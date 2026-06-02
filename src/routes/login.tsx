@@ -1,9 +1,13 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { Logo } from "@/components/app/Logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Bot, Sparkles, Zap } from "lucide-react";
+import { Bot, Sparkles, Zap, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { lovable } from "@/integrations/lovable";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -17,6 +21,60 @@ export const Route = createFileRoute("/login")({
 
 function LoginPage() {
   const nav = useNavigate();
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) nav({ to: "/dashboard", replace: true });
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      if (session?.user) nav({ to: "/dashboard", replace: true });
+    });
+    return () => sub.subscription.unsubscribe();
+  }, [nav]);
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      if (mode === "signup") {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: window.location.origin,
+            data: { full_name: name },
+          },
+        });
+        if (error) throw error;
+        toast.success("Conta criada!", { description: "Verifique seu e-mail para confirmar o acesso." });
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao autenticar";
+      toast.error("Falha", { description: msg });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onGoogle = async () => {
+    setLoading(true);
+    const result = await lovable.auth.signInWithOAuth("google", {
+      redirect_uri: window.location.origin,
+    });
+    if (result.error) {
+      toast.error("Falha no login com Google", { description: String(result.error.message ?? result.error) });
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
       <div className="hidden lg:flex relative grid-bg overflow-hidden p-12 flex-col justify-between border-r border-white/5">
@@ -51,13 +109,17 @@ function LoginPage() {
         <div className="w-full max-w-sm space-y-6">
           <div className="lg:hidden flex justify-center"><Logo /></div>
           <div className="space-y-1.5 text-center lg:text-left">
-            <h2 className="text-2xl font-semibold tracking-tight">Bem-vindo de volta</h2>
-            <p className="text-sm text-muted-foreground">Entre no painel do seu robô de anúncios.</p>
+            <h2 className="text-2xl font-semibold tracking-tight">
+              {mode === "signin" ? "Bem-vindo de volta" : "Criar sua conta"}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {mode === "signin" ? "Entre no painel do seu robô." : "Comece com R$ 50 de saldo de boas-vindas."}
+            </p>
           </div>
 
-          <Button variant="glass" className="w-full h-11" onClick={() => nav({ to: "/power-on" })}>
+          <Button variant="glass" className="w-full h-11" onClick={onGoogle} disabled={loading}>
             <svg className="h-4 w-4" viewBox="0 0 24 24"><path fill="currentColor" d="M21.35 11.1h-9.17v2.92h5.51c-.25 1.37-1.7 4.03-5.51 4.03-3.31 0-6.01-2.74-6.01-6.13s2.7-6.13 6.01-6.13c1.87 0 3.13.8 3.85 1.48l2.84-2.76C17.09 2.84 14.97 2 12.18 2 6.92 2 2.68 6.24 2.68 11.5S6.92 21 12.18 21c7.03 0 9.41-4.92 9.41-7.5 0-.5-.05-.88-.24-2.4Z"/></svg>
-            Entrar com Google
+            Continuar com Google
           </Button>
 
           <div className="flex items-center gap-3">
@@ -66,25 +128,37 @@ function LoginPage() {
             <div className="h-px flex-1 bg-border" />
           </div>
 
-          <form
-            className="space-y-3"
-            onSubmit={(e) => { e.preventDefault(); nav({ to: "/power-on" }); }}
-          >
+          <form className="space-y-3" onSubmit={onSubmit}>
+            {mode === "signup" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="name">Nome</Label>
+                <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Seu nome" required />
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="email">E-mail</Label>
-              <Input id="email" type="email" placeholder="voce@empresa.com" defaultValue="demo@robo-de-lucro.com" />
+              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@empresa.com" required />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="pw">Senha</Label>
-              <Input id="pw" type="password" placeholder="••••••••" defaultValue="demo1234" />
+              <Input id="pw" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" minLength={6} required />
             </div>
-            <Button type="submit" variant="neon" className="w-full h-11">
-              Entrar no painel
+            <Button type="submit" variant="neon" className="w-full h-11" disabled={loading}>
+              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+              {mode === "signin" ? "Entrar no painel" : "Criar conta"}
             </Button>
           </form>
 
           <p className="text-center text-xs text-muted-foreground">
-            Novo por aqui? <span className="text-primary cursor-pointer hover:underline">Criar conta</span>
+            {mode === "signin" ? (
+              <>Novo por aqui? <button type="button" onClick={() => setMode("signup")} className="text-primary hover:underline">Criar conta</button></>
+            ) : (
+              <>Já tem conta? <button type="button" onClick={() => setMode("signin")} className="text-primary hover:underline">Entrar</button></>
+            )}
+          </p>
+
+          <p className="text-center text-[11px] text-muted-foreground">
+            <Link to="/power-on" className="hover:text-foreground">Ver animação de abertura</Link>
           </p>
         </div>
       </div>
