@@ -14,7 +14,99 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      campaigns: {
+        Row: {
+          budget: number
+          city: string
+          clicks: number
+          copy: string
+          cpc: number
+          created_at: string
+          ctr: number
+          days: number
+          headline: string
+          id: string
+          image: string
+          impressions: number
+          link: string
+          name: string
+          neighborhood: string
+          radius: number
+          spent: number
+          status: Database["public"]["Enums"]["campaign_status"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          budget?: number
+          city?: string
+          clicks?: number
+          copy?: string
+          cpc?: number
+          created_at?: string
+          ctr?: number
+          days?: number
+          headline?: string
+          id?: string
+          image?: string
+          impressions?: number
+          link?: string
+          name: string
+          neighborhood?: string
+          radius?: number
+          spent?: number
+          status?: Database["public"]["Enums"]["campaign_status"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          budget?: number
+          city?: string
+          clicks?: number
+          copy?: string
+          cpc?: number
+          created_at?: string
+          ctr?: number
+          days?: number
+          headline?: string
+          id?: string
+          image?: string
+          impressions?: number
+          link?: string
+          name?: string
+          neighborhood?: string
+          radius?: number
+          spent?: number
+          status?: Database["public"]["Enums"]["campaign_status"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          balance: number
+          created_at: string
+          display_name: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          balance?: number
+          created_at?: string
+          display_name?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          balance?: number
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +115,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      campaign_status: "running" | "analyzing" | "paused"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +242,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      campaign_status: ["running", "analyzing", "paused"],
+    },
   },
 } as const
