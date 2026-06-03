@@ -5,6 +5,7 @@ import { Bot, MousePointerClick, DollarSign, TrendingDown, Plus, Sparkles, MapPi
 import { EnergyOrb } from "@/components/app/EnergyOrb";
 import { RobotMascot } from "@/components/app/RobotMascot";
 import { useAppStore, computeSummary } from "@/lib/store";
+import { PushNotificationBanner } from "@/components/app/PushNotificationBanner";
 
 export const Route = createFileRoute("/_app/dashboard")({
   head: () => ({
@@ -50,6 +51,9 @@ function Dashboard() {
           </Button>
         </Link>
       </header>
+
+      <PushNotificationBanner />
+
 
       {/* Núcleo da IA */}
       <section className="glass-strong rounded-3xl p-6 lg:p-10 grid lg:grid-cols-[auto_1fr] gap-8 items-center relative overflow-hidden">

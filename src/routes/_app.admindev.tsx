@@ -1,0 +1,282 @@
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import {
+  adminListCampaigns,
+  adminSetCampaignStatus,
+  getCampaignMode,
+  setCampaignMode,
+  checkIsAdmin,
+  type AdminCampaignRow,
+} from "@/lib/admin.functions";
+import { supabase } from "@/integrations/supabase/client";
+import { Shield, Zap, Hand, Eye, X, Rocket, Loader2 } from "lucide-react";
+
+export const Route = createFileRoute("/_app/admindev")({
+  beforeLoad: async () => {
+    if (typeof window === "undefined") return;
+    const { data } = await supabase.auth.getUser();
+    if (!data.user) throw redirect({ to: "/login" });
+    try {
+      const res = await checkIsAdmin();
+      if (!res.isAdmin) throw redirect({ to: "/dashboard" });
+    } catch {
+      throw redirect({ to: "/dashboard" });
+    }
+  },
+  head: () => ({ meta: [{ title: "Admin Dev — Robô de Lucro" }] }),
+  component: AdminDevPage,
+});
+
+const fmtBRL = (n: number) =>
+  n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+function AdminDevPage() {
+  const qc = useQueryClient();
+  const getMode = useServerFn(getCampaignMode);
+  const setMode = useServerFn(setCampaignMode);
+  const listFn = useServerFn(adminListCampaigns);
+  const setStatusFn = useServerFn(adminSetCampaignStatus);
+
+  const modeQuery = useQuery({ queryKey: ["campaign-mode"], queryFn: () => getMode() });
+  const campaignsQuery = useQuery({ queryKey: ["admin-campaigns"], queryFn: () => listFn() });
+  const [preview, setPreview] = useState<AdminCampaignRow | null>(null);
+
+  const toggleMutation = useMutation({
+    mutationFn: (mode: "manual" | "automatic") => setMode({ data: { mode } }),
+    onSuccess: (r) => {
+      qc.setQueryData(["campaign-mode"], r);
+      toast.success(
+        r.mode === "automatic" ? "Modo AUTOMÁTICO ativado" : "Modo MANUAL ativado",
+      );
+    },
+    onError: (e) => toast.error("Falha ao alternar modo", { description: String(e) }),
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: (v: { id: string; status: "running" | "analyzing" | "paused" }) =>
+      setStatusFn({ data: v }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-campaigns"] });
+      toast.success("Status atualizado");
+    },
+  });
+
+  const isAuto = modeQuery.data?.mode === "automatic";
+
+  return (
+    <div className="p-6 lg:p-10 max-w-[1400px] mx-auto space-y-8">
+      <header className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="text-sm text-muted-foreground flex items-center gap-2">
+            <Shield className="h-3.5 w-3.5 text-primary" /> Painel da Agência
+          </p>
+          <h1 className="text-3xl font-bold tracking-tight">Admin Dev</h1>
+        </div>
+      </header>
+
+      {/* Mode toggle */}
+      <section
+        className={`glass-strong rounded-2xl p-6 border transition-all ${
+          isAuto ? "border-success/40 shadow-[0_0_40px_-10px_var(--color-success)]" : "border-warning/40"
+        }`}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">Modo de Criação na BM</p>
+            <p className="text-lg font-semibold mt-1">
+              Como as campanhas dos clientes são publicadas
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={toggleMutation.isPending || modeQuery.isLoading}
+            onClick={() => toggleMutation.mutate(isAuto ? "manual" : "automatic")}
+            className={`relative h-14 w-72 rounded-full border-2 transition-all overflow-hidden ${
+              isAuto
+                ? "bg-success/15 border-success/60 shadow-[0_0_30px_-5px_var(--color-success)]"
+                : "bg-warning/15 border-warning/60"
+            }`}
+          >
+            <span
+              className={`absolute top-1 left-1 h-11 w-[140px] rounded-full transition-all flex items-center justify-center gap-2 font-semibold text-sm ${
+                isAuto
+                  ? "translate-x-[124px] bg-gradient-to-r from-success to-success/70 text-background"
+                  : "translate-x-0 bg-gradient-to-r from-warning to-warning/70 text-background"
+              }`}
+            >
+              {isAuto ? (
+                <><Zap className="h-4 w-4" /> AUTOMÁTICO</>
+              ) : (
+                <><Hand className="h-4 w-4" /> MANUAL</>
+              )}
+            </span>
+            <span className="absolute inset-0 flex items-center justify-between px-5 text-[11px] uppercase tracking-wider opacity-60 pointer-events-none">
+              <span>Manual</span>
+              <span>Auto</span>
+            </span>
+          </button>
+        </div>
+        <p className="text-xs text-muted-foreground mt-3">
+          {isAuto
+            ? "⚡ Campanhas pagas vão direto para a Meta API com o token da agência. Se a API falhar, cai automaticamente para 'Em Análise'."
+            : "✋ Campanhas pagas ficam com status 'Em Análise' aguardando aprovação manual nesta tela."}
+        </p>
+      </section>
+
+      {/* Campaigns table */}
+      <section className="glass-strong rounded-2xl overflow-hidden">
+        <div className="p-5 border-b border-white/5 flex items-center justify-between">
+          <h2 className="font-semibold">Campanhas dos Clientes</h2>
+          <span className="text-xs text-muted-foreground">
+            {campaignsQuery.data?.length ?? 0} no total
+          </span>
+        </div>
+        {campaignsQuery.isLoading ? (
+          <div className="p-10 text-center text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin mx-auto" />
+          </div>
+        ) : !campaignsQuery.data?.length ? (
+          <div className="p-10 text-center text-sm text-muted-foreground">Nenhuma campanha ainda.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-white/5">
+                <tr>
+                  <th className="px-4 py-3">Cliente</th>
+                  <th className="px-4 py-3">Campanha</th>
+                  <th className="px-4 py-3 text-right">Orçamento</th>
+                  <th className="px-4 py-3 text-center">Dias</th>
+                  <th className="px-4 py-3">Status Interno</th>
+                  <th className="px-4 py-3">Métricas Reais (Meta)</th>
+                  <th className="px-4 py-3 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {campaignsQuery.data.map((c) => (
+                  <tr key={c.id} className="border-b border-white/5 hover:bg-white/[0.02]">
+                    <td className="px-4 py-3">
+                      <p className="font-medium">{c.client_name ?? "—"}</p>
+                      <p className="text-[11px] text-muted-foreground font-mono">{c.user_id.slice(0, 8)}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="font-medium truncate max-w-[200px]">{c.name}</p>
+                      <p className="text-[11px] text-muted-foreground truncate max-w-[200px]">{c.headline}</p>
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums">{fmtBRL(c.budget)}</td>
+                    <td className="px-4 py-3 text-center tabular-nums">{c.days}</td>
+                    <td className="px-4 py-3">
+                      <select
+                        value={c.status}
+                        onChange={(e) =>
+                          statusMutation.mutate({
+                            id: c.id,
+                            status: e.target.value as "running" | "analyzing" | "paused",
+                          })
+                        }
+                        className="bg-background border border-white/10 rounded-md px-2 py-1 text-xs"
+                      >
+                        <option value="analyzing">⏳ Em Análise</option>
+                        <option value="running">🟢 Ativo</option>
+                        <option value="paused">🔴 Desativado</option>
+                      </select>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="grid grid-cols-3 gap-1 text-[10px] min-w-[260px]">
+                        <Metric label="Cliques" value={c.clicks.toLocaleString("pt-BR")} />
+                        <Metric label="Impr." value={c.impressions.toLocaleString("pt-BR")} />
+                        <Metric label="CTR" value={`${c.ctr.toFixed(2)}%`} />
+                        <Metric label="CPC" value={fmtBRL(c.cpc)} />
+                        <Metric label="Gasto" value={fmtBRL(c.spent)} />
+                        <Metric label="ROI" value="—" />
+                        <Metric label="CPM" value={c.impressions ? fmtBRL((c.spent / c.impressions) * 1000) : "—"} />
+                        <Metric label="Freq." value="—" />
+                        <Metric label="C/Result." value={c.clicks ? fmtBRL(c.spent / c.clicks) : "—"} />
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="glass"
+                          size="sm"
+                          onClick={() => setPreview(c)}
+                          title="Pré-visualizar anúncio"
+                        >
+                          <Eye className="h-3.5 w-3.5" /> Prévia
+                        </Button>
+                        <Button
+                          variant="neon"
+                          size="sm"
+                          disabled={c.status === "running" || statusMutation.isPending}
+                          onClick={() => statusMutation.mutate({ id: c.id, status: "running" })}
+                        >
+                          <Rocket className="h-3.5 w-3.5" /> Forçar Ativação
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {preview && <FbPreview campaign={preview} onClose={() => setPreview(null)} />}
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="glass rounded p-1.5">
+      <p className="text-muted-foreground">{label}</p>
+      <p className="font-semibold tabular-nums truncate">{value}</p>
+    </div>
+  );
+}
+
+function FbPreview({ campaign, onClose }: { campaign: AdminCampaignRow; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" onClick={onClose}>
+      <div
+        className="bg-[#18191a] rounded-xl max-w-md w-full overflow-hidden border border-white/10 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
+          <span className="text-xs text-white/60">Prévia · Facebook Feed</span>
+          <button onClick={onClose} className="text-white/60 hover:text-white">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="bg-[#242526] text-white">
+          <div className="flex items-center gap-2 px-3 py-2">
+            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-accent" />
+            <div className="text-xs">
+              <p className="font-semibold">{campaign.client_name ?? "Anunciante"}</p>
+              <p className="text-white/50">Patrocinado · 🌐</p>
+            </div>
+          </div>
+          <p className="px-3 pb-3 text-sm">{campaign.copy || campaign.headline}</p>
+          {campaign.image && (
+            <img src={campaign.image} alt="" className="w-full aspect-square object-cover bg-black" />
+          )}
+          <div className="px-3 py-2 bg-[#3a3b3c] flex items-center justify-between">
+            <div className="text-xs">
+              <p className="uppercase text-white/50 text-[10px]">
+                {new URL(campaign.link || "https://facebook.com").hostname}
+              </p>
+              <p className="font-semibold text-sm">{campaign.headline || campaign.name}</p>
+            </div>
+            <button className="bg-[#4e4f50] hover:bg-[#5a5b5c] text-white text-xs font-semibold px-3 py-1.5 rounded">
+              Saiba mais
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

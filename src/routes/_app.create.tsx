@@ -76,7 +76,9 @@ function CreateWizard() {
         setAnalysis(result);
         setScanState("done");
         if (!result.compliant) {
-          toast.warning("A IA identificou possíveis ajustes para conformidade.");
+          toast.error("Bloqueado pela IA — ajuste o criativo para avançar.");
+        } else if (result.issues.some((i) => i.severity === "soft_warning")) {
+          toast.warning("A IA sugeriu ajustes de design (não bloqueia).");
         }
       } catch (err) {
         toast.error("Falha ao analisar criativo");
@@ -492,13 +494,32 @@ function AiAnalysisPanel({
         </div>
       )}
       {scanState === "done" && analysis && !analysis.compliant && (
-        <div className="rounded-lg p-3 border border-destructive/40 bg-destructive/5 flex items-start gap-2">
-          <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
-          <p className="text-xs text-destructive">
-            A IA bloqueou esse criativo. Ajuste e tente novamente antes de avançar.
-          </p>
+        <div className="rounded-lg p-3 border border-destructive/40 bg-destructive/5 space-y-1">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+            <p className="text-xs text-destructive font-semibold">
+              Bloqueado: viola política da Meta. Envie outra imagem.
+            </p>
+          </div>
+          {analysis.issues.filter((i) => i.severity === "hard_block").map((i, idx) => (
+            <p key={idx} className="text-[11px] text-destructive/90 pl-6">• {i.message}</p>
+          ))}
         </div>
       )}
+      {scanState === "done" && analysis?.compliant &&
+        analysis.issues.some((i) => i.severity === "soft_warning") && (
+          <div className="rounded-lg p-3 border border-warning/50 bg-warning/10 space-y-1">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+              <p className="text-xs text-warning font-semibold">
+                Sugestões de design (não obrigatórias)
+              </p>
+            </div>
+            {analysis.issues.filter((i) => i.severity === "soft_warning").map((i, idx) => (
+              <p key={idx} className="text-[11px] text-warning/90 pl-6">• {i.message}</p>
+            ))}
+          </div>
+        )}
       <button onClick={onReset} className="text-xs text-muted-foreground hover:text-foreground">
         Trocar imagem
       </button>
