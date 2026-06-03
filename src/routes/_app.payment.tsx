@@ -66,13 +66,30 @@ function PaymentPage() {
     setTimeout(() => setCopied(false), 2200);
   };
 
-  const simulatePaid = () => {
+  const submitFn = useServerFn(submitCampaignToMeta);
+
+  const simulatePaid = async () => {
     setPaid(true);
-    // Credita o pagamento e ativa a campanha
     topup(total);
-    if (campaignId) updateCampaign(campaignId, { status: "running" });
-    toast.success("Pagamento confirmado", { description: "O robô já colocou seu anúncio no ar." });
-    setTimeout(() => nav({ to: "/dashboard" }), 1200);
+    let result: { status: "running" | "analyzing"; mode: string; fallback?: boolean } | null = null;
+    if (campaignId) {
+      try {
+        result = await submitFn({ data: { campaignId } });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    if (!result || result.status === "analyzing") {
+      toast.success("Pagamento confirmado", {
+        description:
+          result?.fallback
+            ? "O robô está preparando os motores (fallback automático para análise)."
+            : "O robô está preparando os motores. Sua campanha entrou em análise.",
+      });
+    } else {
+      toast.success("Anúncio no ar! 🚀", { description: "Enviado para a Meta com sucesso." });
+    }
+    setTimeout(() => nav({ to: "/dashboard" }), 1500);
   };
 
   return (
