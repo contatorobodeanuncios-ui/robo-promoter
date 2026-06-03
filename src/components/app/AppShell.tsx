@@ -1,7 +1,11 @@
-import { Link, Outlet, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, Plus, Settings, LogOut, Bot } from "lucide-react";
+import { Link, Outlet, useRouterState, useNavigate } from "@tanstack/react-router";
+import { LayoutDashboard, Plus, Settings, LogOut, Bot, Shield } from "lucide-react";
 import { Logo } from "./Logo";
 import { useAppStore } from "@/lib/store";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { checkIsAdmin } from "@/lib/admin.functions";
+import { supabase } from "@/integrations/supabase/client";
 
 const nav = [
   { to: "/dashboard" as const, label: "Dashboard", icon: LayoutDashboard },
@@ -11,6 +15,20 @@ const nav = [
 
 export function AppShell() {
   const path = useRouterState({ select: (s) => s.location.pathname });
+  const navigate = useNavigate();
+  const checkAdminFn = useServerFn(checkIsAdmin);
+  const { data: adminData } = useQuery({
+    queryKey: ["is-admin"],
+    queryFn: () => checkAdminFn(),
+    staleTime: 5 * 60_000,
+  });
+
+  const onLogout = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    await supabase.auth.signOut();
+    navigate({ to: "/login", replace: true });
+  };
+
   return (
     <div className="min-h-screen flex">
       <aside className="hidden md:flex w-64 flex-col glass-strong border-r border-white/5 p-5 sticky top-0 h-screen">
@@ -33,6 +51,19 @@ export function AppShell() {
               </Link>
             );
           })}
+          {adminData?.isAdmin && (
+            <Link
+              to="/admindev"
+              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all ${
+                path === "/admindev"
+                  ? "bg-gradient-to-r from-warning/20 to-primary/20 text-foreground border border-warning/40"
+                  : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+              }`}
+            >
+              <Shield className="h-4 w-4" />
+              Admin Dev
+            </Link>
+          )}
         </nav>
         <div className="mt-auto space-y-1">
           <div className="glass rounded-xl p-3 mb-3">
@@ -45,12 +76,13 @@ export function AppShell() {
             </div>
             <BalanceLine />
           </div>
-          <Link
-            to="/login"
+          <button
+            type="button"
+            onClick={onLogout}
             className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-white/5"
           >
             <LogOut className="h-4 w-4" /> Sair
-          </Link>
+          </button>
         </div>
       </aside>
       <main className="flex-1 min-w-0">
