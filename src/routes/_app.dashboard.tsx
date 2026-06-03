@@ -52,6 +52,9 @@ function Dashboard() {
         </Link>
       </header>
 
+      <PushNotificationBanner />
+
+
       {/* Núcleo da IA */}
       <section className="glass-strong rounded-3xl p-6 lg:p-10 grid lg:grid-cols-[auto_1fr] gap-8 items-center relative overflow-hidden">
         <div className="absolute inset-0 grid-bg opacity-30 pointer-events-none" />
