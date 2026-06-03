@@ -17,6 +17,7 @@ import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppPaymentRouteImport } from './routes/_app.payment'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppCreateRouteImport } from './routes/_app.create'
+import { Route as AppAdmindevRouteImport } from './routes/_app.admindev'
 import { Route as AppCampaignIdRouteImport } from './routes/_app.campaign.$id'
 
 const PowerOnRoute = PowerOnRouteImport.update({
@@ -58,6 +59,11 @@ const AppCreateRoute = AppCreateRouteImport.update({
   path: '/create',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAdmindevRoute = AppAdmindevRouteImport.update({
+  id: '/admindev',
+  path: '/admindev',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppCampaignIdRoute = AppCampaignIdRouteImport.update({
   id: '/campaign/$id',
   path: '/campaign/$id',
@@ -68,6 +74,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/power-on': typeof PowerOnRoute
+  '/admindev': typeof AppAdmindevRoute
   '/create': typeof AppCreateRoute
   '/dashboard': typeof AppDashboardRoute
   '/payment': typeof AppPaymentRoute
@@ -78,6 +85,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/power-on': typeof PowerOnRoute
+  '/admindev': typeof AppAdmindevRoute
   '/create': typeof AppCreateRoute
   '/dashboard': typeof AppDashboardRoute
   '/payment': typeof AppPaymentRoute
@@ -90,6 +98,7 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
   '/power-on': typeof PowerOnRoute
+  '/_app/admindev': typeof AppAdmindevRoute
   '/_app/create': typeof AppCreateRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/payment': typeof AppPaymentRoute
@@ -102,6 +111,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/power-on'
+    | '/admindev'
     | '/create'
     | '/dashboard'
     | '/payment'
@@ -112,6 +122,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/power-on'
+    | '/admindev'
     | '/create'
     | '/dashboard'
     | '/payment'
@@ -123,6 +134,7 @@ export interface FileRouteTypes {
     | '/_app'
     | '/login'
     | '/power-on'
+    | '/_app/admindev'
     | '/_app/create'
     | '/_app/dashboard'
     | '/_app/payment'
@@ -195,6 +207,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCreateRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/admindev': {
+      id: '/_app/admindev'
+      path: '/admindev'
+      fullPath: '/admindev'
+      preLoaderRoute: typeof AppAdmindevRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/campaign/$id': {
       id: '/_app/campaign/$id'
       path: '/campaign/$id'
@@ -206,6 +225,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteChildren {
+  AppAdmindevRoute: typeof AppAdmindevRoute
   AppCreateRoute: typeof AppCreateRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppPaymentRoute: typeof AppPaymentRoute
@@ -214,6 +234,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAdmindevRoute: AppAdmindevRoute,
   AppCreateRoute: AppCreateRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppPaymentRoute: AppPaymentRoute,
@@ -232,3 +253,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
