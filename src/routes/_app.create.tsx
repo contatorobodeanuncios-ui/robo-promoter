@@ -76,7 +76,9 @@ function CreateWizard() {
         setAnalysis(result);
         setScanState("done");
         if (!result.compliant) {
-          toast.warning("A IA identificou possíveis ajustes para conformidade.");
+          toast.error("Bloqueado pela IA — ajuste o criativo para avançar.");
+        } else if (result.issues.some((i) => i.severity === "soft_warning")) {
+          toast.warning("A IA sugeriu ajustes de design (não bloqueia).");
         }
       } catch (err) {
         toast.error("Falha ao analisar criativo");
