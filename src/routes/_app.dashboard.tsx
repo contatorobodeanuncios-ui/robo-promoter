@@ -5,6 +5,7 @@ import { Bot, MousePointerClick, DollarSign, TrendingDown, Plus, Sparkles, MapPi
 import { EnergyOrb } from "@/components/app/EnergyOrb";
 import { RobotMascot } from "@/components/app/RobotMascot";
 import { useAppStore, computeSummary } from "@/lib/store";
+import { PushNotificationBanner } from "@/components/app/PushNotificationBanner";
 
 export const Route = createFileRoute("/_app/dashboard")({
   head: () => ({
