@@ -33,7 +33,7 @@ const fmtBRL = (n: number) =>
 function PaymentPage() {
   const { budget, days, name, campaignId } = useSearch({ from: "/_app/payment" });
   const total = budget * days;
-  const updateCampaign = useAppStore((s) => s.updateCampaign);
+  const topup = useAppStore((s) => s.topup);
   const topup = useAppStore((s) => s.topup);
   const nav = useNavigate();
 
