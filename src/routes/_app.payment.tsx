@@ -34,7 +34,6 @@ function PaymentPage() {
   const { budget, days, name, campaignId } = useSearch({ from: "/_app/payment" });
   const total = budget * days;
   const topup = useAppStore((s) => s.topup);
-  const topup = useAppStore((s) => s.topup);
   const nav = useNavigate();
 
   // Placeholder PIX copy-paste payload (real one virá do Asaas)
