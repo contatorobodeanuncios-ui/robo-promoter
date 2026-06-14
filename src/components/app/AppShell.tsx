@@ -19,8 +19,17 @@ export function AppShell() {
   const checkAdminFn = useServerFn(checkIsAdmin);
   const { data: adminData } = useQuery({
     queryKey: ["is-admin"],
-    queryFn: () => checkAdminFn(),
+    queryFn: async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) return { isAdmin: false };
+      try {
+        return await checkAdminFn();
+      } catch {
+        return { isAdmin: false };
+      }
+    },
     staleTime: 5 * 60_000,
+    retry: false,
   });
 
   const onLogout = async (e: React.MouseEvent) => {
