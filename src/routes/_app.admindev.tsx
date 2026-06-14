@@ -16,6 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Shield, Zap, Hand, Eye, X, Rocket, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/_app/admindev")({
+  ssr: false,
   beforeLoad: async () => {
     if (typeof window === "undefined") return;
     const { data } = await supabase.auth.getUser();
@@ -39,7 +40,15 @@ function AdminDevPage() {
 
   const adminQuery = useQuery({
     queryKey: ["admindev-access"],
-    queryFn: () => checkAdminFn(),
+    queryFn: async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) return { isAdmin: false };
+      try {
+        return await checkAdminFn();
+      } catch {
+        return { isAdmin: false };
+      }
+    },
     retry: false,
   });
   const modeQuery = useQuery({
