@@ -1,4 +1,4 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -16,16 +16,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Shield, Zap, Hand, Eye, X, Rocket, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/_app/admindev")({
+  ssr: false,
   beforeLoad: async () => {
     if (typeof window === "undefined") return;
     const { data } = await supabase.auth.getUser();
     if (!data.user) throw redirect({ to: "/login" });
-    try {
-      const res = await checkIsAdmin();
-      if (!res.isAdmin) throw redirect({ to: "/dashboard" });
-    } catch {
-      throw redirect({ to: "/dashboard" });
-    }
   },
   head: () => ({ meta: [{ title: "Admin Dev — Robô de Lucro" }] }),
   component: AdminDevPage,
@@ -36,13 +31,37 @@ const fmtBRL = (n: number) =>
 
 function AdminDevPage() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
+  const checkAdminFn = useServerFn(checkIsAdmin);
   const getMode = useServerFn(getCampaignMode);
   const setMode = useServerFn(setCampaignMode);
   const listFn = useServerFn(adminListCampaigns);
   const setStatusFn = useServerFn(adminSetCampaignStatus);
 
-  const modeQuery = useQuery({ queryKey: ["campaign-mode"], queryFn: () => getMode() });
-  const campaignsQuery = useQuery({ queryKey: ["admin-campaigns"], queryFn: () => listFn() });
+  const adminQuery = useQuery({
+    queryKey: ["admindev-access"],
+    queryFn: async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) return { isAdmin: false };
+      try {
+        return await checkAdminFn();
+      } catch {
+        return { isAdmin: false };
+      }
+    },
+    retry: false,
+  });
+  const modeQuery = useQuery({
+    queryKey: ["campaign-mode"],
+    queryFn: () => getMode(),
+    enabled: adminQuery.data?.isAdmin === true,
+  });
+  const campaignsQuery = useQuery({
+    queryKey: ["admin-campaigns"],
+    queryFn: () => listFn(),
+    retry: false,
+    enabled: adminQuery.data?.isAdmin === true,
+  });
   const [preview, setPreview] = useState<AdminCampaignRow | null>(null);
 
   const toggleMutation = useMutation({
@@ -66,6 +85,33 @@ function AdminDevPage() {
   });
 
   const isAuto = modeQuery.data?.mode === "automatic";
+
+  if (adminQuery.isLoading) {
+    return (
+      <div className="p-10 text-center text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin mx-auto" />
+      </div>
+    );
+  }
+
+  if (adminQuery.error || !adminQuery.data?.isAdmin) {
+    return (
+      <div className="max-w-xl mx-auto px-6 py-16 text-center space-y-4">
+        <div className="mx-auto h-14 w-14 rounded-full border border-warning/30 bg-warning/10 grid place-items-center">
+          <Shield className="h-6 w-6 text-warning" />
+        </div>
+        <div className="space-y-2">
+          <h1 className="text-2xl font-bold tracking-tight">Acesso restrito</h1>
+          <p className="text-sm text-muted-foreground">
+            Sua conta atual não possui permissão de administrador para abrir esta área.
+          </p>
+        </div>
+        <Button variant="outline" onClick={() => navigate({ to: "/dashboard" })}>
+          Voltar ao dashboard
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 lg:p-10 max-w-[1400px] mx-auto space-y-8">
