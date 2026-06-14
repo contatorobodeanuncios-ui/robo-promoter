@@ -1,11 +1,16 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 export type CampaignMode = "manual" | "automatic";
 
+async function getSupabaseAdmin() {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  return supabaseAdmin;
+}
+
 async function assertAdmin(userId: string) {
+  const supabaseAdmin = await getSupabaseAdmin();
   const { data, error } = await supabaseAdmin
     .from("user_roles")
     .select("role")
@@ -17,6 +22,7 @@ async function assertAdmin(userId: string) {
 }
 
 export const getCampaignMode = createServerFn({ method: "GET" }).handler(async () => {
+  const supabaseAdmin = await getSupabaseAdmin();
   const { data, error } = await supabaseAdmin
     .from("app_settings")
     .select("value")
@@ -30,6 +36,7 @@ export const getCampaignMode = createServerFn({ method: "GET" }).handler(async (
 export const checkIsAdmin = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    const supabaseAdmin = await getSupabaseAdmin();
     const { data } = await supabaseAdmin
       .from("user_roles")
       .select("role")
@@ -44,6 +51,7 @@ export const setCampaignMode = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ mode: z.enum(["manual", "automatic"]) }).parse(d))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.userId);
+    const supabaseAdmin = await getSupabaseAdmin();
     const { error } = await supabaseAdmin
       .from("app_settings")
       .upsert({ key: "campaign_mode", value: { mode: data.mode }, updated_at: new Date().toISOString() });
@@ -75,6 +83,7 @@ export const adminListCampaigns = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<AdminCampaignRow[]> => {
     await assertAdmin(context.userId);
+    const supabaseAdmin = await getSupabaseAdmin();
     const { data: campaigns, error } = await supabaseAdmin
       .from("campaigns")
       .select("*")
@@ -114,6 +123,7 @@ export const adminSetCampaignStatus = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     await assertAdmin(context.userId);
+    const supabaseAdmin = await getSupabaseAdmin();
     const { error } = await supabaseAdmin
       .from("campaigns")
       .update({ status: data.status })
@@ -129,6 +139,7 @@ export const submitCampaignToMeta = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ campaignId: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase } = context;
+    const supabaseAdmin = await getSupabaseAdmin();
     const { data: modeRow } = await supabaseAdmin
       .from("app_settings")
       .select("value")
