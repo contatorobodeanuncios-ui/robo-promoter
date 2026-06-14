@@ -1,4 +1,4 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -36,13 +36,18 @@ const fmtBRL = (n: number) =>
 
 function AdminDevPage() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const getMode = useServerFn(getCampaignMode);
   const setMode = useServerFn(setCampaignMode);
   const listFn = useServerFn(adminListCampaigns);
   const setStatusFn = useServerFn(adminSetCampaignStatus);
 
   const modeQuery = useQuery({ queryKey: ["campaign-mode"], queryFn: () => getMode() });
-  const campaignsQuery = useQuery({ queryKey: ["admin-campaigns"], queryFn: () => listFn() });
+  const campaignsQuery = useQuery({
+    queryKey: ["admin-campaigns"],
+    queryFn: () => listFn(),
+    retry: false,
+  });
   const [preview, setPreview] = useState<AdminCampaignRow | null>(null);
 
   const toggleMutation = useMutation({
@@ -66,6 +71,11 @@ function AdminDevPage() {
   });
 
   const isAuto = modeQuery.data?.mode === "automatic";
+
+  if (campaignsQuery.error) {
+    void navigate({ to: "/dashboard", replace: true });
+    return null;
+  }
 
   return (
     <div className="p-6 lg:p-10 max-w-[1400px] mx-auto space-y-8">
