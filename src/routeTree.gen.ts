@@ -18,6 +18,7 @@ import { Route as AppPaymentRouteImport } from './routes/_app.payment'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppCreateRouteImport } from './routes/_app.create'
 import { Route as AppAdmindevRouteImport } from './routes/_app.admindev'
+import { Route as ApiPublicAsaasWebhookRouteImport } from './routes/api/public/asaas-webhook'
 import { Route as AppCampaignIdRouteImport } from './routes/_app.campaign.$id'
 
 const PowerOnRoute = PowerOnRouteImport.update({
@@ -64,6 +65,11 @@ const AppAdmindevRoute = AppAdmindevRouteImport.update({
   path: '/admindev',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiPublicAsaasWebhookRoute = ApiPublicAsaasWebhookRouteImport.update({
+  id: '/api/public/asaas-webhook',
+  path: '/api/public/asaas-webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppCampaignIdRoute = AppCampaignIdRouteImport.update({
   id: '/campaign/$id',
   path: '/campaign/$id',
@@ -80,6 +86,7 @@ export interface FileRoutesByFullPath {
   '/payment': typeof AppPaymentRoute
   '/settings': typeof AppSettingsRoute
   '/campaign/$id': typeof AppCampaignIdRoute
+  '/api/public/asaas-webhook': typeof ApiPublicAsaasWebhookRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -91,6 +98,7 @@ export interface FileRoutesByTo {
   '/payment': typeof AppPaymentRoute
   '/settings': typeof AppSettingsRoute
   '/campaign/$id': typeof AppCampaignIdRoute
+  '/api/public/asaas-webhook': typeof ApiPublicAsaasWebhookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -104,6 +112,7 @@ export interface FileRoutesById {
   '/_app/payment': typeof AppPaymentRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/campaign/$id': typeof AppCampaignIdRoute
+  '/api/public/asaas-webhook': typeof ApiPublicAsaasWebhookRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -117,6 +126,7 @@ export interface FileRouteTypes {
     | '/payment'
     | '/settings'
     | '/campaign/$id'
+    | '/api/public/asaas-webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -128,6 +138,7 @@ export interface FileRouteTypes {
     | '/payment'
     | '/settings'
     | '/campaign/$id'
+    | '/api/public/asaas-webhook'
   id:
     | '__root__'
     | '/'
@@ -140,6 +151,7 @@ export interface FileRouteTypes {
     | '/_app/payment'
     | '/_app/settings'
     | '/_app/campaign/$id'
+    | '/api/public/asaas-webhook'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -147,6 +159,7 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
   PowerOnRoute: typeof PowerOnRoute
+  ApiPublicAsaasWebhookRoute: typeof ApiPublicAsaasWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -214,6 +227,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdmindevRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/public/asaas-webhook': {
+      id: '/api/public/asaas-webhook'
+      path: '/api/public/asaas-webhook'
+      fullPath: '/api/public/asaas-webhook'
+      preLoaderRoute: typeof ApiPublicAsaasWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/campaign/$id': {
       id: '/_app/campaign/$id'
       path: '/campaign/$id'
@@ -249,6 +269,7 @@ const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
   PowerOnRoute: PowerOnRoute,
+  ApiPublicAsaasWebhookRoute: ApiPublicAsaasWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
