@@ -30,7 +30,6 @@ export const Route = createFileRoute("/_app/settings")({
 
 function SettingsPage() {
   const balance = useAppStore((s) => s.balance);
-  const topup = useAppStore((s) => s.topup);
   const wipeAll = useAppStore((s) => s.wipeAll);
   const nav = useNavigate();
 
@@ -41,12 +40,16 @@ function SettingsPage() {
   const [notifyAlerts, setNotifyAlerts] = useState(true);
   const [aiAuto, setAiAuto] = useState(true);
   const [confirmText, setConfirmText] = useState("");
+  const [customAmount, setCustomAmount] = useState("");
 
   const save = () => toast.success("Preferências salvas");
 
-  const handleTopup = (amount: number) => {
-    topup(amount);
-    toast.success(`Saldo recarregado em R$ ${amount.toFixed(2)}`);
+  const goPay = (amount: number) => {
+    if (amount < 20) {
+      toast.error("Valor mínimo R$ 20");
+      return;
+    }
+    nav({ to: "/payment", search: { topup: Math.round(amount) } });
   };
 
   const handleWipe = () => {
