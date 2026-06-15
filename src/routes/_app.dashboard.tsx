@@ -28,12 +28,15 @@ const statusMeta: Record<string, { label: string; cls: string; dot: string }> = 
 
 function Dashboard() {
   const campaigns = useAppStore((s) => s.campaigns);
+  const balance = useAppStore((s) => s.balance);
   const summary = computeSummary(campaigns);
+  const running = campaigns.filter((c) => c.status === "running");
+  const hasRunning = running.length > 0;
   const cards = [
-    { label: "Investimento Total", value: fmtBRL(summary.totalSpent), icon: DollarSign, hint: "este mês" },
-    { label: "Cliques Gerados", value: summary.totalClicks.toLocaleString("pt-BR"), icon: MousePointerClick, hint: `CTR médio ${summary.avgCtr.toFixed(2)}%` },
-    { label: "CPC Médio", value: fmtBRL(summary.avgCpc), icon: TrendingDown, hint: `${summary.totalImpressions.toLocaleString("pt-BR")} impressões` },
-    { label: "Status do Robô", value: campaigns.length ? "Operando" : "Parado", icon: Bot, hint: `monitorando ${campaigns.length} campanha(s)`, live: campaigns.length > 0 },
+    { label: "Saldo no app", value: fmtBRL(balance), icon: DollarSign, hint: balance > 0 ? "creditado após pagamento" : "Aguardando pagamento Asaas" },
+    { label: "Cliques reais", value: hasRunning ? summary.totalClicks.toLocaleString("pt-BR") : "—", icon: MousePointerClick, hint: hasRunning ? `CTR ${summary.avgCtr.toFixed(2)}% · Facebook/Pixel` : "Sem campanhas ativas" },
+    { label: "CPC real", value: hasRunning ? fmtBRL(summary.avgCpc) : "—", icon: TrendingDown, hint: hasRunning ? `${summary.totalImpressions.toLocaleString("pt-BR")} impressões` : "Sem dados do Facebook ainda" },
+    { label: "Status do Robô", value: hasRunning ? "Operando" : "Parado", icon: Bot, hint: `monitorando ${running.length} campanha(s) ativa(s)`, live: hasRunning },
   ];
 
   return (
