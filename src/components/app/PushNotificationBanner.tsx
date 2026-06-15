@@ -2,29 +2,33 @@ import { useEffect, useState } from "react";
 import { Bell, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { useAppStore } from "@/lib/store";
 
 const STORAGE_KEY = "rdl_push_prompt_dismissed";
 
 export function PushNotificationBanner() {
   const [show, setShow] = useState(false);
+  const runningCount = useAppStore((s) => s.campaigns.filter((c) => c.status === "running").length);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!("Notification" in window)) return;
     if (Notification.permission !== "default") return;
     if (localStorage.getItem(STORAGE_KEY) === "1") return;
+    // Só pede permissão quando há ao menos uma campanha rodando
+    if (runningCount === 0) return;
     setShow(true);
-  }, []);
+  }, [runningCount]);
 
   const enable = async () => {
     try {
       const perm = await Notification.requestPermission();
       if (perm === "granted") {
         toast.success("Notificações ativadas", {
-          description: "Você será avisado quando o robô atualizar suas campanhas.",
+          description: "Você será avisado com dados reais quando o Facebook reportar métricas das suas campanhas.",
         });
         new Notification("🤖 Robô de Lucro", {
-          body: "Tudo certo — vamos te avisar dos resultados aqui no celular.",
+          body: `Monitorando ${runningCount} campanha(s) ativa(s). Você receberá alertas com métricas reais do Facebook/Pixel.`,
         });
         setShow(false);
       } else {
@@ -51,7 +55,7 @@ export function PushNotificationBanner() {
       <div className="flex-1 min-w-0">
         <p className="font-semibold text-sm">Ative as notificações do Robô</p>
         <p className="text-xs text-muted-foreground">
-          Acompanhe seus lucros e novos cliques em tempo real no celular.
+          Receba alertas com métricas reais das suas {runningCount} campanha(s) ativa(s).
         </p>
       </div>
       <Button variant="neon" size="sm" onClick={enable}>
