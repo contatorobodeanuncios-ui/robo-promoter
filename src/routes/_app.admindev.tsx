@@ -1,9 +1,11 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   adminListCampaigns,
   adminSetCampaignStatus,
@@ -12,8 +14,16 @@ import {
   checkIsAdmin,
   type AdminCampaignRow,
 } from "@/lib/admin.functions";
+import {
+  getPaymentSettings,
+  setAsaasConfig,
+  setPaymentConfirmMode,
+  adminListPayments,
+  adminApprovePayment,
+  adminRejectPayment,
+} from "@/lib/payment.functions";
 import { supabase } from "@/integrations/supabase/client";
-import { Shield, Zap, Hand, Eye, X, Rocket, Loader2 } from "lucide-react";
+import { Shield, Zap, Hand, Eye, X, Rocket, Loader2, Link2, Check, Ban, CreditCard } from "lucide-react";
 
 export const Route = createFileRoute("/_app/admindev")({
   ssr: false,
@@ -37,6 +47,12 @@ function AdminDevPage() {
   const setMode = useServerFn(setCampaignMode);
   const listFn = useServerFn(adminListCampaigns);
   const setStatusFn = useServerFn(adminSetCampaignStatus);
+  const getPaySettings = useServerFn(getPaymentSettings);
+  const setAsaasFn = useServerFn(setAsaasConfig);
+  const setConfirmFn = useServerFn(setPaymentConfirmMode);
+  const listPaymentsFn = useServerFn(adminListPayments);
+  const approvePayFn = useServerFn(adminApprovePayment);
+  const rejectPayFn = useServerFn(adminRejectPayment);
 
   const adminQuery = useQuery({
     queryKey: ["admindev-access"],
@@ -51,18 +67,41 @@ function AdminDevPage() {
     },
     retry: false,
   });
+  const enabled = adminQuery.data?.isAdmin === true;
+
   const modeQuery = useQuery({
     queryKey: ["campaign-mode"],
     queryFn: () => getMode(),
-    enabled: adminQuery.data?.isAdmin === true,
+    enabled,
   });
   const campaignsQuery = useQuery({
     queryKey: ["admin-campaigns"],
     queryFn: () => listFn(),
     retry: false,
-    enabled: adminQuery.data?.isAdmin === true,
+    enabled,
   });
+  const paySettingsQuery = useQuery({
+    queryKey: ["pay-settings"],
+    queryFn: () => getPaySettings(),
+    enabled,
+  });
+  const paymentsQuery = useQuery({
+    queryKey: ["admin-payments"],
+    queryFn: () => listPaymentsFn(),
+    enabled,
+    refetchInterval: 15_000,
+  });
+
   const [preview, setPreview] = useState<AdminCampaignRow | null>(null);
+  const [asaasLink, setAsaasLink] = useState("");
+  const [apiKeySet, setApiKeySet] = useState(false);
+
+  useEffect(() => {
+    if (paySettingsQuery.data) {
+      setAsaasLink(paySettingsQuery.data.asaas.link_template || "");
+      setApiKeySet(!!paySettingsQuery.data.asaas.api_key_set);
+    }
+  }, [paySettingsQuery.data]);
 
   const toggleMutation = useMutation({
     mutationFn: (mode: "manual" | "automatic") => setMode({ data: { mode } }),
@@ -84,7 +123,44 @@ function AdminDevPage() {
     },
   });
 
+  const saveAsaas = useMutation({
+    mutationFn: () => setAsaasFn({ data: { link_template: asaasLink.trim(), api_key_set: apiKeySet } }),
+    onSuccess: () => {
+      toast.success("Configuração do Asaas salva");
+      qc.invalidateQueries({ queryKey: ["pay-settings"] });
+    },
+    onError: (e) => toast.error("Falha ao salvar Asaas", { description: String(e) }),
+  });
+
+  const toggleConfirmMode = useMutation({
+    mutationFn: (mode: "manual" | "webhook") => setConfirmFn({ data: { mode } }),
+    onSuccess: (r) => {
+      qc.setQueryData(["pay-settings"], (prev: ReturnType<typeof getPaymentSettings> extends Promise<infer T> ? T : never) =>
+        prev ? { ...prev, confirm: r.mode } : prev,
+      );
+      qc.invalidateQueries({ queryKey: ["pay-settings"] });
+      toast.success(r.mode === "webhook" ? "Confirmação por WEBHOOK ativada" : "Confirmação MANUAL ativada");
+    },
+  });
+
+  const approveMut = useMutation({
+    mutationFn: (id: string) => approvePayFn({ data: { id } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-payments"] });
+      toast.success("Pagamento aprovado e saldo creditado");
+    },
+    onError: (e) => toast.error("Falha", { description: String(e) }),
+  });
+  const rejectMut = useMutation({
+    mutationFn: (id: string) => rejectPayFn({ data: { id } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-payments"] });
+      toast.info("Pagamento recusado");
+    },
+  });
+
   const isAuto = modeQuery.data?.mode === "automatic";
+  const confirmMode = paySettingsQuery.data?.confirm ?? "manual";
 
   if (adminQuery.isLoading) {
     return (
