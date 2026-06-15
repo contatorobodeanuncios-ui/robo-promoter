@@ -1,7 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
+
+async function getAdmin() {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  return supabaseAdmin;
+}
 
 export type CampaignStatus = "running" | "analyzing" | "paused";
 
@@ -23,6 +27,7 @@ export interface CampaignRow {
   city: string;
   neighborhood: string;
   radius: number;
+  total_paid: number;
 }
 
 interface DbCampaign {
@@ -43,6 +48,7 @@ interface DbCampaign {
   city: string;
   neighborhood: string;
   radius: number;
+  total_paid?: string | number | null;
 }
 
 const num = (v: string | number | null | undefined) => (v == null ? 0 : Number(v));
@@ -65,6 +71,7 @@ const mapCampaign = (r: DbCampaign): CampaignRow => ({
   city: r.city,
   neighborhood: r.neighborhood,
   radius: r.radius,
+  total_paid: num(r.total_paid),
 });
 
 export const getAppData = createServerFn({ method: "GET" })
@@ -76,7 +83,7 @@ export const getAppData = createServerFn({ method: "GET" })
       supabase.from("campaigns").select("*").order("created_at", { ascending: false }),
     ]);
     return {
-      balance: profile?.balance ? Number(profile.balance) : 50,
+      balance: profile?.balance ? Number(profile.balance) : 0,
       displayName: profile?.display_name ?? null,
       campaigns: (campaigns ?? []).map((c) => mapCampaign(c as unknown as DbCampaign)),
     };
@@ -106,9 +113,19 @@ export const createCampaign = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => campaignInput.parse(data))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
+    // Métricas reais começam zeradas — só serão preenchidas pela integração Facebook/Pixel.
+    const safe = {
+      ...data,
+      spent: 0,
+      clicks: 0,
+      impressions: 0,
+      ctr: 0,
+      cpc: 0,
+      status: "analyzing" as const,
+    };
     const { data: row, error } = await supabase
       .from("campaigns")
-      .insert({ ...data, user_id: userId })
+      .insert({ ...safe, user_id: userId })
       .select("*")
       .single();
     if (error) throw new Error(error.message);
@@ -125,63 +142,22 @@ export const updateCampaign = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => updateInput.parse(data))
   .handler(async ({ data, context }) => {
     const { supabase } = context;
-    const { error } = await supabase.from("campaigns").update(data.patch).eq("id", data.id);
+    // Bloqueia mutação de métricas pelo cliente — só FB/Pixel via webhook (server) pode atualizar.
+    const { spent: _s, clicks: _c, impressions: _i, ctr: _ct, cpc: _cp, ...safe } = data.patch;
+    void _s; void _c; void _i; void _ct; void _cp;
+    const { error } = await supabase.from("campaigns").update(safe).eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
-  });
-
-const amountInput = z.object({ amount: z.number().positive().max(100000) });
-
-export const topupBalance = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) => amountInput.parse(data))
-  .handler(async ({ data, context }) => {
-    const { userId } = context;
-    const { data: profile, error: readErr } = await supabaseAdmin
-      .from("profiles")
-      .select("balance")
-      .eq("id", userId)
-      .single();
-    if (readErr) throw new Error(readErr.message);
-    const next = Number(profile.balance) + data.amount;
-    const { error } = await supabaseAdmin
-      .from("profiles")
-      .update({ balance: next })
-      .eq("id", userId);
-    if (error) throw new Error(error.message);
-    return { balance: next };
-  });
-
-export const chargeBalance = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) => amountInput.parse(data))
-  .handler(async ({ data, context }) => {
-    const { userId } = context;
-    const { data: profile, error: readErr } = await supabaseAdmin
-      .from("profiles")
-      .select("balance")
-      .eq("id", userId)
-      .single();
-    if (readErr) throw new Error(readErr.message);
-    const next = Math.max(0, Number(profile.balance) - data.amount);
-    const { error } = await supabaseAdmin
-      .from("profiles")
-      .update({ balance: next })
-      .eq("id", userId);
-    if (error) throw new Error(error.message);
-    return { balance: next };
   });
 
 export const wipeAll = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { userId } = context;
-    const { error: delErr } = await supabaseAdmin.from("campaigns").delete().eq("user_id", userId);
+    const admin = await getAdmin();
+    const { error: delErr } = await admin.from("campaigns").delete().eq("user_id", userId);
     if (delErr) throw new Error(delErr.message);
-    const { error } = await supabaseAdmin
-      .from("profiles")
-      .update({ balance: 0 })
-      .eq("id", userId);
+    const { error } = await admin.from("profiles").update({ balance: 0 }).eq("id", userId);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
