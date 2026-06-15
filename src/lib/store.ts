@@ -4,8 +4,6 @@ import {
   getAppData,
   createCampaign as createCampaignFn,
   updateCampaign as updateCampaignFn,
-  topupBalance,
-  chargeBalance,
   wipeAll as wipeAllFn,
   type CampaignRow,
 } from "./data.functions";
@@ -18,10 +16,8 @@ interface AppState {
   balance: number;
   campaigns: Campaign[];
   displayName: string | null;
-  addCampaign: (c: Omit<Campaign, "id"> & { id?: string }) => Promise<Campaign | void>;
+  addCampaign: (c: Omit<Campaign, "id" | "total_paid"> & { id?: string }) => Promise<Campaign | void>;
   updateCampaign: (id: string, patch: Partial<Campaign>) => void;
-  topup: (amount: number) => void;
-  charge: (amount: number) => void;
   wipeAll: () => void;
 }
 
@@ -37,7 +33,7 @@ export function useAppData(): AppState & { isLoading: boolean } {
   const invalidate = useCallback(() => qc.invalidateQueries({ queryKey: APP_DATA_KEY }), [qc]);
 
   const createMut = useMutation({
-    mutationFn: (c: Omit<Campaign, "id"> & { id?: string }) => {
+    mutationFn: (c: Omit<Campaign, "id" | "total_paid"> & { id?: string }) => {
       const { id: _drop, ...rest } = c;
       void _drop;
       return createCampaignFn({ data: rest });
@@ -51,20 +47,7 @@ export function useAppData(): AppState & { isLoading: boolean } {
     onSuccess: invalidate,
   });
 
-  const topupMut = useMutation({
-    mutationFn: (amount: number) => topupBalance({ data: { amount } }),
-    onSuccess: invalidate,
-  });
-
-  const chargeMut = useMutation({
-    mutationFn: (amount: number) => chargeBalance({ data: { amount } }),
-    onSuccess: invalidate,
-  });
-
-  const wipeMut = useMutation({
-    mutationFn: () => wipeAllFn(),
-    onSuccess: invalidate,
-  });
+  const wipeMut = useMutation({ mutationFn: () => wipeAllFn(), onSuccess: invalidate });
 
   return {
     balance: data?.balance ?? 0,
@@ -72,40 +55,32 @@ export function useAppData(): AppState & { isLoading: boolean } {
     displayName: data?.displayName ?? null,
     isLoading,
     addCampaign: (c) => createMut.mutateAsync(c),
-    updateCampaign: (id, patch) => {
-      updateMut.mutate({ id, patch });
-    },
-    topup: (amount) => {
-      topupMut.mutate(amount);
-    },
-    charge: (amount) => {
-      chargeMut.mutate(amount);
-    },
-    wipeAll: () => {
-      wipeMut.mutate();
-    },
+    updateCampaign: (id, patch) => { updateMut.mutate({ id, patch }); },
+    wipeAll: () => { wipeMut.mutate(); },
   };
 }
 
-// Backward-compatible selector wrapper so existing routes don't need rewriting.
 export function useAppStore<T>(selector: (s: AppState) => T): T {
   const state = useAppData();
   return selector(state);
 }
 
 export const computeSummary = (campaigns: Campaign[]) => {
-  const totalSpent = campaigns.reduce((a, c) => a + c.spent, 0);
-  const totalClicks = campaigns.reduce((a, c) => a + c.clicks, 0);
-  const totalImpressions = campaigns.reduce((a, c) => a + c.impressions, 0);
+  const running = campaigns.filter((c) => c.status === "running");
+  const totalSpent = running.reduce((a, c) => a + c.spent, 0);
+  const totalClicks = running.reduce((a, c) => a + c.clicks, 0);
+  const totalImpressions = running.reduce((a, c) => a + c.impressions, 0);
+  const totalPaid = campaigns.reduce((a, c) => a + (c.total_paid || 0), 0);
   const avgCpc = totalClicks > 0 ? totalSpent / totalClicks : 0;
   const avgCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
   return {
     totalSpent,
     totalClicks,
     totalImpressions,
+    totalPaid,
     avgCpc,
     avgCtr,
-    running: campaigns.filter((c) => c.status === "running").length,
+    running: running.length,
     analyzing: campaigns.filter((c) => c.status === "analyzing").length,
     paused: campaigns.filter((c) => c.status === "paused").length,
   };
