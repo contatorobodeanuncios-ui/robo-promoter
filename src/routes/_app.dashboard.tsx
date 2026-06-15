@@ -122,6 +122,7 @@ function Dashboard() {
           {campaigns.map((c) => {
             const s = statusMeta[c.status];
             const range = reachRange(c.budget, c.days);
+            const isRunning = c.status === "running";
             return (
               <Link
                 to="/campaign/$id"
@@ -154,13 +155,31 @@ function Dashboard() {
                       </span>
                       <span className="inline-flex items-center gap-1">
                         <Users className="h-3 w-3 text-primary" />
-                        alcance {fmtRange(range)}
+                        alcance estimado {fmtRange(range)}
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-4 text-xs pt-1">
-                      <span className="tabular-nums"><span className="text-muted-foreground">Gasto</span> <span className="font-semibold">{fmtBRL(c.spent)}</span></span>
-                      <span className="tabular-nums"><span className="text-muted-foreground">Cliques</span> <span className="font-semibold">{c.clicks.toLocaleString("pt-BR")}</span></span>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs pt-1">
+                      <span className="tabular-nums">
+                        <span className="text-muted-foreground">Pago pelo anúncio</span>{" "}
+                        <span className="font-semibold text-primary">{fmtBRL(c.total_paid)}</span>
+                      </span>
+                      {isRunning ? (
+                        <>
+                          <span className="tabular-nums">
+                            <span className="text-muted-foreground">Gasto (FB)</span>{" "}
+                            <span className="font-semibold">{fmtBRL(c.spent)}</span>
+                          </span>
+                          <span className="tabular-nums">
+                            <span className="text-muted-foreground">Cliques reais</span>{" "}
+                            <span className="font-semibold">{c.clicks.toLocaleString("pt-BR")}</span>
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground italic">
+                          Métricas aparecem aqui assim que a campanha ficar ativa (Facebook/Pixel).
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -170,10 +189,12 @@ function Dashboard() {
         </div>
       </section>
 
-      <RobotMascot
-        tone="success"
-        message="Sua campanha 'Hambúrguer Artesanal' está superando a meta de cliques em +18%."
-      />
+      {hasRunning && summary.totalClicks > 0 && (
+        <RobotMascot
+          tone="success"
+          message={`Você tem ${running.length} campanha(s) rodando com ${summary.totalClicks.toLocaleString("pt-BR")} cliques reais reportados pelo Facebook.`}
+        />
+      )}
     </div>
   );
 }
