@@ -249,6 +249,160 @@ function AdminDevPage() {
         </p>
       </section>
 
+      {/* Asaas config + Confirmação de pagamento */}
+      <section className="grid lg:grid-cols-2 gap-6">
+        <div className="glass-strong rounded-2xl p-6 space-y-4 border border-primary/20">
+          <div className="flex items-center gap-2">
+            <Link2 className="h-5 w-5 text-primary" />
+            <h2 className="font-semibold">Asaas — Link de pagamento</h2>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Cole o link base de cobrança do Asaas. Use os marcadores{" "}
+            <code className="text-primary">{"{amount}"}</code> ou{" "}
+            <code className="text-primary">{"{value}"}</code> para substituir o valor da cobrança.
+          </p>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Link/Template do Asaas</Label>
+            <Input
+              placeholder="https://www.asaas.com/c/SEU-LINK?value={amount}"
+              value={asaasLink}
+              onChange={(e) => setAsaasLink(e.target.value)}
+            />
+          </div>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={apiKeySet}
+              onChange={(e) => setApiKeySet(e.target.checked)}
+            />
+            Chave da API do Asaas já configurada (informativo)
+          </label>
+          <Button
+            variant="neon"
+            size="sm"
+            onClick={() => saveAsaas.mutate()}
+            disabled={saveAsaas.isPending}
+          >
+            {saveAsaas.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+            Salvar link
+          </Button>
+        </div>
+
+        <div className="glass-strong rounded-2xl p-6 space-y-4 border border-primary/20">
+          <div className="flex items-center gap-2">
+            <CreditCard className="h-5 w-5 text-primary" />
+            <h2 className="font-semibold">Modo de confirmação do pagamento</h2>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant={confirmMode === "manual" ? "neon" : "glass"}
+              size="sm"
+              onClick={() => toggleConfirmMode.mutate("manual")}
+              disabled={toggleConfirmMode.isPending}
+            >
+              <Hand className="h-3.5 w-3.5" /> Manual
+            </Button>
+            <Button
+              variant={confirmMode === "webhook" ? "neon" : "glass"}
+              size="sm"
+              onClick={() => toggleConfirmMode.mutate("webhook")}
+              disabled={toggleConfirmMode.isPending}
+            >
+              <Zap className="h-3.5 w-3.5" /> Webhook Asaas
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {confirmMode === "webhook"
+              ? "⚡ O Asaas notifica o endpoint /api/public/asaas-webhook e o saldo é creditado automaticamente."
+              : "✋ Você aprova cada pagamento manualmente na lista abaixo antes do saldo ser creditado."}
+          </p>
+          <div className="text-[11px] text-muted-foreground glass rounded p-2 font-mono break-all">
+            URL do webhook: <span className="text-primary">/api/public/asaas-webhook</span>
+          </div>
+        </div>
+      </section>
+
+      {/* Pagamentos pendentes */}
+      <section className="glass-strong rounded-2xl overflow-hidden">
+        <div className="p-5 border-b border-white/5 flex items-center justify-between">
+          <h2 className="font-semibold">Solicitações de pagamento</h2>
+          <span className="text-xs text-muted-foreground">
+            {paymentsQuery.data?.filter((p) => p.status === "pending").length ?? 0} aguardando
+          </span>
+        </div>
+        {!paymentsQuery.data?.length ? (
+          <div className="p-8 text-center text-sm text-muted-foreground">Nenhuma solicitação ainda.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-white/5">
+                <tr>
+                  <th className="px-4 py-3">Cliente</th>
+                  <th className="px-4 py-3 text-right">Valor</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Link Asaas</th>
+                  <th className="px-4 py-3 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paymentsQuery.data.map((p) => (
+                  <tr key={p.id} className="border-b border-white/5">
+                    <td className="px-4 py-3">
+                      <p className="font-medium">{p.client_name ?? "—"}</p>
+                      <p className="text-[11px] text-muted-foreground font-mono">{p.user_id.slice(0, 8)}</p>
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold">{fmtBRL(p.amount)}</td>
+                    <td className="px-4 py-3">
+                      <span className={`text-[11px] px-2 py-1 rounded-full border ${
+                        p.status === "paid" ? "border-success/40 text-success bg-success/10" :
+                        p.status === "rejected" ? "border-destructive/40 text-destructive bg-destructive/10" :
+                        p.status === "approved" ? "border-primary/40 text-primary bg-primary/10" :
+                        "border-warning/40 text-warning bg-warning/10"
+                      }`}>
+                        {p.status === "pending" ? "Aguardando" : p.status === "paid" ? "Pago" : p.status === "rejected" ? "Recusado" : "Aprovado"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {p.asaas_link ? (
+                        <a href={p.asaas_link} target="_blank" rel="noreferrer" className="text-[11px] text-primary truncate inline-block max-w-[220px]">
+                          {p.asaas_link}
+                        </a>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground italic">sem link</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {p.status === "pending" && (
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="neon"
+                            size="sm"
+                            onClick={() => approveMut.mutate(p.id)}
+                            disabled={approveMut.isPending}
+                          >
+                            <Check className="h-3.5 w-3.5" /> Aprovar
+                          </Button>
+                          <Button
+                            variant="glass"
+                            size="sm"
+                            onClick={() => rejectMut.mutate(p.id)}
+                            disabled={rejectMut.isPending}
+                          >
+                            <Ban className="h-3.5 w-3.5" /> Recusar
+                          </Button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+
+
       {/* Campaigns table */}
       <section className="glass-strong rounded-2xl overflow-hidden">
         <div className="p-5 border-b border-white/5 flex items-center justify-between">
