@@ -52,6 +52,7 @@ export type Database = {
           radius: number
           spent: number
           status: Database["public"]["Enums"]["campaign_status"]
+          total_paid: number
           updated_at: string
           user_id: string
         }
@@ -74,6 +75,7 @@ export type Database = {
           radius?: number
           spent?: number
           status?: Database["public"]["Enums"]["campaign_status"]
+          total_paid?: number
           updated_at?: string
           user_id: string
         }
@@ -96,6 +98,46 @@ export type Database = {
           radius?: number
           spent?: number
           status?: Database["public"]["Enums"]["campaign_status"]
+          total_paid?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      payment_requests: {
+        Row: {
+          amount: number
+          approved_at: string | null
+          asaas_link: string | null
+          asaas_payment_id: string | null
+          created_at: string
+          id: string
+          note: string | null
+          status: Database["public"]["Enums"]["payment_request_status"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          approved_at?: string | null
+          asaas_link?: string | null
+          asaas_payment_id?: string | null
+          created_at?: string
+          id?: string
+          note?: string | null
+          status?: Database["public"]["Enums"]["payment_request_status"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          approved_at?: string | null
+          asaas_link?: string | null
+          asaas_payment_id?: string | null
+          created_at?: string
+          id?: string
+          note?: string | null
+          status?: Database["public"]["Enums"]["payment_request_status"]
           updated_at?: string
           user_id?: string
         }
@@ -162,6 +204,7 @@ export type Database = {
     Enums: {
       app_role: "admin" | "user"
       campaign_status: "running" | "analyzing" | "paused"
+      payment_request_status: "pending" | "approved" | "rejected" | "paid"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -291,6 +334,7 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "user"],
       campaign_status: ["running", "analyzing", "paused"],
+      payment_request_status: ["pending", "approved", "rejected", "paid"],
     },
   },
 } as const

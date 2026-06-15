@@ -30,7 +30,6 @@ export const Route = createFileRoute("/_app/settings")({
 
 function SettingsPage() {
   const balance = useAppStore((s) => s.balance);
-  const topup = useAppStore((s) => s.topup);
   const wipeAll = useAppStore((s) => s.wipeAll);
   const nav = useNavigate();
 
@@ -41,12 +40,16 @@ function SettingsPage() {
   const [notifyAlerts, setNotifyAlerts] = useState(true);
   const [aiAuto, setAiAuto] = useState(true);
   const [confirmText, setConfirmText] = useState("");
+  const [customAmount, setCustomAmount] = useState("");
 
   const save = () => toast.success("Preferências salvas");
 
-  const handleTopup = (amount: number) => {
-    topup(amount);
-    toast.success(`Saldo recarregado em R$ ${amount.toFixed(2)}`);
+  const goPay = (amount: number) => {
+    if (amount < 20) {
+      toast.error("Valor mínimo R$ 20");
+      return;
+    }
+    nav({ to: "/payment", search: { topup: Math.round(amount) } });
   };
 
   const handleWipe = () => {
@@ -79,13 +82,29 @@ function SettingsPage() {
             <p className="text-4xl font-bold text-gradient tabular-nums">
               R$ {balance.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              O saldo só é creditado após a confirmação do pagamento no Asaas.
+            </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {[20, 50, 100, 250].map((v) => (
-              <Button key={v} variant="glass" size="sm" onClick={() => handleTopup(v)}>
+          <div className="flex flex-wrap gap-2 items-center">
+            {[20, 50, 100, 250, 500].map((v) => (
+              <Button key={v} variant="glass" size="sm" onClick={() => goPay(v)}>
                 <Plus className="h-3.5 w-3.5" /> R$ {v}
               </Button>
             ))}
+            <div className="flex items-center gap-1">
+              <Input
+                type="number"
+                min={20}
+                placeholder="Outro (mín R$ 20)"
+                value={customAmount}
+                onChange={(e) => setCustomAmount(e.target.value)}
+                className="h-9 w-40"
+              />
+              <Button variant="neon" size="sm" onClick={() => goPay(Number(customAmount) || 0)}>
+                Pagar
+              </Button>
+            </div>
           </div>
         </div>
       </section>

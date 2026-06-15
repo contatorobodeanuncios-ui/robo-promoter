@@ -92,28 +92,18 @@ function CreateWizard() {
     if (!image) return;
     setLaunching(true);
     const id = `c_${Date.now().toString(36)}`;
-    const range = reachRange(budget, days);
-    // Métricas iniciais derivadas da análise da IA
-    const lift = analysis?.engagement_lift ?? 0;
-    const score = analysis?.visual_score ?? 70;
-    const ctrBase = 2.8 + (score - 50) * 0.04 + lift * 0.02; // ~ 2-5%
-    const ctr = Math.max(0.8, Math.min(7, ctrBase));
-    const impressions = Math.round((range.min + range.max) / 2 * 0.05); // estimativa inicial
-    const clicks = Math.round(impressions * (ctr / 100));
-    const cpc = budget * days > 0 && clicks > 0 ? (budget * days * 0.1) / Math.max(1, clicks) : 0;
-    const spent = Math.round(clicks * cpc * 100) / 100;
-
     setTimeout(() => {
+      // Métricas começam zeradas — só são atualizadas via integração Facebook/Pixel.
       addCampaign({
         id,
         name: headline || "Nova campanha",
         image: image,
         status: "analyzing",
-        spent,
-        clicks,
-        impressions,
-        ctr: Number(ctr.toFixed(2)),
-        cpc: Number(cpc.toFixed(2)),
+        spent: 0,
+        clicks: 0,
+        impressions: 0,
+        ctr: 0,
+        cpc: 0,
         copy: body,
         headline,
         link,
@@ -123,12 +113,12 @@ function CreateWizard() {
         neighborhood,
         radius: Number(radius) || 1,
       });
-      toast.success("Robô preparado!", { description: "Finalize o pagamento via PIX para colocar o anúncio no ar." });
+      toast.success("Robô preparado!", { description: "Finalize o pagamento via Asaas para colocar o anúncio no ar." });
       nav({
         to: "/payment",
         search: { budget, days, name: headline || "Nova campanha", campaignId: id },
       });
-    }, 1200);
+    }, 800);
   };
 
   const canNext =
