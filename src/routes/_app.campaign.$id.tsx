@@ -6,6 +6,7 @@ import {
   ThumbsUp, MessageCircle, Share2, MoreHorizontal, Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SafeImage } from "@/components/app/SafeImage";
 
 export const Route = createFileRoute("/_app/campaign/$id")({
   head: () => ({
