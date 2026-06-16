@@ -177,10 +177,24 @@ function SettingsPage() {
       </section>
 
       {/* Zona de perigo */}
-      <section className="rounded-2xl p-6 border border-destructive/40 bg-destructive/5 space-y-4">
+      <section className="rounded-2xl p-6 border-2 border-destructive/60 bg-destructive/10 space-y-4">
         <div className="flex items-center gap-2">
           <AlertTriangle className="h-5 w-5 text-destructive" />
-          <h2 className="font-semibold text-destructive">Zona de perigo</h2>
+          <h2 className="font-semibold text-destructive">Zona de perigo — leia antes de clicar</h2>
+        </div>
+        <div className="rounded-lg border border-destructive/40 bg-destructive/15 p-4 text-sm text-destructive space-y-2">
+          <p className="font-bold uppercase tracking-wide">
+            ⚠ AVISO OBRIGATÓRIO
+          </p>
+          <p>
+            Apagar suas campanhas <strong>encerra anúncios ativos no Facebook</strong> e você
+            <strong> PERDE TODO o valor já investido nesses anúncios</strong> (o dinheiro pago à
+            Meta <u>não é reembolsado</u>).
+          </p>
+          <p>
+            Seu <strong>saldo no app (não gasto)</strong> NÃO é apagado — ele permanece na sua
+            carteira e só pode sair via gasto em campanha.
+          </p>
         </div>
         <p className="text-sm text-muted-foreground">
           Digite <span className="font-mono font-semibold text-foreground">APAGAR</span> para liberar o botão abaixo.
@@ -196,11 +210,8 @@ function SettingsPage() {
           disabled={confirmText !== "APAGAR"}
           className="w-full sm:w-auto bg-destructive hover:bg-destructive/90 text-destructive-foreground border border-destructive shadow-[0_0_24px_oklch(0.6_0.22_25/0.6)] disabled:opacity-50"
         >
-          <Trash2 className="h-4 w-4" /> Zerar TODOS os dados
+          <Trash2 className="h-4 w-4" /> Apagar campanhas (mantém saldo)
         </Button>
-        <p className="text-xs text-destructive/90 font-medium">
-          ⚠ Cuidado: se clicar nesse botão todas as informações serão zeradas, inclusive seu saldo e métricas nas campanhas. Tudo será apagado.
-        </p>
       </section>
     </div>
   );
