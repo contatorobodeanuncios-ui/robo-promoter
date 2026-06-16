@@ -7,16 +7,11 @@ async function getAdmin() {
   return supabaseAdmin;
 }
 
-async function assertAdmin(userId: string) {
-  const admin = await getAdmin();
-  const { data, error } = await admin
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("role", "admin")
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error("Forbidden: admin only");
+const ADMIN_EMAIL = "prototipospremium@gmail.com";
+
+async function assertAdmin(_userId: string, claims?: { email?: string }) {
+  const email = (claims?.email ?? "").toLowerCase();
+  if (email !== ADMIN_EMAIL) throw new Error("Forbidden: admin only");
 }
 
 export interface AsaasConfig {
