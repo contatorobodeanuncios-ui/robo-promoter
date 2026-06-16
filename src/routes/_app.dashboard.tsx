@@ -132,7 +132,7 @@ function Dashboard() {
                 className="block px-5 py-4 hover:bg-white/[0.03] transition-colors border-b border-white/5 last:border-0"
               >
                 <div className="flex items-start gap-3">
-                  <img src={c.image} alt="" className="h-14 w-14 rounded-lg object-cover border border-white/10 shrink-0" />
+                  <SafeImage src={c.image} alt="" className="h-14 w-14 rounded-lg object-cover border border-white/10 shrink-0" fallbackClassName="h-14 w-14 rounded-lg border border-white/10 shrink-0 grid place-items-center bg-white/5 text-muted-foreground" />
                   <div className="flex-1 min-w-0 space-y-2">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
