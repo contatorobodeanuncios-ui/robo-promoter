@@ -4,6 +4,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Bot, MousePointerClick, DollarSign, TrendingDown, Plus, Sparkles, MapPin, CalendarDays, Users } from "lucide-react";
 import { EnergyOrb } from "@/components/app/EnergyOrb";
 import { RobotMascot } from "@/components/app/RobotMascot";
+import { SafeImage } from "@/components/app/SafeImage";
 import { useAppStore, computeSummary } from "@/lib/store";
 import { PushNotificationBanner } from "@/components/app/PushNotificationBanner";
 
