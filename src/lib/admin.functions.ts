@@ -44,7 +44,7 @@ export const setCampaignMode = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ mode: z.enum(["manual", "automatic"]) }).parse(d))
   .handler(async ({ data, context }) => {
-    await assertAdmin(context.userId);
+    await assertAdmin(context.userId, context.claims as { email?: string });
     const supabaseAdmin = await getSupabaseAdmin();
     const { error } = await supabaseAdmin
       .from("app_settings")
@@ -76,7 +76,7 @@ export interface AdminCampaignRow {
 export const adminListCampaigns = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<AdminCampaignRow[]> => {
-    await assertAdmin(context.userId);
+    await assertAdmin(context.userId, context.claims as { email?: string });
     const supabaseAdmin = await getSupabaseAdmin();
     const { data: campaigns, error } = await supabaseAdmin
       .from("campaigns")
@@ -116,7 +116,7 @@ export const adminSetCampaignStatus = createServerFn({ method: "POST" })
     z.object({ id: z.string().uuid(), status: z.enum(["running", "analyzing", "paused"]) }).parse(d),
   )
   .handler(async ({ data, context }) => {
-    await assertAdmin(context.userId);
+    await assertAdmin(context.userId, context.claims as { email?: string });
     const supabaseAdmin = await getSupabaseAdmin();
     const { error } = await supabaseAdmin
       .from("campaigns")
