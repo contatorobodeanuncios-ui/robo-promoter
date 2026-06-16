@@ -5,6 +5,7 @@ import { Bot, MousePointerClick, DollarSign, TrendingDown, Plus, Sparkles, MapPi
 import { EnergyOrb } from "@/components/app/EnergyOrb";
 import { RobotMascot } from "@/components/app/RobotMascot";
 import { SafeImage } from "@/components/app/SafeImage";
+import { useUserDisplayName } from "@/components/app/AppShell";
 import { useAppStore, computeSummary } from "@/lib/store";
 import { PushNotificationBanner } from "@/components/app/PushNotificationBanner";
 
@@ -30,6 +31,7 @@ const statusMeta: Record<string, { label: string; cls: string; dot: string }> = 
 function Dashboard() {
   const campaigns = useAppStore((s) => s.campaigns);
   const balance = useAppStore((s) => s.balance);
+  const displayName = useUserDisplayName();
   const summary = computeSummary(campaigns);
   const running = campaigns.filter((c) => c.status === "running");
   const hasRunning = running.length > 0;
@@ -45,7 +47,7 @@ function Dashboard() {
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-sm text-muted-foreground flex items-center gap-2">
-            <Sparkles className="h-3.5 w-3.5 text-primary" /> Olá, Lucas 👋
+            <Sparkles className="h-3.5 w-3.5 text-primary" /> Olá, <span translate="no">{displayName}</span> 👋
           </p>
           <h1 className="text-3xl font-bold tracking-tight">Painel do Robô</h1>
         </div>
