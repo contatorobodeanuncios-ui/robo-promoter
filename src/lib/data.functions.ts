@@ -155,9 +155,10 @@ export const wipeAll = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
     const { userId } = context;
     const admin = await getAdmin();
+    // IMPORTANTE: nunca apaga o saldo já pago no app — o saldo é dinheiro real
+    // do cliente e só sai por gasto em campanha. Apenas as campanhas e suas
+    // métricas são removidas.
     const { error: delErr } = await admin.from("campaigns").delete().eq("user_id", userId);
     if (delErr) throw new Error(delErr.message);
-    const { error } = await admin.from("profiles").update({ balance: 0 }).eq("id", userId);
-    if (error) throw new Error(error.message);
     return { ok: true };
   });
