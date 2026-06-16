@@ -9,16 +9,16 @@ async function getSupabaseAdmin() {
   return supabaseAdmin;
 }
 
-async function assertAdmin(userId: string) {
-  const supabaseAdmin = await getSupabaseAdmin();
-  const { data, error } = await supabaseAdmin
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("role", "admin")
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error("Forbidden: admin only");
+const ADMIN_EMAIL = "prototipospremium@gmail.com";
+
+function assertAdminEmail(claims: { email?: string } | undefined) {
+  const email = (claims?.email ?? "").toLowerCase();
+  if (email !== ADMIN_EMAIL) throw new Error("Forbidden: admin only");
+}
+
+async function assertAdmin(userId: string, claims?: { email?: string }) {
+  void userId;
+  assertAdminEmail(claims);
 }
 
 export const getCampaignMode = createServerFn({ method: "GET" }).handler(async () => {
