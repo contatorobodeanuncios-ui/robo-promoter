@@ -1,10 +1,7 @@
 import { Link, Outlet, useRouterState, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, Plus, Settings, LogOut, Bot, Shield } from "lucide-react";
+import { LayoutDashboard, Plus, Settings, LogOut, Bot } from "lucide-react";
 import { Logo } from "./Logo";
 import { useAppStore } from "@/lib/store";
-import { useQuery } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
-import { checkIsAdmin } from "@/lib/admin.functions";
 import { supabase } from "@/integrations/supabase/client";
 
 const nav = [
@@ -16,21 +13,6 @@ const nav = [
 export function AppShell() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
-  const checkAdminFn = useServerFn(checkIsAdmin);
-  const { data: adminData } = useQuery({
-    queryKey: ["is-admin"],
-    queryFn: async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) return { isAdmin: false };
-      try {
-        return await checkAdminFn();
-      } catch {
-        return { isAdmin: false };
-      }
-    },
-    staleTime: 5 * 60_000,
-    retry: false,
-  });
 
   const onLogout = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -60,19 +42,6 @@ export function AppShell() {
               </Link>
             );
           })}
-          {adminData?.isAdmin && (
-            <Link
-              to="/admindev"
-              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all ${
-                path === "/admindev"
-                  ? "bg-gradient-to-r from-warning/20 to-primary/20 text-foreground border border-warning/40"
-                  : "text-muted-foreground hover:text-foreground hover:bg-white/5"
-              }`}
-            >
-              <Shield className="h-4 w-4" />
-              Admin Dev
-            </Link>
-          )}
         </nav>
         <div className="mt-auto space-y-1">
           <div className="glass rounded-xl p-3 mb-3">

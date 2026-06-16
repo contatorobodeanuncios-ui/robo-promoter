@@ -6,6 +6,7 @@ import {
   ThumbsUp, MessageCircle, Share2, MoreHorizontal, Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SafeImage } from "@/components/app/SafeImage";
 
 export const Route = createFileRoute("/_app/campaign/$id")({
   head: () => ({
@@ -108,7 +109,7 @@ function CampaignDetail() {
               <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
             </div>
             <p className="px-4 pb-3 text-sm">{c.copy}</p>
-            {c.image && <img src={c.image} alt="" className="w-full aspect-square object-cover" />}
+            <SafeImage src={c.image} alt="" className="w-full aspect-square object-cover" fallbackClassName="w-full aspect-square grid place-items-center bg-white/5 text-muted-foreground" />
             <div className="p-3 flex items-center justify-between bg-white/[0.02] border-t border-white/5">
               <div className="min-w-0">
                 <p className="text-[11px] text-muted-foreground uppercase">

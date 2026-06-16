@@ -9,16 +9,16 @@ async function getSupabaseAdmin() {
   return supabaseAdmin;
 }
 
-async function assertAdmin(userId: string) {
-  const supabaseAdmin = await getSupabaseAdmin();
-  const { data, error } = await supabaseAdmin
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("role", "admin")
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error("Forbidden: admin only");
+const ADMIN_EMAIL = "prototipospremium@gmail.com";
+
+function assertAdminEmail(claims: { email?: string } | undefined) {
+  const email = (claims?.email ?? "").toLowerCase();
+  if (email !== ADMIN_EMAIL) throw new Error("Forbidden: admin only");
+}
+
+async function assertAdmin(userId: string, claims?: { email?: string }) {
+  void userId;
+  assertAdminEmail(claims);
 }
 
 export const getCampaignMode = createServerFn({ method: "GET" }).handler(async () => {
@@ -36,21 +36,15 @@ export const getCampaignMode = createServerFn({ method: "GET" }).handler(async (
 export const checkIsAdmin = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const supabaseAdmin = await getSupabaseAdmin();
-    const { data } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    return { isAdmin: !!data };
+    const email = ((context.claims as { email?: string } | undefined)?.email ?? "").toLowerCase();
+    return { isAdmin: email === ADMIN_EMAIL };
   });
 
 export const setCampaignMode = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ mode: z.enum(["manual", "automatic"]) }).parse(d))
   .handler(async ({ data, context }) => {
-    await assertAdmin(context.userId);
+    await assertAdmin(context.userId, context.claims as { email?: string });
     const supabaseAdmin = await getSupabaseAdmin();
     const { error } = await supabaseAdmin
       .from("app_settings")
@@ -82,7 +76,7 @@ export interface AdminCampaignRow {
 export const adminListCampaigns = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<AdminCampaignRow[]> => {
-    await assertAdmin(context.userId);
+    await assertAdmin(context.userId, context.claims as { email?: string });
     const supabaseAdmin = await getSupabaseAdmin();
     const { data: campaigns, error } = await supabaseAdmin
       .from("campaigns")
@@ -122,7 +116,7 @@ export const adminSetCampaignStatus = createServerFn({ method: "POST" })
     z.object({ id: z.string().uuid(), status: z.enum(["running", "analyzing", "paused"]) }).parse(d),
   )
   .handler(async ({ data, context }) => {
-    await assertAdmin(context.userId);
+    await assertAdmin(context.userId, context.claims as { email?: string });
     const supabaseAdmin = await getSupabaseAdmin();
     const { error } = await supabaseAdmin
       .from("campaigns")
