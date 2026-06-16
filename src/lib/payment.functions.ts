@@ -42,7 +42,7 @@ export const setAsaasConfig = createServerFn({ method: "POST" })
     z.object({ link_template: z.string().max(500).default(""), api_key_set: z.boolean().default(false) }).parse(d),
   )
   .handler(async ({ data, context }) => {
-    await assertAdmin(context.userId);
+    await assertAdmin(context.userId, context.claims as { email?: string });
     const admin = await getAdmin();
     const { error } = await admin.from("app_settings").upsert({
       key: "asaas_config",
@@ -57,7 +57,7 @@ export const setPaymentConfirmMode = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ mode: z.enum(["manual", "webhook"]) }).parse(d))
   .handler(async ({ data, context }) => {
-    await assertAdmin(context.userId);
+    await assertAdmin(context.userId, context.claims as { email?: string });
     const admin = await getAdmin();
     const { error } = await admin.from("app_settings").upsert({
       key: "payment_confirm_mode",
@@ -121,7 +121,7 @@ export interface PaymentRequestRow {
 export const adminListPayments = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<PaymentRequestRow[]> => {
-    await assertAdmin(context.userId);
+    await assertAdmin(context.userId, context.claims as { email?: string });
     const admin = await getAdmin();
     const { data, error } = await admin
       .from("payment_requests")
@@ -150,7 +150,7 @@ export const adminApprovePayment = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    await assertAdmin(context.userId);
+    await assertAdmin(context.userId, context.claims as { email?: string });
     const admin = await getAdmin();
     const { data: pr, error } = await admin
       .from("payment_requests")
@@ -185,7 +185,7 @@ export const adminRejectPayment = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    await assertAdmin(context.userId);
+    await assertAdmin(context.userId, context.claims as { email?: string });
     const admin = await getAdmin();
     const { error } = await admin
       .from("payment_requests")
