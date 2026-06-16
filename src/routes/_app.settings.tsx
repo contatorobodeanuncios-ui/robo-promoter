@@ -57,9 +57,16 @@ function SettingsPage() {
       toast.error("Digite APAGAR para confirmar.");
       return;
     }
+    if (!window.confirm(
+      "ATENÇÃO: ao apagar TODAS as campanhas você PERDE imediatamente o valor já investido nos anúncios do Facebook. " +
+      "O dinheiro pago à Meta NÃO volta. Seu saldo no app (não gasto) é preservado. " +
+      "Tem certeza absoluta que deseja continuar?"
+    )) {
+      return;
+    }
     wipeAll();
     setConfirmText("");
-    toast.success("Tudo apagado.", { description: "Saldo, campanhas e métricas foram zerados." });
+    toast.success("Campanhas removidas.", { description: "Seu saldo no app foi preservado." });
     nav({ to: "/dashboard" });
   };
 
