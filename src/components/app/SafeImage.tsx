@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ImageOff } from "lucide-react";
 
-interface Props extends React.ImgHTMLAttributes<HTMLImageElement> {
+interface Props extends Omit<React.ImgHTMLAttributes<HTMLImageElement>, "src"> {
   src?: string | null;
   fallbackClassName?: string;
 }
