@@ -31,8 +31,10 @@ function LoginPage() {
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) nav({ to: "/dashboard", replace: true });
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
-      if (session?.user) nav({ to: "/dashboard", replace: true });
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && session?.user) {
+        nav({ to: "/power-on", replace: true });
+      }
     });
     return () => sub.subscription.unsubscribe();
   }, [nav]);
@@ -67,7 +69,7 @@ function LoginPage() {
   const onGoogle = async () => {
     setLoading(true);
     const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
+      redirect_uri: window.location.origin + "/power-on",
     });
     if (result.error) {
       toast.error("Falha no login com Google", { description: String(result.error.message ?? result.error) });
