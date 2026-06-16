@@ -36,14 +36,8 @@ export const getCampaignMode = createServerFn({ method: "GET" }).handler(async (
 export const checkIsAdmin = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const supabaseAdmin = await getSupabaseAdmin();
-    const { data } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    return { isAdmin: !!data };
+    const email = ((context.claims as { email?: string } | undefined)?.email ?? "").toLowerCase();
+    return { isAdmin: email === ADMIN_EMAIL };
   });
 
 export const setCampaignMode = createServerFn({ method: "POST" })
