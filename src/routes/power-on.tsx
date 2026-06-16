@@ -71,6 +71,13 @@ function PowerOnPage() {
 
   useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
 
+  // Auto-start animation when arriving (e.g., right after Google login)
+  useEffect(() => {
+    const t = setTimeout(() => start(), 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const start = () => {
     if (booting) return;
     setBooting(true);
