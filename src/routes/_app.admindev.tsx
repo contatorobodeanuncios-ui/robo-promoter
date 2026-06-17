@@ -93,6 +93,12 @@ function AdminDevPage() {
     enabled,
     refetchInterval: 15_000,
   });
+  const wipesQuery = useQuery({
+    queryKey: ["admin-wipes"],
+    queryFn: () => listWipesFn(),
+    enabled,
+    refetchInterval: 30_000,
+  });
 
   const [preview, setPreview] = useState<AdminCampaignRow | null>(null);
   const [asaasLink, setAsaasLink] = useState("");
