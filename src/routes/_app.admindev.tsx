@@ -411,6 +411,93 @@ function AdminDevPage() {
 
 
 
+      {/* Resets — contas que apagaram o app na Zona de Perigo */}
+      <section className="rounded-2xl overflow-hidden border-2 border-destructive/50 bg-destructive/5">
+        <div className="p-5 border-b border-destructive/30 flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-destructive" />
+            <h2 className="font-semibold">Resets na Zona de Perigo</h2>
+          </div>
+          <span className="text-xs text-destructive font-semibold uppercase tracking-wider">
+            ⚠ Desligue os anúncios na Meta!
+          </span>
+        </div>
+        <div className="p-4 bg-destructive/10 border-b border-destructive/20 text-xs text-destructive">
+          <p className="font-bold">
+            Cada reset abaixo representa uma conta que APAGOU as campanhas no app.
+            Os anúncios ainda podem estar <strong>ATIVOS no Facebook</strong> gastando dinheiro.
+            É obrigatório <strong>desligar manualmente cada anúncio relacionado</strong> na Meta Ads Manager.
+          </p>
+        </div>
+        {wipesQuery.isLoading ? (
+          <div className="p-8 text-center text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin mx-auto" />
+          </div>
+        ) : !wipesQuery.data?.length ? (
+          <div className="p-8 text-center text-sm text-muted-foreground">
+            Nenhum reset registrado ainda.
+          </div>
+        ) : (
+          <div className="divide-y divide-destructive/20">
+            {wipesQuery.data.map((w) => (
+              <div key={w.id} className="p-5 space-y-3">
+                <div className="flex items-start justify-between flex-wrap gap-2">
+                  <div>
+                    <p className="font-semibold flex items-center gap-2">
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                      {w.user_name ?? "(sem nome)"}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground font-mono">
+                      {w.user_email ?? w.user_id.slice(0, 8)}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[11px] text-muted-foreground">
+                      {new Date(w.created_at).toLocaleString("pt-BR")}
+                    </p>
+                    <p className="text-xs">
+                      <span className="text-destructive font-semibold">{w.active_count}</span>{" "}
+                      ativo(s) · {w.total_count} total
+                    </p>
+                  </div>
+                </div>
+                {w.campaigns_snapshot.length > 0 ? (
+                  <div className="rounded-lg bg-background/40 border border-destructive/20 p-3 space-y-2">
+                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                      <PowerOff className="h-3 w-3 text-destructive" /> Anúncios que estavam relacionados (desligar na Meta):
+                    </p>
+                    <ul className="space-y-1.5">
+                      {w.campaigns_snapshot.map((c) => (
+                        <li key={c.id} className="flex items-center justify-between gap-2 text-xs">
+                          <span className="truncate flex-1">
+                            <span className={`mr-2 inline-block px-1.5 py-0.5 rounded text-[10px] ${
+                              c.status === "running" ? "bg-success/20 text-success" :
+                              c.status === "analyzing" ? "bg-warning/20 text-warning" :
+                              "bg-white/10 text-muted-foreground"
+                            }`}>
+                              {c.status}
+                            </span>
+                            <span className="font-medium">{c.name}</span>
+                            {c.headline && <span className="text-muted-foreground"> — {c.headline}</span>}
+                          </span>
+                          {typeof c.budget === "number" && typeof c.days === "number" && (
+                            <span className="text-muted-foreground tabular-nums shrink-0">
+                              {fmtBRL(c.budget)}/dia · {c.days}d
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">Sem campanhas no momento do reset.</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
       {/* Campaigns table */}
       <section className="glass-strong rounded-2xl overflow-hidden">
         <div className="p-5 border-b border-white/5 flex items-center justify-between">
