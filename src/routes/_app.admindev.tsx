@@ -12,6 +12,7 @@ import {
   getCampaignMode,
   setCampaignMode,
   checkIsAdmin,
+  adminListWipeEvents,
   type AdminCampaignRow,
 } from "@/lib/admin.functions";
 import {
@@ -23,7 +24,7 @@ import {
   adminRejectPayment,
 } from "@/lib/payment.functions";
 import { supabase } from "@/integrations/supabase/client";
-import { Shield, Zap, Hand, Eye, X, Rocket, Loader2, Link2, Check, Ban, CreditCard } from "lucide-react";
+import { Shield, Zap, Hand, Eye, X, Rocket, Loader2, Link2, Check, Ban, CreditCard, AlertTriangle, Trash2, PowerOff } from "lucide-react";
 
 export const Route = createFileRoute("/_app/admindev")({
   ssr: false,
