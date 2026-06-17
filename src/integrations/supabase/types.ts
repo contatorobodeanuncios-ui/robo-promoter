@@ -188,6 +188,39 @@ export type Database = {
         }
         Relationships: []
       }
+      wipe_events: {
+        Row: {
+          active_count: number
+          campaigns_snapshot: Json
+          created_at: string
+          id: string
+          total_count: number
+          user_email: string | null
+          user_id: string
+          user_name: string | null
+        }
+        Insert: {
+          active_count?: number
+          campaigns_snapshot?: Json
+          created_at?: string
+          id?: string
+          total_count?: number
+          user_email?: string | null
+          user_id: string
+          user_name?: string | null
+        }
+        Update: {
+          active_count?: number
+          campaigns_snapshot?: Json
+          created_at?: string
+          id?: string
+          total_count?: number
+          user_email?: string | null
+          user_id?: string
+          user_name?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
