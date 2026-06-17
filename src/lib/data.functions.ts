@@ -108,12 +108,19 @@ const campaignInput = z.object({
   radius: z.number().int().min(1).max(200),
 });
 
+export interface CreateCampaignResult {
+  campaign: CampaignRow;
+  paid: boolean;
+  needsPayment: boolean;
+  totalCost: number;
+  remainingDue: number;
+}
+
 export const createCampaign = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => campaignInput.parse(data))
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data, context }): Promise<CreateCampaignResult> => {
     const { supabase, userId } = context;
-    // Métricas reais começam zeradas — só serão preenchidas pela integração Facebook/Pixel.
     const safe = {
       ...data,
       spent: 0,
@@ -129,7 +136,37 @@ export const createCampaign = createServerFn({ method: "POST" })
       .select("*")
       .single();
     if (error) throw new Error(error.message);
-    return mapCampaign(row as unknown as DbCampaign);
+
+    const totalCost = Math.round(data.budget * data.days);
+    const admin = await getAdmin();
+    const { data: prof } = await admin
+      .from("profiles")
+      .select("balance")
+      .eq("id", userId)
+      .maybeSingle();
+    const balance = Number(prof?.balance ?? 0);
+
+    if (balance >= totalCost) {
+      const next = balance - totalCost;
+      await admin.from("profiles").update({ balance: next }).eq("id", userId);
+      await admin.from("campaigns").update({ total_paid: totalCost }).eq("id", row.id);
+      const fresh = { ...(row as unknown as DbCampaign), total_paid: totalCost };
+      return {
+        campaign: mapCampaign(fresh),
+        paid: true,
+        needsPayment: false,
+        totalCost,
+        remainingDue: 0,
+      };
+    }
+
+    return {
+      campaign: mapCampaign(row as unknown as DbCampaign),
+      paid: false,
+      needsPayment: true,
+      totalCost,
+      remainingDue: totalCost - balance,
+    };
   });
 
 const updateInput = z.object({
@@ -142,7 +179,6 @@ export const updateCampaign = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => updateInput.parse(data))
   .handler(async ({ data, context }) => {
     const { supabase } = context;
-    // Bloqueia mutação de métricas pelo cliente — só FB/Pixel via webhook (server) pode atualizar.
     const { spent: _s, clicks: _c, impressions: _i, ctr: _ct, cpc: _cp, ...safe } = data.patch;
     void _s; void _c; void _i; void _ct; void _cp;
     const { error } = await supabase.from("campaigns").update(safe).eq("id", data.id);
@@ -153,12 +189,38 @@ export const updateCampaign = createServerFn({ method: "POST" })
 export const wipeAll = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { userId } = context;
+    const { userId, claims } = context;
     const admin = await getAdmin();
-    // IMPORTANTE: nunca apaga o saldo já pago no app — o saldo é dinheiro real
-    // do cliente e só sai por gasto em campanha. Apenas as campanhas e suas
-    // métricas são removidas.
-    const { error: delErr } = await admin.from("campaigns").delete().eq("user_id", userId);
+    // Snapshot antes de apagar (para registro na zona de perigo /admindev)
+    const { data: existing } = await admin
+      .from("campaigns")
+      .select("id,name,status,headline,image,budget,days,spent")
+      .eq("user_id", userId);
+    const list = existing ?? [];
+    const active = list.filter(
+      (c) => c.status === "running" || c.status === "analyzing",
+    ).length;
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("display_name")
+      .eq("id", userId)
+      .maybeSingle();
+    const email = (claims as { email?: string } | undefined)?.email ?? null;
+
+    await admin.from("wipe_events").insert({
+      user_id: userId,
+      user_email: email,
+      user_name: profile?.display_name ?? null,
+      campaigns_snapshot: list as unknown as object,
+      active_count: active,
+      total_count: list.length,
+    });
+
+    // NUNCA apaga o saldo já pago (preservado). Apaga apenas campanhas.
+    const { error: delErr } = await admin
+      .from("campaigns")
+      .delete()
+      .eq("user_id", userId);
     if (delErr) throw new Error(delErr.message);
     return { ok: true };
   });
