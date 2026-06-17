@@ -88,16 +88,16 @@ function CreateWizard() {
     reader.readAsDataURL(f);
   };
 
-  const launch = () => {
+  const launch = async () => {
     if (!image) return;
     setLaunching(true);
-    const id = `c_${Date.now().toString(36)}`;
-    setTimeout(() => {
-      // Métricas começam zeradas — só são atualizadas via integração Facebook/Pixel.
-      addCampaign({
-        id,
+    try {
+      // Salva como data URL para que a imagem não quebre na prévia
+      // (especialmente no celular, onde object URLs ficam inválidos).
+      const persistedImage = imageDataUrl || image;
+      const result = await addCampaign({
         name: headline || "Nova campanha",
-        image: image,
+        image: persistedImage,
         status: "analyzing",
         spent: 0,
         clicks: 0,
@@ -113,12 +113,27 @@ function CreateWizard() {
         neighborhood,
         radius: Number(radius) || 1,
       });
-      toast.success("Robô preparado!", { description: "Finalize o pagamento via Asaas para colocar o anúncio no ar." });
-      nav({
-        to: "/payment",
-        search: { budget, days, name: headline || "Nova campanha", campaignId: id },
-      });
-    }, 800);
+      if (result.paid) {
+        // Regra: paga primeiro com saldo do app se houver.
+        toast.success("Anúncio pago com saldo do app!", {
+          description: `R$ ${result.totalCost} debitados. Robô em análise.`,
+        });
+        nav({ to: "/dashboard" });
+      } else {
+        // Sem saldo suficiente → redireciona pro pagamento normal pelo link.
+        toast.info("Saldo insuficiente — redirecionando ao pagamento.", {
+          description: `Faltam R$ ${result.remainingDue.toFixed(2)} para ativar a campanha.`,
+        });
+        nav({
+          to: "/payment",
+          search: { budget, days, name: headline || "Nova campanha", campaignId: result.campaign.id },
+        });
+      }
+    } catch (e) {
+      toast.error("Falha ao criar campanha", { description: String(e) });
+    } finally {
+      setLaunching(false);
+    }
   };
 
   const canNext =
