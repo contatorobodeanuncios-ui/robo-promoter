@@ -18,7 +18,8 @@ export function AppShell() {
   const onLogout = async (e: React.MouseEvent) => {
     e.preventDefault();
     await supabase.auth.signOut();
-    navigate({ to: "/login", replace: true });
+    // Ao sair, volta para a abertura (regra: só volta pra abertura via "Sair").
+    navigate({ to: "/power-on", replace: true });
   };
 
   return (

@@ -6,6 +6,7 @@ import {
   updateCampaign as updateCampaignFn,
   wipeAll as wipeAllFn,
   type CampaignRow,
+  type CreateCampaignResult,
 } from "./data.functions";
 
 export type Campaign = CampaignRow;
@@ -16,7 +17,9 @@ interface AppState {
   balance: number;
   campaigns: Campaign[];
   displayName: string | null;
-  addCampaign: (c: Omit<Campaign, "id" | "total_paid"> & { id?: string }) => Promise<Campaign | void>;
+  addCampaign: (
+    c: Omit<Campaign, "id" | "total_paid"> & { id?: string },
+  ) => Promise<CreateCampaignResult>;
   updateCampaign: (id: string, patch: Partial<Campaign>) => void;
   wipeAll: () => void;
 }

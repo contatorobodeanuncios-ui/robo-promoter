@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +17,7 @@ import {
   User2,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_app/settings")({
   head: () => ({
@@ -28,19 +29,61 @@ export const Route = createFileRoute("/_app/settings")({
   component: SettingsPage,
 });
 
+interface NotifPrefs {
+  daily: boolean;
+  alerts: boolean;
+  aiAuto: boolean;
+}
+const NOTIF_KEY = "rdl_notif_prefs_v1";
+
+function loadNotif(): NotifPrefs {
+  if (typeof window === "undefined") return { daily: true, alerts: true, aiAuto: true };
+  try {
+    const raw = localStorage.getItem(NOTIF_KEY);
+    if (raw) return { daily: true, alerts: true, aiAuto: true, ...JSON.parse(raw) };
+  } catch { /* ignore */ }
+  return { daily: true, alerts: true, aiAuto: true };
+}
+
 function SettingsPage() {
   const balance = useAppStore((s) => s.balance);
   const wipeAll = useAppStore((s) => s.wipeAll);
+  const storeName = useAppStore((s) => s.displayName);
   const nav = useNavigate();
 
-  const [name, setName] = useState("Lucas");
-  const [email, setEmail] = useState("lucas@empresa.com");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [whats, setWhats] = useState("");
-  const [notifyDaily, setNotifyDaily] = useState(true);
-  const [notifyAlerts, setNotifyAlerts] = useState(true);
-  const [aiAuto, setAiAuto] = useState(true);
+  const [notif, setNotif] = useState<NotifPrefs>(() => loadNotif());
   const [confirmText, setConfirmText] = useState("");
   const [customAmount, setCustomAmount] = useState("");
+
+  // Puxa nome/email reais da sessão do Google/Supabase
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      const u = data.user;
+      if (!u) return;
+      const meta = (u.user_metadata ?? {}) as Record<string, unknown>;
+      const realName =
+        storeName ||
+        (meta.full_name as string) ||
+        (meta.name as string) ||
+        (meta.given_name as string) ||
+        (u.email ? u.email.split("@")[0] : "");
+      setName(realName || "");
+      setEmail(u.email || "");
+      const phone = (meta.phone as string) || u.phone || "";
+      setWhats(phone || "");
+    });
+  }, [storeName]);
+
+  // Persistência em tempo real das preferências de notificação
+  const setNotifKey = (k: keyof NotifPrefs, v: boolean) => {
+    const next = { ...notif, [k]: v };
+    setNotif(next);
+    try { localStorage.setItem(NOTIF_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+    toast.success(`${k === "daily" ? "Resumo diário" : k === "alerts" ? "Alertas críticos" : "IA automática"} ${v ? "ativado" : "desativado"}`);
+  };
 
   const save = () => toast.success("Preferências salvas");
 
@@ -147,21 +190,21 @@ function SettingsPage() {
             <p className="text-sm">Resumo diário do robô</p>
             <p className="text-xs text-muted-foreground">Receba um resumo das campanhas todo dia às 9h.</p>
           </div>
-          <Switch checked={notifyDaily} onCheckedChange={setNotifyDaily} />
+          <Switch checked={notif.daily} onCheckedChange={(v) => setNotifKey("daily", v)} />
         </div>
         <div className="flex items-center justify-between py-2 border-b border-white/5">
           <div>
             <p className="text-sm">Alertas críticos</p>
             <p className="text-xs text-muted-foreground">Avisar imediatamente quando uma campanha ficar fora da meta.</p>
           </div>
-          <Switch checked={notifyAlerts} onCheckedChange={setNotifyAlerts} />
+          <Switch checked={notif.alerts} onCheckedChange={(v) => setNotifKey("alerts", v)} />
         </div>
         <div className="flex items-center justify-between py-2">
           <div>
             <p className="text-sm">IA otimiza automaticamente</p>
             <p className="text-xs text-muted-foreground">Permite o robô ajustar lances e segmentações sem aprovação.</p>
           </div>
-          <Switch checked={aiAuto} onCheckedChange={setAiAuto} />
+          <Switch checked={notif.aiAuto} onCheckedChange={(v) => setNotifKey("aiAuto", v)} />
         </div>
       </section>
 

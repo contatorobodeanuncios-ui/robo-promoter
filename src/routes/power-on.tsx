@@ -3,8 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Power, Loader2 } from "lucide-react";
 import robotImg from "@/assets/robot-mascot.jpg";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/power-on")({
+  ssr: false,
   head: () => ({
     meta: [
       { title: "Ligar Robô — Robô de Lucro" },
@@ -24,12 +26,10 @@ const BOOT_STEPS = [
 
 function playStartupSound() {
   try {
-    const Ctx = (window.AudioContext || (window as any).webkitAudioContext);
+    const Ctx = (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext);
     if (!Ctx) return;
     const ctx = new Ctx();
     const now = ctx.currentTime;
-
-    // Rising synth sweep
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = "sawtooth";
@@ -41,8 +41,6 @@ function playStartupSound() {
     osc.connect(gain).connect(ctx.destination);
     osc.start(now);
     osc.stop(now + 1.5);
-
-    // Confirmation beeps
     [0.6, 0.85, 1.1].forEach((t, i) => {
       const o = ctx.createOscillator();
       const g = ctx.createGain();
@@ -55,7 +53,6 @@ function playStartupSound() {
       o.start(now + t);
       o.stop(now + t + 0.25);
     });
-
     setTimeout(() => ctx.close(), 2200);
   } catch {
     /* ignore */
@@ -71,17 +68,16 @@ function PowerOnPage() {
 
   useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
 
-  // Auto-start animation when arriving (e.g., right after Google login)
-  useEffect(() => {
-    const t = setTimeout(() => start(), 300);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Regra: NUNCA inicia sozinho. Espera o usuário clicar em "Iniciar".
+  // Depois do clique: se logado vai pro dashboard; senão vai pro login.
 
-  const start = () => {
+  const start = async () => {
     if (booting) return;
     setBooting(true);
     playStartupSound();
+
+    const { data } = await supabase.auth.getUser();
+    const destination = data.user ? "/dashboard" : "/login";
 
     const total = 3200;
     const tick = 40;
@@ -93,7 +89,7 @@ function PowerOnPage() {
       setStep(Math.min(BOOT_STEPS.length - 1, Math.floor((p / 100) * BOOT_STEPS.length)));
       if (p >= 100) {
         clearInterval(interval);
-        timers.current.push(setTimeout(() => nav({ to: "/dashboard" }), 500));
+        timers.current.push(setTimeout(() => nav({ to: destination, replace: true }), 400));
       }
     }, tick);
   };

@@ -152,16 +152,17 @@ function PaymentPage() {
           </div>
         </div>
 
-        <div className="glass-strong rounded-2xl p-6 flex flex-col items-center justify-center gap-6">
-          <EnergyOrb state="analyzing" size={220} label="Aguardando pagamento" />
-          <div className="text-center max-w-xs">
+        <div className="glass-strong rounded-2xl p-6 flex flex-col items-center justify-center gap-10 min-h-[360px] pt-16 pb-10">
+          <EnergyOrb state="analyzing" size={200} labelPosition="top" label="Aguardando pagamento" />
+          <div className="text-center max-w-xs mx-auto">
             <p className="text-sm font-semibold flex items-center justify-center gap-2">
               <Hourglass className="h-4 w-4" /> Pendente
             </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Assim que o Asaas confirmar o pagamento (ou o admin liberar manualmente), {isCampaign ? "a campanha entra no ar" : "o saldo aparece no app"}.
+            <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+              Assim que o Asaas confirmar o pagamento (ou o admin liberar manualmente),
+              {isCampaign ? " a campanha entra no ar." : " o saldo aparece no app."}
             </p>
-            <Link to="/dashboard" className="inline-flex items-center gap-1 text-xs text-primary mt-3">
+            <Link to="/dashboard" className="inline-flex items-center gap-1 text-xs text-primary mt-4">
               Ir para o dashboard <ArrowRight className="h-3 w-3" />
             </Link>
           </div>

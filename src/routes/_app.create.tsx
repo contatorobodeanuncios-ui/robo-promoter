@@ -88,16 +88,16 @@ function CreateWizard() {
     reader.readAsDataURL(f);
   };
 
-  const launch = () => {
+  const launch = async () => {
     if (!image) return;
     setLaunching(true);
-    const id = `c_${Date.now().toString(36)}`;
-    setTimeout(() => {
-      // Métricas começam zeradas — só são atualizadas via integração Facebook/Pixel.
-      addCampaign({
-        id,
+    try {
+      // Salva como data URL para que a imagem não quebre na prévia
+      // (especialmente no celular, onde object URLs ficam inválidos).
+      const persistedImage = imageDataUrl || image;
+      const result = await addCampaign({
         name: headline || "Nova campanha",
-        image: image,
+        image: persistedImage,
         status: "analyzing",
         spent: 0,
         clicks: 0,
@@ -113,12 +113,27 @@ function CreateWizard() {
         neighborhood,
         radius: Number(radius) || 1,
       });
-      toast.success("Robô preparado!", { description: "Finalize o pagamento via Asaas para colocar o anúncio no ar." });
-      nav({
-        to: "/payment",
-        search: { budget, days, name: headline || "Nova campanha", campaignId: id },
-      });
-    }, 800);
+      if (result.paid) {
+        // Regra: paga primeiro com saldo do app se houver.
+        toast.success("Anúncio pago com saldo do app!", {
+          description: `R$ ${result.totalCost} debitados. Robô em análise.`,
+        });
+        nav({ to: "/dashboard" });
+      } else {
+        // Sem saldo suficiente → redireciona pro pagamento normal pelo link.
+        toast.info("Saldo insuficiente — redirecionando ao pagamento.", {
+          description: `Faltam R$ ${result.remainingDue.toFixed(2)} para ativar a campanha.`,
+        });
+        nav({
+          to: "/payment",
+          search: { budget, days, name: headline || "Nova campanha", campaignId: result.campaign.id },
+        });
+      }
+    } catch (e) {
+      toast.error("Falha ao criar campanha", { description: String(e) });
+    } finally {
+      setLaunching(false);
+    }
   };
 
   const canNext =
@@ -137,7 +152,7 @@ function CreateWizard() {
       </header>
 
       {/* Stepper */}
-      <ol className="grid grid-cols-4 gap-2">
+      <ol className="grid grid-cols-2 md:grid-cols-4 gap-2">
         {steps.map((s, i) => {
           const active = step === s.n;
           const done = step > s.n;
@@ -184,7 +199,17 @@ function CreateWizard() {
             {image && (
               <div className="grid md:grid-cols-2 gap-6">
                 <div className="relative aspect-square rounded-2xl overflow-hidden border border-white/10">
-                  <img src={image} alt="preview" className="absolute inset-0 h-full w-full object-cover" />
+                  <img
+                    src={imageDataUrl || image}
+                    alt="preview"
+                    className="absolute inset-0 h-full w-full object-cover"
+                    onError={(e) => {
+                      // fallback se objectURL quebrar (caso celular)
+                      if (imageDataUrl && (e.currentTarget as HTMLImageElement).src !== imageDataUrl) {
+                        (e.currentTarget as HTMLImageElement).src = imageDataUrl;
+                      }
+                    }}
+                  />
                   {scanState === "scanning" && (
                     <>
                       <div className="absolute inset-0 bg-primary/10" />
@@ -271,6 +296,14 @@ function CreateWizard() {
               <p className="text-xs text-muted-foreground -mt-1">
                 A IA precisa saber onde rodar o anúncio. Cidade, bairro e raio são sempre obrigatórios.
               </p>
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-[11px] text-foreground/90 flex items-start gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                <span>
+                  <strong>Dica:</strong> se você quiser anunciar para a <strong>cidade inteira</strong>,
+                  escreva o nome da cidade <strong>também no campo Bairro</strong>. Assim o robô não
+                  limita o anúncio a um bairro específico e sim a toda a cidade.
+                </span>
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1.5 col-span-2">
                   <Label className="text-xs">Cidade</Label>

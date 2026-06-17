@@ -173,3 +173,50 @@ export const submitCampaignToMeta = createServerFn({ method: "POST" })
       return { status: "analyzing" as const, mode, fallback: true };
     }
   });
+
+export interface WipeSnapshotItem {
+  id: string;
+  name: string;
+  status: string;
+  headline?: string;
+  image?: string;
+  budget?: number;
+  days?: number;
+  spent?: number;
+}
+
+export interface AdminWipeEventRow {
+  id: string;
+  user_id: string;
+  user_email: string | null;
+  user_name: string | null;
+  active_count: number;
+  total_count: number;
+  campaigns_snapshot: WipeSnapshotItem[];
+  created_at: string;
+}
+
+export const adminListWipeEvents = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<AdminWipeEventRow[]> => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const { data, error } = await admin
+      .from("wipe_events")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (error) throw new Error(error.message);
+    return (data ?? []).map((r) => ({
+      id: r.id,
+      user_id: r.user_id,
+      user_email: r.user_email,
+      user_name: r.user_name,
+      active_count: r.active_count,
+      total_count: r.total_count,
+      campaigns_snapshot: Array.isArray(r.campaigns_snapshot)
+        ? (r.campaigns_snapshot as unknown as WipeSnapshotItem[])
+        : [],
+      created_at: r.created_at,
+    }));
+  });
