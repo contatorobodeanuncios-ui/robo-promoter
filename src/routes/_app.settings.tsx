@@ -190,21 +190,21 @@ function SettingsPage() {
             <p className="text-sm">Resumo diário do robô</p>
             <p className="text-xs text-muted-foreground">Receba um resumo das campanhas todo dia às 9h.</p>
           </div>
-          <Switch checked={notifyDaily} onCheckedChange={setNotifyDaily} />
+          <Switch checked={notif.daily} onCheckedChange={(v) => setNotifKey("daily", v)} />
         </div>
         <div className="flex items-center justify-between py-2 border-b border-white/5">
           <div>
             <p className="text-sm">Alertas críticos</p>
             <p className="text-xs text-muted-foreground">Avisar imediatamente quando uma campanha ficar fora da meta.</p>
           </div>
-          <Switch checked={notifyAlerts} onCheckedChange={setNotifyAlerts} />
+          <Switch checked={notif.alerts} onCheckedChange={(v) => setNotifKey("alerts", v)} />
         </div>
         <div className="flex items-center justify-between py-2">
           <div>
             <p className="text-sm">IA otimiza automaticamente</p>
             <p className="text-xs text-muted-foreground">Permite o robô ajustar lances e segmentações sem aprovação.</p>
           </div>
-          <Switch checked={aiAuto} onCheckedChange={setAiAuto} />
+          <Switch checked={notif.aiAuto} onCheckedChange={(v) => setNotifKey("aiAuto", v)} />
         </div>
       </section>
 
