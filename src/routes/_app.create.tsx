@@ -296,6 +296,14 @@ function CreateWizard() {
               <p className="text-xs text-muted-foreground -mt-1">
                 A IA precisa saber onde rodar o anúncio. Cidade, bairro e raio são sempre obrigatórios.
               </p>
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-[11px] text-foreground/90 flex items-start gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                <span>
+                  <strong>Dica:</strong> se você quiser anunciar para a <strong>cidade inteira</strong>,
+                  escreva o nome da cidade <strong>também no campo Bairro</strong>. Assim o robô não
+                  limita o anúncio a um bairro específico e sim a toda a cidade.
+                </span>
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1.5 col-span-2">
                   <Label className="text-xs">Cidade</Label>
