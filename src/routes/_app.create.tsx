@@ -199,7 +199,17 @@ function CreateWizard() {
             {image && (
               <div className="grid md:grid-cols-2 gap-6">
                 <div className="relative aspect-square rounded-2xl overflow-hidden border border-white/10">
-                  <img src={image} alt="preview" className="absolute inset-0 h-full w-full object-cover" />
+                  <img
+                    src={imageDataUrl || image}
+                    alt="preview"
+                    className="absolute inset-0 h-full w-full object-cover"
+                    onError={(e) => {
+                      // fallback se objectURL quebrar (caso celular)
+                      if (imageDataUrl && (e.currentTarget as HTMLImageElement).src !== imageDataUrl) {
+                        (e.currentTarget as HTMLImageElement).src = imageDataUrl;
+                      }
+                    }}
+                  />
                   {scanState === "scanning" && (
                     <>
                       <div className="absolute inset-0 bg-primary/10" />
