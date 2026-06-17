@@ -32,8 +32,10 @@ function LoginPage() {
       if (data.user) nav({ to: "/dashboard", replace: true });
     });
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
-      if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && session?.user) {
-        nav({ to: "/power-on", replace: true });
+      // Após login (Google/email), entra direto no app. A abertura só é vista
+      // antes do login (quando o usuário acessa o app pela primeira vez ou após sair).
+      if (event === "SIGNED_IN" && session?.user) {
+        nav({ to: "/dashboard", replace: true });
       }
     });
     return () => sub.subscription.unsubscribe();
