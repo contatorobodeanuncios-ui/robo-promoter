@@ -152,7 +152,7 @@ function CreateWizard() {
       </header>
 
       {/* Stepper */}
-      <ol className="grid grid-cols-4 gap-2">
+      <ol className="grid grid-cols-2 md:grid-cols-4 gap-2">
         {steps.map((s, i) => {
           const active = step === s.n;
           const done = step > s.n;
