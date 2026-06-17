@@ -54,6 +54,7 @@ function AdminDevPage() {
   const listPaymentsFn = useServerFn(adminListPayments);
   const approvePayFn = useServerFn(adminApprovePayment);
   const rejectPayFn = useServerFn(adminRejectPayment);
+  const listWipesFn = useServerFn(adminListWipeEvents);
 
   const adminQuery = useQuery({
     queryKey: ["admindev-access"],
