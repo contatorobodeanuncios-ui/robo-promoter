@@ -211,7 +211,7 @@ export const wipeAll = createServerFn({ method: "POST" })
       user_id: userId,
       user_email: email,
       user_name: profile?.display_name ?? null,
-      campaigns_snapshot: list as unknown as object,
+      campaigns_snapshot: JSON.parse(JSON.stringify(list)),
       active_count: active,
       total_count: list.length,
     });
