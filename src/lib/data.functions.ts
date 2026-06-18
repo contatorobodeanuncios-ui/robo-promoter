@@ -91,7 +91,7 @@ export const getAppData = createServerFn({ method: "GET" })
 
 const campaignInput = z.object({
   name: z.string().min(1).max(200),
-  image: z.string().max(2000).default(""),
+  image: z.string().max(8_000_000).default(""),
   status: z.enum(["running", "analyzing", "paused"]).default("analyzing"),
   spent: z.number().min(0).default(0),
   clicks: z.number().int().min(0).default(0),
