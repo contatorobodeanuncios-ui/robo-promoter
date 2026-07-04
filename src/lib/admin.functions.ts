@@ -58,7 +58,7 @@ export interface AdminCampaignRow {
   user_id: string;
   client_name: string | null;
   name: string;
-  status: "running" | "analyzing" | "paused";
+  status: "running" | "analyzing" | "paused" | "aguardando_vinculo_meta" | "rodando" | "encerrada_saldo_consumido";
   budget: number;
   days: number;
   spent: number;
@@ -113,7 +113,13 @@ export const adminListCampaigns = createServerFn({ method: "GET" })
 export const adminSetCampaignStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
-    z.object({ id: z.string().uuid(), status: z.enum(["running", "analyzing", "paused"]) }).parse(d),
+    z.object({
+      id: z.string().uuid(),
+      status: z.enum([
+        "running","analyzing","paused",
+        "aguardando_vinculo_meta","rodando","encerrada_saldo_consumido",
+      ]),
+    }).parse(d),
   )
   .handler(async ({ data, context }) => {
     await assertAdmin(context.userId, context.claims as { email?: string });
