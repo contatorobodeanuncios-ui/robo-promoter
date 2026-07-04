@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as PowerOnRouteImport } from './routes/power-on'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as AguardandoRouteImport } from './routes/aguardando'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
@@ -29,6 +30,11 @@ const PowerOnRoute = PowerOnRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AguardandoRoute = AguardandoRouteImport.update({
+  id: '/aguardando',
+  path: '/aguardando',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppRoute = AppRouteImport.update({
@@ -78,6 +84,7 @@ const AppCampaignIdRoute = AppCampaignIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/aguardando': typeof AguardandoRoute
   '/login': typeof LoginRoute
   '/power-on': typeof PowerOnRoute
   '/admindev': typeof AppAdmindevRoute
@@ -90,6 +97,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/aguardando': typeof AguardandoRoute
   '/login': typeof LoginRoute
   '/power-on': typeof PowerOnRoute
   '/admindev': typeof AppAdmindevRoute
@@ -104,6 +112,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
+  '/aguardando': typeof AguardandoRoute
   '/login': typeof LoginRoute
   '/power-on': typeof PowerOnRoute
   '/_app/admindev': typeof AppAdmindevRoute
@@ -118,6 +127,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/aguardando'
     | '/login'
     | '/power-on'
     | '/admindev'
@@ -130,6 +140,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/aguardando'
     | '/login'
     | '/power-on'
     | '/admindev'
@@ -143,6 +154,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_app'
+    | '/aguardando'
     | '/login'
     | '/power-on'
     | '/_app/admindev'
@@ -157,6 +169,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
+  AguardandoRoute: typeof AguardandoRoute
   LoginRoute: typeof LoginRoute
   PowerOnRoute: typeof PowerOnRoute
   ApiPublicAsaasWebhookRoute: typeof ApiPublicAsaasWebhookRoute
@@ -176,6 +189,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/aguardando': {
+      id: '/aguardando'
+      path: '/aguardando'
+      fullPath: '/aguardando'
+      preLoaderRoute: typeof AguardandoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app': {
@@ -267,6 +287,7 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
+  AguardandoRoute: AguardandoRoute,
   LoginRoute: LoginRoute,
   PowerOnRoute: PowerOnRoute,
   ApiPublicAsaasWebhookRoute: ApiPublicAsaasWebhookRoute,
