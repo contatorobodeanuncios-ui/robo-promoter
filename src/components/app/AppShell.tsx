@@ -19,6 +19,7 @@ export function AppShell() {
     e.preventDefault();
     await supabase.auth.signOut();
     // Ao sair, volta para a abertura (regra: só volta pra abertura via "Sair").
+    try { window.sessionStorage.removeItem("boot_seen"); } catch { /* ignore */ }
     navigate({ to: "/power-on", replace: true });
   };
 

@@ -89,6 +89,7 @@ function PowerOnPage() {
       setStep(Math.min(BOOT_STEPS.length - 1, Math.floor((p / 100) * BOOT_STEPS.length)));
       if (p >= 100) {
         clearInterval(interval);
+        try { window.sessionStorage.setItem("boot_seen", "1"); } catch { /* ignore */ }
         timers.current.push(setTimeout(() => nav({ to: destination, replace: true }), 400));
       }
     }, tick);
