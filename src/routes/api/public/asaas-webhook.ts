@@ -58,7 +58,7 @@ export const Route = createFileRoute("/api/public/asaas-webhook")({
             event_type: event,
             payment_id: payment.id ?? null,
             external_reference: payment.externalReference ?? null,
-            raw_payload: payload as unknown as Record<string, unknown>,
+            raw_payload: payload as unknown as never,
           });
         if (dedupErr) {
           // 23505 = unique_violation. Já processado.
