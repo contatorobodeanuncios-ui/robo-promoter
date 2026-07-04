@@ -24,8 +24,11 @@ const fmtBRL = (n: number) =>
 
 const statusMeta: Record<string, { label: string; cls: string; dot: string }> = {
   running: { label: "Rodando", cls: "text-success bg-success/10 border-success/30", dot: "bg-success" },
+  rodando: { label: "Rodando", cls: "text-success bg-success/10 border-success/30", dot: "bg-success" },
   analyzing: { label: "IA analisando", cls: "text-primary bg-primary/10 border-primary/30", dot: "bg-primary animate-pulse" },
+  aguardando_vinculo_meta: { label: "Aguardando PIX/Meta", cls: "text-warning bg-warning/10 border-warning/30", dot: "bg-warning animate-pulse" },
   paused: { label: "Pausado", cls: "text-muted-foreground bg-white/5 border-white/10", dot: "bg-muted-foreground" },
+  encerrada_saldo_consumido: { label: "Encerrada", cls: "text-muted-foreground bg-white/5 border-white/10", dot: "bg-muted-foreground" },
 };
 
 function Dashboard() {
