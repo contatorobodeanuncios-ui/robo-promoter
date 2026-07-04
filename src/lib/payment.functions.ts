@@ -73,7 +73,10 @@ const ALLOWED_PRESETS = [20, 50, 100, 200, 500, 1000] as const;
 export const createPaymentRequest = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
-    z.object({ amount: z.number().int().min(20).max(100000) }).parse(d),
+    z.object({
+      amount: z.number().int().min(20).max(100000),
+      campaignId: z.string().uuid().optional(),
+    }).parse(d),
   )
   .handler(async ({ data, context }) => {
     void ALLOWED_PRESETS;
@@ -84,27 +87,98 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
       .eq("key", "asaas_config")
       .maybeSingle();
     const cfg = (cfgRow?.value as AsaasConfig | null) ?? { link_template: "", api_key_set: false };
-    const link = cfg.link_template
-      ? cfg.link_template
-          .replace("{amount}", String(data.amount))
-          .replace("{value}", String(data.amount))
-      : "";
+
+    // Cria linha em payment_requests primeiro para termos o id (usado como externalReference).
     const { data: row, error } = await admin
       .from("payment_requests")
       .insert({
         user_id: context.userId,
         amount: data.amount,
         status: "pending",
-        asaas_link: link || null,
+        asaas_link: null,
       })
       .select("*")
       .single();
     if (error) throw new Error(error.message);
+    const prId = row.id as string;
+    // externalReference: `pr:<uuid>` para top-up de saldo; `cmp:<campaignId>|pr:<uuid>` para campanha PIX dedicado.
+    const externalReference = data.campaignId
+      ? `cmp:${data.campaignId}|pr:${prId}`
+      : `pr:${prId}`;
+
+    let link = "";
+    let usedApi = false;
+
+    const apiKey = process.env.ASAAS_API_KEY;
+    if (apiKey) {
+      try {
+        // 1) upsert de customer usando o e-mail do usuário logado (fallback: user_id).
+        const email = (context.claims as { email?: string } | undefined)?.email ?? `user-${context.userId}@robolucro.app`;
+        const custResp = await fetch("https://api.asaas.com/v3/customers", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            access_token: apiKey,
+          },
+          body: JSON.stringify({
+            name: email.split("@")[0],
+            email,
+            externalReference: context.userId,
+          }),
+        });
+        const cust = (await custResp.json()) as { id?: string; errors?: unknown };
+        const customerId = cust.id;
+        if (customerId) {
+          const due = new Date(Date.now() + 3 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+          const payResp = await fetch("https://api.asaas.com/v3/payments", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              access_token: apiKey,
+            },
+            body: JSON.stringify({
+              customer: customerId,
+              billingType: "PIX",
+              value: data.amount,
+              dueDate: due,
+              externalReference,
+              description: data.campaignId
+                ? `Campanha PIX dedicado — ${data.campaignId}`
+                : `Recarga de saldo — Robô de Lucro`,
+            }),
+          });
+          const pay = (await payResp.json()) as { id?: string; invoiceUrl?: string; errors?: Array<{ description?: string }> };
+          if (pay.invoiceUrl) {
+            link = pay.invoiceUrl;
+            usedApi = true;
+            await admin
+              .from("payment_requests")
+              .update({ asaas_link: link, asaas_payment_id: pay.id ?? null })
+              .eq("id", prId);
+          } else {
+            console.error("Asaas payment error", pay.errors);
+          }
+        }
+      } catch (err) {
+        console.error("Asaas API failure, falling back to link_template", err);
+      }
+    }
+
+    if (!link && cfg.link_template) {
+      link = cfg.link_template
+        .replace("{amount}", String(data.amount))
+        .replace("{value}", String(data.amount))
+        .replace("{ref}", externalReference);
+      await admin.from("payment_requests").update({ asaas_link: link }).eq("id", prId);
+    }
+
     return {
-      id: row.id as string,
+      id: prId,
       amount: Number(row.amount),
       link,
-      configured: !!cfg.link_template,
+      externalReference,
+      configured: !!link,
+      via: usedApi ? "api" : link ? "template" : "none",
     };
   });
 

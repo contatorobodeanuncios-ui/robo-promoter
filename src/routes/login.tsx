@@ -19,6 +19,42 @@ export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
+const ADMIN_EMAIL = "prototipospremium@gmail.com";
+
+async function routeAfterLogin(
+  userId: string,
+  email: string | null,
+  displayName: string | null,
+  nav: ReturnType<typeof useNavigate>,
+) {
+  const isAdmin = (email ?? "").toLowerCase() === ADMIN_EMAIL;
+  if (isAdmin) {
+    nav({ to: "/dashboard", replace: true });
+    return;
+  }
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("status")
+    .eq("id", userId)
+    .maybeSingle();
+  const status = (profile?.status ?? "pending") as "pending" | "approved" | "banned";
+  if (status === "approved") {
+    nav({ to: "/dashboard", replace: true });
+    return;
+  }
+  // Registra/atualiza o pedido de acesso e desloga; deixa apenas na tela de espera.
+  await supabase.from("access_requests").upsert(
+    {
+      user_id: userId,
+      email,
+      display_name: displayName,
+      status: status === "banned" ? "rejected" : "pending",
+    },
+    { onConflict: "user_id" },
+  );
+  nav({ to: "/aguardando", replace: true });
+}
+
 function LoginPage() {
   const nav = useNavigate();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -29,13 +65,23 @@ function LoginPage() {
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      if (data.user) nav({ to: "/dashboard", replace: true });
+      if (data.user) {
+        void routeAfterLogin(
+          data.user.id,
+          data.user.email ?? null,
+          (data.user.user_metadata?.full_name as string | undefined) ?? null,
+          nav,
+        );
+      }
     });
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
-      // Após login (Google/email), entra direto no app. A abertura só é vista
-      // antes do login (quando o usuário acessa o app pela primeira vez ou após sair).
       if (event === "SIGNED_IN" && session?.user) {
-        nav({ to: "/dashboard", replace: true });
+        void routeAfterLogin(
+          session.user.id,
+          session.user.email ?? null,
+          (session.user.user_metadata?.full_name as string | undefined) ?? null,
+          nav,
+        );
       }
     });
     return () => sub.subscription.unsubscribe();
@@ -71,7 +117,7 @@ function LoginPage() {
   const onGoogle = async () => {
     setLoading(true);
     const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin + "/dashboard",
+      redirect_uri: window.location.origin + "/login",
     });
     if (result.error) {
       toast.error("Falha no login com Google", { description: String(result.error.message ?? result.error) });
@@ -117,7 +163,9 @@ function LoginPage() {
               {mode === "signin" ? "Bem-vindo de volta" : "Criar sua conta"}
             </h2>
             <p className="text-sm text-muted-foreground">
-              {mode === "signin" ? "Entre no painel do seu robô." : "Comece com R$ 50 de saldo de boas-vindas."}
+              {mode === "signin"
+                ? "Entre no painel do seu robô."
+                : "Novas contas passam por aprovação do administrador antes de acessar o painel."}
             </p>
           </div>
 

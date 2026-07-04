@@ -52,6 +52,7 @@ function CreateWizard() {
   const [radius, setRadius] = useState("15");
   const [budget, setBudget] = useState(15);
   const [days, setDays] = useState(7);
+  const [fundingType, setFundingType] = useState<"wallet" | "pix_dedicated">("wallet");
   const [launching, setLaunching] = useState(false);
 
   const handleFile = async (f: File) => {
@@ -112,18 +113,27 @@ function CreateWizard() {
         city,
         neighborhood,
         radius: Number(radius) || 1,
+        funding_type: fundingType,
+        pix_total_budget: fundingType === "pix_dedicated" ? budget * days : 0,
+        pix_remaining_budget: 0,
       });
       if (result.paid) {
-        // Regra: paga primeiro com saldo do app se houver.
         toast.success("Anúncio pago com saldo do app!", {
           description: `R$ ${result.totalCost} debitados. Robô em análise.`,
         });
         nav({ to: "/dashboard" });
       } else {
-        // Sem saldo suficiente → redireciona pro pagamento normal pelo link.
-        toast.info("Saldo insuficiente — redirecionando ao pagamento.", {
-          description: `Faltam R$ ${result.remainingDue.toFixed(2)} para ativar a campanha.`,
-        });
+        toast.info(
+          fundingType === "pix_dedicated"
+            ? "Campanha criada — pagamento PIX 100% para Meta Ads."
+            : "Saldo insuficiente — redirecionando ao pagamento.",
+          {
+            description:
+              fundingType === "pix_dedicated"
+                ? `R$ ${result.totalCost.toFixed(2)} vão diretamente para o anúncio (sem reembolso).`
+                : `Faltam R$ ${result.remainingDue.toFixed(2)} para ativar a campanha.`,
+          },
+        );
         nav({
           to: "/payment",
           search: { budget, days, name: headline || "Nova campanha", campaignId: result.campaign.id },
@@ -425,8 +435,44 @@ function CreateWizard() {
               </div>
             </div>
 
+            <div className="glass rounded-2xl p-5 space-y-3">
+              <p className="text-sm font-medium">Como você quer pagar esta campanha?</p>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setFundingType("wallet")}
+                  className={`text-left rounded-xl p-4 border transition-all ${fundingType === "wallet" ? "border-primary/70 bg-primary/5 border-glow" : "border-white/10 hover:border-white/20"}`}
+                >
+                  <p className="font-semibold text-sm">Saldo do app</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Usa o saldo pré-pago. Sobra vira crédito para a próxima campanha.
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFundingType("pix_dedicated")}
+                  className={`text-left rounded-xl p-4 border transition-all ${fundingType === "pix_dedicated" ? "border-primary/70 bg-primary/5 border-glow" : "border-white/10 hover:border-white/20"}`}
+                >
+                  <p className="font-semibold text-sm">PIX dedicado (100% Meta Ads)</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    O valor vai <strong>direto</strong> para esta campanha. Não entra no saldo.
+                  </p>
+                </button>
+              </div>
+              {fundingType === "pix_dedicated" && (
+                <div className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-[11px] text-warning-foreground/90 flex items-start gap-2">
+                  <AlertTriangle className="h-3.5 w-3.5 text-warning shrink-0 mt-0.5" />
+                  <span>
+                    <strong>Sem reembolso.</strong> O PIX dedicado é enviado 100% para
+                    veiculação no Meta Ads. Se sobrar verba ao final ou a campanha for
+                    encerrada antes, o valor não retorna e não vira saldo no app.
+                  </span>
+                </div>
+              )}
+            </div>
+
             <Button variant="neon" size="lg" className="w-full h-14 text-base animate-pulse-glow" onClick={launch} disabled={launching}>
-              {launching ? <><Loader2 className="animate-spin" /> Ativando robô...</> : <><Rocket /> Ativar Robô e Lançar Anúncio</>}
+              {launching ? <><Loader2 className="animate-spin" /> Ativando robô...</> : <><Rocket /> {fundingType === "pix_dedicated" ? "Gerar PIX e Lançar" : "Ativar Robô e Lançar Anúncio"}</>}
             </Button>
           </div>
         )}

@@ -638,7 +638,7 @@ function FbPreview({ campaign, onClose }: { campaign: AdminCampaignRow; onClose:
           <div className="px-3 py-2 bg-[#3a3b3c] flex items-center justify-between">
             <div className="text-xs">
               <p className="uppercase text-white/50 text-[10px]">
-                {new URL(campaign.link || "https://facebook.com").hostname}
+                {safeHostname(campaign.link)}
               </p>
               <p className="font-semibold text-sm">{campaign.headline || campaign.name}</p>
             </div>
@@ -650,4 +650,14 @@ function FbPreview({ campaign, onClose }: { campaign: AdminCampaignRow; onClose:
       </div>
     </div>
   );
+}
+
+function safeHostname(link: string | null | undefined): string {
+  if (!link) return "facebook.com";
+  try {
+    const withProto = /^https?:\/\//i.test(link) ? link : `https://${link}`;
+    return new URL(withProto).hostname;
+  } catch {
+    return "link inválido";
+  }
 }

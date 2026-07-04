@@ -7,7 +7,15 @@ async function getAdmin() {
   return supabaseAdmin;
 }
 
-export type CampaignStatus = "running" | "analyzing" | "paused";
+export type CampaignStatus =
+  | "running"
+  | "analyzing"
+  | "paused"
+  | "aguardando_vinculo_meta"
+  | "rodando"
+  | "encerrada_saldo_consumido";
+
+export type FundingType = "wallet" | "pix_dedicated";
 
 export interface CampaignRow {
   id: string;
@@ -28,6 +36,9 @@ export interface CampaignRow {
   neighborhood: string;
   radius: number;
   total_paid: number;
+  funding_type: FundingType;
+  pix_total_budget: number;
+  pix_remaining_budget: number;
 }
 
 interface DbCampaign {
@@ -49,6 +60,9 @@ interface DbCampaign {
   neighborhood: string;
   radius: number;
   total_paid?: string | number | null;
+  funding_type?: FundingType | null;
+  pix_total_budget?: string | number | null;
+  pix_remaining_budget?: string | number | null;
 }
 
 const num = (v: string | number | null | undefined) => (v == null ? 0 : Number(v));
@@ -72,6 +86,9 @@ const mapCampaign = (r: DbCampaign): CampaignRow => ({
   neighborhood: r.neighborhood,
   radius: r.radius,
   total_paid: num(r.total_paid),
+  funding_type: (r.funding_type ?? "wallet") as FundingType,
+  pix_total_budget: num(r.pix_total_budget),
+  pix_remaining_budget: num(r.pix_remaining_budget),
 });
 
 export const getAppData = createServerFn({ method: "GET" })
@@ -92,7 +109,14 @@ export const getAppData = createServerFn({ method: "GET" })
 const campaignInput = z.object({
   name: z.string().min(1).max(200),
   image: z.string().max(8_000_000).default(""),
-  status: z.enum(["running", "analyzing", "paused"]).default("analyzing"),
+  status: z.enum([
+    "running",
+    "analyzing",
+    "paused",
+    "aguardando_vinculo_meta",
+    "rodando",
+    "encerrada_saldo_consumido",
+  ]).default("analyzing"),
   spent: z.number().min(0).default(0),
   clicks: z.number().int().min(0).default(0),
   impressions: z.number().int().min(0).default(0),
@@ -106,6 +130,8 @@ const campaignInput = z.object({
   city: z.string().max(200).default(""),
   neighborhood: z.string().max(200).default(""),
   radius: z.number().int().min(1).max(200),
+  funding_type: z.enum(["wallet", "pix_dedicated"]).default("wallet"),
+  pix_total_budget: z.number().min(0).optional(),
 });
 
 export interface CreateCampaignResult {
@@ -121,14 +147,28 @@ export const createCampaign = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => campaignInput.parse(data))
   .handler(async ({ data, context }): Promise<CreateCampaignResult> => {
     const { supabase, userId } = context;
+    const totalCost = Math.round(data.budget * data.days);
+    const isPix = data.funding_type === "pix_dedicated";
     const safe = {
-      ...data,
+      name: data.name,
+      image: data.image,
+      copy: data.copy,
+      headline: data.headline,
+      link: data.link,
+      budget: data.budget,
+      days: data.days,
+      city: data.city,
+      neighborhood: data.neighborhood,
+      radius: data.radius,
       spent: 0,
       clicks: 0,
       impressions: 0,
       ctr: 0,
       cpc: 0,
-      status: "analyzing" as const,
+      status: isPix ? ("aguardando_vinculo_meta" as const) : ("analyzing" as const),
+      funding_type: data.funding_type,
+      pix_total_budget: isPix ? totalCost : null,
+      pix_remaining_budget: isPix ? 0 : null,
     };
     const { data: row, error } = await supabase
       .from("campaigns")
@@ -137,7 +177,18 @@ export const createCampaign = createServerFn({ method: "POST" })
       .single();
     if (error) throw new Error(error.message);
 
-    const totalCost = Math.round(data.budget * data.days);
+    // PIX dedicado: NÃO debita saldo do app. Cliente precisa pagar por fora
+    // e o valor vai 100% pra Meta Ads. Sem reembolso.
+    if (isPix) {
+      return {
+        campaign: mapCampaign(row as unknown as DbCampaign),
+        paid: false,
+        needsPayment: true,
+        totalCost,
+        remainingDue: totalCost,
+      };
+    }
+
     const admin = await getAdmin();
     const { data: prof } = await admin
       .from("profiles")
@@ -179,8 +230,12 @@ export const updateCampaign = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => updateInput.parse(data))
   .handler(async ({ data, context }) => {
     const { supabase } = context;
-    const { spent: _s, clicks: _c, impressions: _i, ctr: _ct, cpc: _cp, ...safe } = data.patch;
-    void _s; void _c; void _i; void _ct; void _cp;
+    const {
+      spent: _s, clicks: _c, impressions: _i, ctr: _ct, cpc: _cp,
+      funding_type: _ft, pix_total_budget: _ptb,
+      ...safe
+    } = data.patch;
+    void _s; void _c; void _i; void _ct; void _cp; void _ft; void _ptb;
     const { error } = await supabase.from("campaigns").update(safe).eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
@@ -191,14 +246,13 @@ export const wipeAll = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
     const { userId, claims } = context;
     const admin = await getAdmin();
-    // Snapshot antes de apagar (para registro na zona de perigo /admindev)
     const { data: existing } = await admin
       .from("campaigns")
       .select("id,name,status,headline,image,budget,days,spent")
       .eq("user_id", userId);
     const list = existing ?? [];
     const active = list.filter(
-      (c) => c.status === "running" || c.status === "analyzing",
+      (c) => c.status === "running" || c.status === "analyzing" || c.status === "rodando",
     ).length;
     const { data: profile } = await admin
       .from("profiles")
@@ -216,7 +270,6 @@ export const wipeAll = createServerFn({ method: "POST" })
       total_count: list.length,
     });
 
-    // NUNCA apaga o saldo já pago (preservado). Apaga apenas campanhas.
     const { error: delErr } = await admin
       .from("campaigns")
       .delete()
