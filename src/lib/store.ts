@@ -69,7 +69,7 @@ export function useAppStore<T>(selector: (s: AppState) => T): T {
 }
 
 export const computeSummary = (campaigns: Campaign[]) => {
-  const running = campaigns.filter((c) => c.status === "running");
+  const running = campaigns.filter((c) => c.status === "running" || c.status === "rodando");
   const totalSpent = running.reduce((a, c) => a + c.spent, 0);
   const totalClicks = running.reduce((a, c) => a + c.clicks, 0);
   const totalImpressions = running.reduce((a, c) => a + c.impressions, 0);
@@ -84,7 +84,7 @@ export const computeSummary = (campaigns: Campaign[]) => {
     avgCpc,
     avgCtr,
     running: running.length,
-    analyzing: campaigns.filter((c) => c.status === "analyzing").length,
+    analyzing: campaigns.filter((c) => c.status === "analyzing" || c.status === "aguardando_vinculo_meta").length,
     paused: campaigns.filter((c) => c.status === "paused").length,
   };
 };
