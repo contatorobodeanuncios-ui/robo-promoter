@@ -126,9 +126,9 @@ function Dashboard() {
             </div>
           )}
           {campaigns.map((c) => {
-            const s = statusMeta[c.status];
+            const s = statusMeta[c.status] ?? { label: c.status, cls: "text-muted-foreground bg-white/5 border-white/10", dot: "bg-muted-foreground" };
             const range = reachRange(c.budget, c.days);
-            const isRunning = c.status === "running";
+            const isRunning = c.status === "running" || c.status === "rodando";
             return (
               <Link
                 to="/campaign/$id"
