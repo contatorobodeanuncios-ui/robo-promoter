@@ -52,6 +52,7 @@ function CreateWizard() {
   const [radius, setRadius] = useState("15");
   const [budget, setBudget] = useState(15);
   const [days, setDays] = useState(7);
+  const [fundingType, setFundingType] = useState<"wallet" | "pix_dedicated">("wallet");
   const [launching, setLaunching] = useState(false);
 
   const handleFile = async (f: File) => {
@@ -112,18 +113,27 @@ function CreateWizard() {
         city,
         neighborhood,
         radius: Number(radius) || 1,
+        funding_type: fundingType,
+        pix_total_budget: fundingType === "pix_dedicated" ? budget * days : 0,
+        pix_remaining_budget: 0,
       });
       if (result.paid) {
-        // Regra: paga primeiro com saldo do app se houver.
         toast.success("Anúncio pago com saldo do app!", {
           description: `R$ ${result.totalCost} debitados. Robô em análise.`,
         });
         nav({ to: "/dashboard" });
       } else {
-        // Sem saldo suficiente → redireciona pro pagamento normal pelo link.
-        toast.info("Saldo insuficiente — redirecionando ao pagamento.", {
-          description: `Faltam R$ ${result.remainingDue.toFixed(2)} para ativar a campanha.`,
-        });
+        toast.info(
+          fundingType === "pix_dedicated"
+            ? "Campanha criada — pagamento PIX 100% para Meta Ads."
+            : "Saldo insuficiente — redirecionando ao pagamento.",
+          {
+            description:
+              fundingType === "pix_dedicated"
+                ? `R$ ${result.totalCost.toFixed(2)} vão diretamente para o anúncio (sem reembolso).`
+                : `Faltam R$ ${result.remainingDue.toFixed(2)} para ativar a campanha.`,
+          },
+        );
         nav({
           to: "/payment",
           search: { budget, days, name: headline || "Nova campanha", campaignId: result.campaign.id },
