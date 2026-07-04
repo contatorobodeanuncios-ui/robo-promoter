@@ -230,8 +230,12 @@ export const updateCampaign = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => updateInput.parse(data))
   .handler(async ({ data, context }) => {
     const { supabase } = context;
-    const { spent: _s, clicks: _c, impressions: _i, ctr: _ct, cpc: _cp, ...safe } = data.patch;
-    void _s; void _c; void _i; void _ct; void _cp;
+    const {
+      spent: _s, clicks: _c, impressions: _i, ctr: _ct, cpc: _cp,
+      funding_type: _ft, pix_total_budget: _ptb, pix_remaining_budget: _prb,
+      ...safe
+    } = data.patch;
+    void _s; void _c; void _i; void _ct; void _cp; void _ft; void _ptb; void _prb;
     const { error } = await supabase.from("campaigns").update(safe).eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
