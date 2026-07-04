@@ -435,8 +435,44 @@ function CreateWizard() {
               </div>
             </div>
 
+            <div className="glass rounded-2xl p-5 space-y-3">
+              <p className="text-sm font-medium">Como você quer pagar esta campanha?</p>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setFundingType("wallet")}
+                  className={`text-left rounded-xl p-4 border transition-all ${fundingType === "wallet" ? "border-primary/70 bg-primary/5 border-glow" : "border-white/10 hover:border-white/20"}`}
+                >
+                  <p className="font-semibold text-sm">Saldo do app</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Usa o saldo pré-pago. Sobra vira crédito para a próxima campanha.
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFundingType("pix_dedicated")}
+                  className={`text-left rounded-xl p-4 border transition-all ${fundingType === "pix_dedicated" ? "border-primary/70 bg-primary/5 border-glow" : "border-white/10 hover:border-white/20"}`}
+                >
+                  <p className="font-semibold text-sm">PIX dedicado (100% Meta Ads)</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    O valor vai <strong>direto</strong> para esta campanha. Não entra no saldo.
+                  </p>
+                </button>
+              </div>
+              {fundingType === "pix_dedicated" && (
+                <div className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-[11px] text-warning-foreground/90 flex items-start gap-2">
+                  <AlertTriangle className="h-3.5 w-3.5 text-warning shrink-0 mt-0.5" />
+                  <span>
+                    <strong>Sem reembolso.</strong> O PIX dedicado é enviado 100% para
+                    veiculação no Meta Ads. Se sobrar verba ao final ou a campanha for
+                    encerrada antes, o valor não retorna e não vira saldo no app.
+                  </span>
+                </div>
+              )}
+            </div>
+
             <Button variant="neon" size="lg" className="w-full h-14 text-base animate-pulse-glow" onClick={launch} disabled={launching}>
-              {launching ? <><Loader2 className="animate-spin" /> Ativando robô...</> : <><Rocket /> Ativar Robô e Lançar Anúncio</>}
+              {launching ? <><Loader2 className="animate-spin" /> Ativando robô...</> : <><Rocket /> {fundingType === "pix_dedicated" ? "Gerar PIX e Lançar" : "Ativar Robô e Lançar Anúncio"}</>}
             </Button>
           </div>
         )}
