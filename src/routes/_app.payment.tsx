@@ -52,7 +52,7 @@ function PaymentPage() {
     let cancelled = false;
     (async () => {
       try {
-        const r = await createFn({ data: { amount } });
+        const r = await createFn({ data: { amount, campaignId: campaignId || undefined } });
         if (cancelled) return;
         setRequestId(r.id);
         setLink(r.link || null);
