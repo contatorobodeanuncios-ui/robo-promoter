@@ -21,6 +21,7 @@ import { Route as AppCreateRouteImport } from './routes/_app.create'
 import { Route as AppAdmindevRouteImport } from './routes/_app.admindev'
 import { Route as ApiPublicAsaasWebhookRouteImport } from './routes/api/public/asaas-webhook'
 import { Route as AppCampaignIdRouteImport } from './routes/_app.campaign.$id'
+import { Route as ApiPublicHooksMetaMetricsSyncRouteImport } from './routes/api/public/hooks/meta-metrics-sync'
 
 const PowerOnRoute = PowerOnRouteImport.update({
   id: '/power-on',
@@ -81,6 +82,12 @@ const AppCampaignIdRoute = AppCampaignIdRouteImport.update({
   path: '/campaign/$id',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiPublicHooksMetaMetricsSyncRoute =
+  ApiPublicHooksMetaMetricsSyncRouteImport.update({
+    id: '/api/public/hooks/meta-metrics-sync',
+    path: '/api/public/hooks/meta-metrics-sync',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -94,6 +101,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AppSettingsRoute
   '/campaign/$id': typeof AppCampaignIdRoute
   '/api/public/asaas-webhook': typeof ApiPublicAsaasWebhookRoute
+  '/api/public/hooks/meta-metrics-sync': typeof ApiPublicHooksMetaMetricsSyncRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -107,6 +115,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AppSettingsRoute
   '/campaign/$id': typeof AppCampaignIdRoute
   '/api/public/asaas-webhook': typeof ApiPublicAsaasWebhookRoute
+  '/api/public/hooks/meta-metrics-sync': typeof ApiPublicHooksMetaMetricsSyncRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -122,6 +131,7 @@ export interface FileRoutesById {
   '/_app/settings': typeof AppSettingsRoute
   '/_app/campaign/$id': typeof AppCampaignIdRoute
   '/api/public/asaas-webhook': typeof ApiPublicAsaasWebhookRoute
+  '/api/public/hooks/meta-metrics-sync': typeof ApiPublicHooksMetaMetricsSyncRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -137,6 +147,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/campaign/$id'
     | '/api/public/asaas-webhook'
+    | '/api/public/hooks/meta-metrics-sync'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -150,6 +161,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/campaign/$id'
     | '/api/public/asaas-webhook'
+    | '/api/public/hooks/meta-metrics-sync'
   id:
     | '__root__'
     | '/'
@@ -164,6 +176,7 @@ export interface FileRouteTypes {
     | '/_app/settings'
     | '/_app/campaign/$id'
     | '/api/public/asaas-webhook'
+    | '/api/public/hooks/meta-metrics-sync'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -173,6 +186,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   PowerOnRoute: typeof PowerOnRoute
   ApiPublicAsaasWebhookRoute: typeof ApiPublicAsaasWebhookRoute
+  ApiPublicHooksMetaMetricsSyncRoute: typeof ApiPublicHooksMetaMetricsSyncRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -261,6 +275,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCampaignIdRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/public/hooks/meta-metrics-sync': {
+      id: '/api/public/hooks/meta-metrics-sync'
+      path: '/api/public/hooks/meta-metrics-sync'
+      fullPath: '/api/public/hooks/meta-metrics-sync'
+      preLoaderRoute: typeof ApiPublicHooksMetaMetricsSyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -291,6 +312,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   PowerOnRoute: PowerOnRoute,
   ApiPublicAsaasWebhookRoute: ApiPublicAsaasWebhookRoute,
+  ApiPublicHooksMetaMetricsSyncRoute: ApiPublicHooksMetaMetricsSyncRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
