@@ -226,3 +226,136 @@ export const adminListWipeEvents = createServerFn({ method: "GET" })
       created_at: r.created_at,
     }));
   });
+
+// ============ Meta metrics health ============
+export interface MetaMetricsHealth {
+  last_run_at: string | null;
+  last_status: string | null;
+  processed_count: number;
+  error_count: number;
+  duration_ms: number | null;
+  stale: boolean; // true se última execução > 90 min
+}
+
+export const getMetaMetricsHealth = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<MetaMetricsHealth> => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const { data } = await admin
+      .from("meta_metrics_runs")
+      .select("*")
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!data) {
+      return { last_run_at: null, last_status: null, processed_count: 0, error_count: 0, duration_ms: null, stale: true };
+    }
+    const lastAt = data.finished_at ?? data.started_at;
+    const ageMin = (Date.now() - new Date(lastAt).getTime()) / 60000;
+    return {
+      last_run_at: lastAt,
+      last_status: data.status,
+      processed_count: data.processed_count ?? 0,
+      error_count: data.error_count ?? 0,
+      duration_ms: data.duration_ms,
+      stale: ageMin > 90 || data.status === "error",
+    };
+  });
+
+// ============ Ajuste manual de saldo ============
+export const adminAdjustBalance = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      user_id: z.string().uuid(),
+      delta: z.number().refine((n) => n !== 0, "delta não pode ser zero"),
+      reason: z.string().min(3, "motivo obrigatório (mín. 3 chars)"),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const { data: prof, error: pErr } = await admin
+      .from("profiles").select("balance").eq("id", data.user_id).maybeSingle();
+    if (pErr) throw new Error(pErr.message);
+    const current = Number(prof?.balance ?? 0);
+    const next = Number((current + data.delta).toFixed(2));
+    const { error: uErr } = await admin
+      .from("profiles").update({ balance: next }).eq("id", data.user_id);
+    if (uErr) throw new Error(uErr.message);
+    await admin.from("manual_balance_adjustments").insert({
+      user_id: data.user_id,
+      admin_id: context.userId,
+      delta: data.delta,
+      reason: data.reason,
+      balance_after: next,
+    });
+    return { ok: true, balance_after: next };
+  });
+
+// ============ Notas internas por cliente ============
+export const adminGetClientNote = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ user_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const { data: row } = await admin
+      .from("admin_notes").select("note, updated_at").eq("user_id", data.user_id).maybeSingle();
+    return { note: row?.note ?? "", updated_at: row?.updated_at ?? null };
+  });
+
+export const adminSaveClientNote = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ user_id: z.string().uuid(), note: z.string().max(5000) }).parse(d))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const { error } = await admin.from("admin_notes").upsert({
+      user_id: data.user_id,
+      note: data.note,
+      updated_at: new Date().toISOString(),
+      updated_by: context.userId,
+    });
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+// ============ Ação em massa: pausar campanhas ============
+export const adminBulkSetStatus = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      ids: z.array(z.string().uuid()).min(1).max(500),
+      status: z.enum(["running","analyzing","paused","aguardando_vinculo_meta","rodando","encerrada_saldo_consumido"]),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const { error } = await admin.from("campaigns").update({ status: data.status }).in("id", data.ids);
+    if (error) throw new Error(error.message);
+    return { ok: true, count: data.ids.length };
+  });
+
+// ============ Export CSV de campanhas ============
+export const adminExportCampaignsCSV = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<{ csv: string }> => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const { data } = await admin.from("campaigns").select("*").order("created_at", { ascending: false });
+    const rows = data ?? [];
+    const header = ["id","user_id","name","status","budget","spent","clicks","impressions","ctr","cpc","created_at"];
+    const esc = (v: unknown) => {
+      const s = v == null ? "" : String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const lines = [header.join(",")];
+    for (const r of rows) {
+      lines.push(header.map((h) => esc((r as Record<string, unknown>)[h])).join(","));
+    }
+    return { csv: lines.join("\n") };
+  });
+

@@ -83,6 +83,27 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_notes: {
+        Row: {
+          note: string
+          updated_at: string
+          updated_by: string | null
+          user_id: string
+        }
+        Insert: {
+          note?: string
+          updated_at?: string
+          updated_by?: string | null
+          user_id: string
+        }
+        Update: {
+          note?: string
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       app_settings: {
         Row: {
           key: string
@@ -227,6 +248,69 @@ export type Database = {
           total_paid?: number
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      manual_balance_adjustments: {
+        Row: {
+          admin_id: string
+          balance_after: number | null
+          created_at: string
+          delta: number
+          id: string
+          reason: string
+          user_id: string
+        }
+        Insert: {
+          admin_id: string
+          balance_after?: number | null
+          created_at?: string
+          delta: number
+          id?: string
+          reason: string
+          user_id: string
+        }
+        Update: {
+          admin_id?: string
+          balance_after?: number | null
+          created_at?: string
+          delta?: number
+          id?: string
+          reason?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      meta_metrics_runs: {
+        Row: {
+          duration_ms: number | null
+          error_count: number
+          error_message: string | null
+          finished_at: string | null
+          id: string
+          processed_count: number
+          started_at: string
+          status: string
+        }
+        Insert: {
+          duration_ms?: number | null
+          error_count?: number
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          processed_count?: number
+          started_at?: string
+          status?: string
+        }
+        Update: {
+          duration_ms?: number | null
+          error_count?: number
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          processed_count?: number
+          started_at?: string
+          status?: string
         }
         Relationships: []
       }

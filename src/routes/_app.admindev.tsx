@@ -13,6 +13,8 @@ import {
   setCampaignMode,
   checkIsAdmin,
   adminListWipeEvents,
+  getMetaMetricsHealth,
+  adminExportCampaignsCSV,
   type AdminCampaignRow,
 } from "@/lib/admin.functions";
 import {
@@ -207,6 +209,10 @@ function AdminDevPage() {
           <h1 className="text-3xl font-bold tracking-tight">Admin Dev</h1>
         </div>
       </header>
+
+      <MetaHealthCard />
+      <ExportCsvButton />
+
 
       {/* Mode toggle */}
       <section
@@ -648,6 +654,63 @@ function FbPreview({ campaign, onClose }: { campaign: AdminCampaignRow; onClose:
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function MetaHealthCard() {
+  const fn = useServerFn(getMetaMetricsHealth);
+  const q = useQuery({ queryKey: ["meta-health"], queryFn: () => fn(), refetchInterval: 60_000 });
+  const h = q.data;
+  const stale = !h || h.stale;
+  const color = !h?.last_run_at ? "border-muted-foreground/30" : stale ? "border-destructive/60" : "border-success/50";
+  return (
+    <section className={`glass-strong rounded-2xl p-4 border ${color} flex flex-wrap items-center justify-between gap-3`}>
+      <div>
+        <p className="text-xs uppercase tracking-wider text-muted-foreground">Saúde: Cron Meta Ads Insights</p>
+        <p className="text-sm mt-1">
+          {!h?.last_run_at
+            ? "Nunca executado"
+            : `Última: ${new Date(h.last_run_at).toLocaleString("pt-BR")} — status ${h.last_status} — processadas ${h.processed_count} / erros ${h.error_count}`}
+        </p>
+      </div>
+      <span className={`text-xs font-semibold px-3 py-1.5 rounded-full ${stale ? "bg-destructive/20 text-destructive" : "bg-success/20 text-success"}`}>
+        {stale ? "ATENÇÃO" : "OK"}
+      </span>
+    </section>
+  );
+}
+
+function ExportCsvButton() {
+  const fn = useServerFn(adminExportCampaignsCSV);
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="flex justify-end">
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          try {
+            const { csv } = await fn();
+            const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `campanhas-${new Date().toISOString().slice(0,10)}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+            toast.success("CSV exportado");
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : "Falha ao exportar");
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        Exportar campanhas (CSV)
+      </Button>
     </div>
   );
 }
