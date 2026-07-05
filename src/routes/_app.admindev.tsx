@@ -210,6 +210,10 @@ function AdminDevPage() {
         </div>
       </header>
 
+      <MetaHealthCard />
+      <ExportCsvButton />
+
+
       {/* Mode toggle */}
       <section
         className={`glass-strong rounded-2xl p-6 border transition-all ${
