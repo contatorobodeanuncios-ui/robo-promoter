@@ -62,6 +62,7 @@ function LoginPage() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -92,12 +93,21 @@ function LoginPage() {
     setLoading(true);
     try {
       if (mode === "signup") {
+        if (!acceptedTerms) {
+          toast.error("Aceite necessário", { description: "Você precisa aceitar os Termos e a Política de Privacidade." });
+          setLoading(false);
+          return;
+        }
         const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             emailRedirectTo: window.location.origin,
-            data: { full_name: name },
+            data: {
+              full_name: name,
+              terms_accepted_at: new Date().toISOString(),
+              terms_version: "2026-07-05",
+            },
           },
         });
         if (error) throw error;
@@ -195,11 +205,39 @@ function LoginPage() {
               <Label htmlFor="pw">Senha</Label>
               <Input id="pw" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" minLength={6} required />
             </div>
-            <Button type="submit" variant="neon" className="w-full h-11" disabled={loading}>
+            {mode === "signup" && (
+              <label className="flex items-start gap-2 text-xs text-muted-foreground pt-1">
+                <input
+                  type="checkbox"
+                  checked={acceptedTerms}
+                  onChange={(e) => setAcceptedTerms(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-input accent-primary"
+                  required
+                />
+                <span>
+                  Li e aceito os{" "}
+                  <Link to="/termos" target="_blank" className="text-primary hover:underline">
+                    Termos de Uso
+                  </Link>{" "}
+                  e a{" "}
+                  <Link to="/privacidade" target="_blank" className="text-primary hover:underline">
+                    Política de Privacidade
+                  </Link>{" "}
+                  (LGPD).
+                </span>
+              </label>
+            )}
+            <Button type="submit" variant="neon" className="w-full h-11" disabled={loading || (mode === "signup" && !acceptedTerms)}>
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
               {mode === "signin" ? "Entrar no painel" : "Criar conta"}
             </Button>
           </form>
+
+          <p className="text-center text-[11px] text-muted-foreground">
+            <Link to="/termos" className="hover:text-foreground">Termos</Link>
+            {" · "}
+            <Link to="/privacidade" className="hover:text-foreground">Privacidade</Link>
+          </p>
 
           <p className="text-center text-xs text-muted-foreground">
             {mode === "signin" ? (

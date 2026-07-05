@@ -9,6 +9,8 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TermosRouteImport } from './routes/termos'
+import { Route as PrivacidadeRouteImport } from './routes/privacidade'
 import { Route as PowerOnRouteImport } from './routes/power-on'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AguardandoRouteImport } from './routes/aguardando'
@@ -23,6 +25,16 @@ import { Route as ApiPublicAsaasWebhookRouteImport } from './routes/api/public/a
 import { Route as AppCampaignIdRouteImport } from './routes/_app.campaign.$id'
 import { Route as ApiPublicHooksMetaMetricsSyncRouteImport } from './routes/api/public/hooks/meta-metrics-sync'
 
+const TermosRoute = TermosRouteImport.update({
+  id: '/termos',
+  path: '/termos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacidadeRoute = PrivacidadeRouteImport.update({
+  id: '/privacidade',
+  path: '/privacidade',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PowerOnRoute = PowerOnRouteImport.update({
   id: '/power-on',
   path: '/power-on',
@@ -94,6 +106,8 @@ export interface FileRoutesByFullPath {
   '/aguardando': typeof AguardandoRoute
   '/login': typeof LoginRoute
   '/power-on': typeof PowerOnRoute
+  '/privacidade': typeof PrivacidadeRoute
+  '/termos': typeof TermosRoute
   '/admindev': typeof AppAdmindevRoute
   '/create': typeof AppCreateRoute
   '/dashboard': typeof AppDashboardRoute
@@ -108,6 +122,8 @@ export interface FileRoutesByTo {
   '/aguardando': typeof AguardandoRoute
   '/login': typeof LoginRoute
   '/power-on': typeof PowerOnRoute
+  '/privacidade': typeof PrivacidadeRoute
+  '/termos': typeof TermosRoute
   '/admindev': typeof AppAdmindevRoute
   '/create': typeof AppCreateRoute
   '/dashboard': typeof AppDashboardRoute
@@ -124,6 +140,8 @@ export interface FileRoutesById {
   '/aguardando': typeof AguardandoRoute
   '/login': typeof LoginRoute
   '/power-on': typeof PowerOnRoute
+  '/privacidade': typeof PrivacidadeRoute
+  '/termos': typeof TermosRoute
   '/_app/admindev': typeof AppAdmindevRoute
   '/_app/create': typeof AppCreateRoute
   '/_app/dashboard': typeof AppDashboardRoute
@@ -140,6 +158,8 @@ export interface FileRouteTypes {
     | '/aguardando'
     | '/login'
     | '/power-on'
+    | '/privacidade'
+    | '/termos'
     | '/admindev'
     | '/create'
     | '/dashboard'
@@ -154,6 +174,8 @@ export interface FileRouteTypes {
     | '/aguardando'
     | '/login'
     | '/power-on'
+    | '/privacidade'
+    | '/termos'
     | '/admindev'
     | '/create'
     | '/dashboard'
@@ -169,6 +191,8 @@ export interface FileRouteTypes {
     | '/aguardando'
     | '/login'
     | '/power-on'
+    | '/privacidade'
+    | '/termos'
     | '/_app/admindev'
     | '/_app/create'
     | '/_app/dashboard'
@@ -185,12 +209,28 @@ export interface RootRouteChildren {
   AguardandoRoute: typeof AguardandoRoute
   LoginRoute: typeof LoginRoute
   PowerOnRoute: typeof PowerOnRoute
+  PrivacidadeRoute: typeof PrivacidadeRoute
+  TermosRoute: typeof TermosRoute
   ApiPublicAsaasWebhookRoute: typeof ApiPublicAsaasWebhookRoute
   ApiPublicHooksMetaMetricsSyncRoute: typeof ApiPublicHooksMetaMetricsSyncRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/termos': {
+      id: '/termos'
+      path: '/termos'
+      fullPath: '/termos'
+      preLoaderRoute: typeof TermosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacidade': {
+      id: '/privacidade'
+      path: '/privacidade'
+      fullPath: '/privacidade'
+      preLoaderRoute: typeof PrivacidadeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/power-on': {
       id: '/power-on'
       path: '/power-on'
@@ -311,6 +351,8 @@ const rootRouteChildren: RootRouteChildren = {
   AguardandoRoute: AguardandoRoute,
   LoginRoute: LoginRoute,
   PowerOnRoute: PowerOnRoute,
+  PrivacidadeRoute: PrivacidadeRoute,
+  TermosRoute: TermosRoute,
   ApiPublicAsaasWebhookRoute: ApiPublicAsaasWebhookRoute,
   ApiPublicHooksMetaMetricsSyncRoute: ApiPublicHooksMetaMetricsSyncRoute,
 }
