@@ -1,9 +1,11 @@
 import { Link, Outlet, useRouterState, useNavigate } from "@tanstack/react-router";
 import { LayoutDashboard, Plus, Settings, LogOut, Bot } from "lucide-react";
 import { Logo } from "./Logo";
+import { SupportWidget } from "./SupportWidget";
 import { useAppStore } from "@/lib/store";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
+import { initSentryClient } from "@/lib/sentry.client";
 
 const nav = [
   { to: "/dashboard" as const, label: "Dashboard", icon: LayoutDashboard },
@@ -14,6 +16,7 @@ const nav = [
 export function AppShell() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
+  useEffect(() => { initSentryClient(); }, []);
 
   const onLogout = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -84,6 +87,7 @@ export function AppShell() {
       <main className="flex-1 min-w-0 pt-14 pb-20 md:pt-0 md:pb-0">
         <Outlet />
       </main>
+      <SupportWidget />
 
       {/* Mobile bottom nav */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 glass-strong border-t border-white/5 grid grid-cols-3 pb-[env(safe-area-inset-bottom)]">
