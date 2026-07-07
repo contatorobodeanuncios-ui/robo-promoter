@@ -18,6 +18,7 @@ export function AppShell() {
   const navigate = useNavigate();
   useEffect(() => {
     import("@/lib/sentry-browser").then((m) => m.initSentryClient()).catch(() => { /* noop */ });
+    import("@/lib/pwa-register").then((m) => m.registerPWA()).catch(() => { /* noop */ });
   }, []);
 
   const onLogout = async (e: React.MouseEvent) => {

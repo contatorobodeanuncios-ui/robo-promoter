@@ -42,6 +42,16 @@ const fallback = (note: string): CreativeAnalysis => ({
 export const analyzeCreative = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => schema.parse(data))
   .handler(async ({ data }): Promise<CreativeAnalysis> => {
+    // Rate limit por IP: 60 requisições / 5 min.
+    try {
+      const { getRequest } = await import("@tanstack/react-start/server");
+      const { rateLimit, ipFromRequest } = await import("@/lib/rate-limit");
+      const req = getRequest();
+      const ip = req ? ipFromRequest(req) : "unknown";
+      const rl = rateLimit(`analyze-creative:${ip}`, 60, 5 * 60 * 1000);
+      if (!rl.ok) return fallback("Limite de análises atingido. Tente novamente em alguns minutos.");
+    } catch { /* getRequest indisponível em alguns contextos — segue */ }
+
     const apiKey = process.env.LOVABLE_API_KEY;
     if (!apiKey) return fallback("LOVABLE_API_KEY ausente");
 

@@ -16,6 +16,11 @@ export const Route = createFileRoute("/api/public/asaas-webhook")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const { rateLimit, ipFromRequest } = await import("@/lib/rate-limit");
+        const ip = ipFromRequest(request);
+        const rl = rateLimit(`asaas-webhook:${ip}`, 60, 5 * 60 * 1000);
+        if (!rl.ok) return new Response("Too many requests", { status: 429 });
+
         const expected = process.env.ASAAS_WEBHOOK_TOKEN;
         if (!expected) {
           return json({ error: "Webhook token not configured" }, 503);

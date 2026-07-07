@@ -27,6 +27,7 @@ import { Route as AppAdminExecRouteImport } from './routes/_app.admin-exec'
 import { Route as AppAdminAuditRouteImport } from './routes/_app.admin-audit'
 import { Route as ApiPublicAsaasWebhookRouteImport } from './routes/api/public/asaas-webhook'
 import { Route as AppCampaignIdRouteImport } from './routes/_app.campaign.$id'
+import { Route as ApiPublicHooksSendPushDailyRouteImport } from './routes/api/public/hooks/send-push-daily'
 import { Route as ApiPublicHooksMetaMetricsSyncRouteImport } from './routes/api/public/hooks/meta-metrics-sync'
 
 const TermosRoute = TermosRouteImport.update({
@@ -118,6 +119,12 @@ const AppCampaignIdRoute = AppCampaignIdRouteImport.update({
   path: '/campaign/$id',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiPublicHooksSendPushDailyRoute =
+  ApiPublicHooksSendPushDailyRouteImport.update({
+    id: '/api/public/hooks/send-push-daily',
+    path: '/api/public/hooks/send-push-daily',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksMetaMetricsSyncRoute =
   ApiPublicHooksMetaMetricsSyncRouteImport.update({
     id: '/api/public/hooks/meta-metrics-sync',
@@ -144,6 +151,7 @@ export interface FileRoutesByFullPath {
   '/campaign/$id': typeof AppCampaignIdRoute
   '/api/public/asaas-webhook': typeof ApiPublicAsaasWebhookRoute
   '/api/public/hooks/meta-metrics-sync': typeof ApiPublicHooksMetaMetricsSyncRoute
+  '/api/public/hooks/send-push-daily': typeof ApiPublicHooksSendPushDailyRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -164,6 +172,7 @@ export interface FileRoutesByTo {
   '/campaign/$id': typeof AppCampaignIdRoute
   '/api/public/asaas-webhook': typeof ApiPublicAsaasWebhookRoute
   '/api/public/hooks/meta-metrics-sync': typeof ApiPublicHooksMetaMetricsSyncRoute
+  '/api/public/hooks/send-push-daily': typeof ApiPublicHooksSendPushDailyRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -186,6 +195,7 @@ export interface FileRoutesById {
   '/_app/campaign/$id': typeof AppCampaignIdRoute
   '/api/public/asaas-webhook': typeof ApiPublicAsaasWebhookRoute
   '/api/public/hooks/meta-metrics-sync': typeof ApiPublicHooksMetaMetricsSyncRoute
+  '/api/public/hooks/send-push-daily': typeof ApiPublicHooksSendPushDailyRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -208,6 +218,7 @@ export interface FileRouteTypes {
     | '/campaign/$id'
     | '/api/public/asaas-webhook'
     | '/api/public/hooks/meta-metrics-sync'
+    | '/api/public/hooks/send-push-daily'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -228,6 +239,7 @@ export interface FileRouteTypes {
     | '/campaign/$id'
     | '/api/public/asaas-webhook'
     | '/api/public/hooks/meta-metrics-sync'
+    | '/api/public/hooks/send-push-daily'
   id:
     | '__root__'
     | '/'
@@ -249,6 +261,7 @@ export interface FileRouteTypes {
     | '/_app/campaign/$id'
     | '/api/public/asaas-webhook'
     | '/api/public/hooks/meta-metrics-sync'
+    | '/api/public/hooks/send-push-daily'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -261,6 +274,7 @@ export interface RootRouteChildren {
   TermosRoute: typeof TermosRoute
   ApiPublicAsaasWebhookRoute: typeof ApiPublicAsaasWebhookRoute
   ApiPublicHooksMetaMetricsSyncRoute: typeof ApiPublicHooksMetaMetricsSyncRoute
+  ApiPublicHooksSendPushDailyRoute: typeof ApiPublicHooksSendPushDailyRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -391,6 +405,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCampaignIdRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/public/hooks/send-push-daily': {
+      id: '/api/public/hooks/send-push-daily'
+      path: '/api/public/hooks/send-push-daily'
+      fullPath: '/api/public/hooks/send-push-daily'
+      preLoaderRoute: typeof ApiPublicHooksSendPushDailyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/meta-metrics-sync': {
       id: '/api/public/hooks/meta-metrics-sync'
       path: '/api/public/hooks/meta-metrics-sync'
@@ -439,6 +460,7 @@ const rootRouteChildren: RootRouteChildren = {
   TermosRoute: TermosRoute,
   ApiPublicAsaasWebhookRoute: ApiPublicAsaasWebhookRoute,
   ApiPublicHooksMetaMetricsSyncRoute: ApiPublicHooksMetaMetricsSyncRoute,
+  ApiPublicHooksSendPushDailyRoute: ApiPublicHooksSendPushDailyRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
