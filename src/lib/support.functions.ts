@@ -232,7 +232,7 @@ export interface AuditLogRow {
   action: string;
   target_type: string | null;
   target_id: string | null;
-  details: unknown;
+  details: string | null;
   created_at: string;
 }
 
@@ -247,7 +247,15 @@ export const adminListAuditLog = createServerFn({ method: "GET" })
       .order("created_at", { ascending: false })
       .limit(500);
     if (error) throw new Error(error.message);
-    return (data ?? []) as AuditLogRow[];
+    return (data ?? []).map((r) => ({
+      id: r.id,
+      admin_email: r.admin_email,
+      action: r.action,
+      target_type: r.target_type,
+      target_id: r.target_id,
+      details: r.details ? JSON.stringify(r.details) : null,
+      created_at: r.created_at,
+    }));
   });
 
 // ============ Dashboard executivo ============
