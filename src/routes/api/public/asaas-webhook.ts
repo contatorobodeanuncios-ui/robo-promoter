@@ -26,7 +26,10 @@ export const Route = createFileRoute("/api/public/asaas-webhook")({
           return json({ error: "Webhook token not configured" }, 503);
         }
         const got = request.headers.get("asaas-access-token") || "";
-        if (got !== expected) {
+        const a = Buffer.from(got);
+        const b = Buffer.from(expected);
+        const { timingSafeEqual } = await import("crypto");
+        if (a.length !== b.length || !timingSafeEqual(a, b)) {
           return new Response("Unauthorized", { status: 401 });
         }
 
