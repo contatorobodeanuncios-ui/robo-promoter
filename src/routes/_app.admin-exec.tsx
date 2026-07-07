@@ -5,7 +5,7 @@ import { ArrowLeft, TrendingUp, Users, Zap, DollarSign, PieChart, MessageCircle 
 import { supabase } from "@/integrations/supabase/client";
 import { getExecDashboard } from "@/lib/support.functions";
 
-export const Route = createFileRoute("/_app/admindev/exec")({
+export const Route = createFileRoute("/_app/admin-exec")({
   ssr: false,
   beforeLoad: async () => {
     if (typeof window === "undefined") return;

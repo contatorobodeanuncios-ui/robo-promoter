@@ -5,7 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { adminListAuditLog } from "@/lib/support.functions";
 
-export const Route = createFileRoute("/_app/admindev/audit")({
+export const Route = createFileRoute("/_app/admin-audit")({
   ssr: false,
   beforeLoad: async () => {
     if (typeof window === "undefined") return;

@@ -15,7 +15,7 @@ import {
   type SupportConversationRow,
 } from "@/lib/support.functions";
 
-export const Route = createFileRoute("/_app/admindev/support")({
+export const Route = createFileRoute("/_app/admin-support")({
   ssr: false,
   beforeLoad: async () => {
     if (typeof window === "undefined") return;
