@@ -208,6 +208,11 @@ function AdminDevPage() {
           </p>
           <h1 className="text-3xl font-bold tracking-tight">Admin Dev</h1>
         </div>
+        <nav className="flex flex-wrap gap-2">
+          <Link to="/admin-exec" className="text-xs px-3 py-2 rounded-lg glass hover:bg-white/5">📊 Dashboard Executivo</Link>
+          <Link to="/admin-support" className="text-xs px-3 py-2 rounded-lg glass hover:bg-white/5">💬 Suporte</Link>
+          <Link to="/admin-audit" className="text-xs px-3 py-2 rounded-lg glass hover:bg-white/5">📜 Auditoria</Link>
+        </nav>
       </header>
 
       <MetaHealthCard />
