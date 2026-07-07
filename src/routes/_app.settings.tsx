@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -156,6 +156,11 @@ function SettingsPage() {
               </Button>
             </div>
           </div>
+        </div>
+        <div className="pt-2">
+          <Link to="/comprovantes" className="text-xs text-primary hover:underline inline-flex items-center gap-1">
+            📄 Ver meus comprovantes (PDF)
+          </Link>
         </div>
       </section>
 

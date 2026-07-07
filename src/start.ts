@@ -11,6 +11,19 @@ const errorMiddleware = createMiddleware().server(async ({ next }) => {
       throw error;
     }
     console.error(error);
+    // Sentry: reporta no server se SENTRY_DSN estiver definido (não bloqueia).
+    try {
+      if (process.env.SENTRY_DSN) {
+        const Sentry = await import(/* @vite-ignore */ "@sentry/browser").catch(() => null);
+        if (Sentry) {
+          if (!(globalThis as { __sentryInited?: boolean }).__sentryInited) {
+            Sentry.init({ dsn: process.env.SENTRY_DSN, tracesSampleRate: 0 });
+            (globalThis as { __sentryInited?: boolean }).__sentryInited = true;
+          }
+          Sentry.captureException(error);
+        }
+      }
+    } catch { /* noop */ }
     return new Response(renderErrorPage(), {
       status: 500,
       headers: { "content-type": "text/html; charset=utf-8" },

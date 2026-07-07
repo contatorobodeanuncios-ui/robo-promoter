@@ -20,7 +20,11 @@ import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppPaymentRouteImport } from './routes/_app.payment'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppCreateRouteImport } from './routes/_app.create'
+import { Route as AppComprovantesRouteImport } from './routes/_app.comprovantes'
 import { Route as AppAdmindevRouteImport } from './routes/_app.admindev'
+import { Route as AppAdminSupportRouteImport } from './routes/_app.admin-support'
+import { Route as AppAdminExecRouteImport } from './routes/_app.admin-exec'
+import { Route as AppAdminAuditRouteImport } from './routes/_app.admin-audit'
 import { Route as ApiPublicAsaasWebhookRouteImport } from './routes/api/public/asaas-webhook'
 import { Route as AppCampaignIdRouteImport } from './routes/_app.campaign.$id'
 import { Route as ApiPublicHooksMetaMetricsSyncRouteImport } from './routes/api/public/hooks/meta-metrics-sync'
@@ -79,9 +83,29 @@ const AppCreateRoute = AppCreateRouteImport.update({
   path: '/create',
   getParentRoute: () => AppRoute,
 } as any)
+const AppComprovantesRoute = AppComprovantesRouteImport.update({
+  id: '/comprovantes',
+  path: '/comprovantes',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppAdmindevRoute = AppAdmindevRouteImport.update({
   id: '/admindev',
   path: '/admindev',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAdminSupportRoute = AppAdminSupportRouteImport.update({
+  id: '/admin-support',
+  path: '/admin-support',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAdminExecRoute = AppAdminExecRouteImport.update({
+  id: '/admin-exec',
+  path: '/admin-exec',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAdminAuditRoute = AppAdminAuditRouteImport.update({
+  id: '/admin-audit',
+  path: '/admin-audit',
   getParentRoute: () => AppRoute,
 } as any)
 const ApiPublicAsaasWebhookRoute = ApiPublicAsaasWebhookRouteImport.update({
@@ -108,7 +132,11 @@ export interface FileRoutesByFullPath {
   '/power-on': typeof PowerOnRoute
   '/privacidade': typeof PrivacidadeRoute
   '/termos': typeof TermosRoute
+  '/admin-audit': typeof AppAdminAuditRoute
+  '/admin-exec': typeof AppAdminExecRoute
+  '/admin-support': typeof AppAdminSupportRoute
   '/admindev': typeof AppAdmindevRoute
+  '/comprovantes': typeof AppComprovantesRoute
   '/create': typeof AppCreateRoute
   '/dashboard': typeof AppDashboardRoute
   '/payment': typeof AppPaymentRoute
@@ -124,7 +152,11 @@ export interface FileRoutesByTo {
   '/power-on': typeof PowerOnRoute
   '/privacidade': typeof PrivacidadeRoute
   '/termos': typeof TermosRoute
+  '/admin-audit': typeof AppAdminAuditRoute
+  '/admin-exec': typeof AppAdminExecRoute
+  '/admin-support': typeof AppAdminSupportRoute
   '/admindev': typeof AppAdmindevRoute
+  '/comprovantes': typeof AppComprovantesRoute
   '/create': typeof AppCreateRoute
   '/dashboard': typeof AppDashboardRoute
   '/payment': typeof AppPaymentRoute
@@ -142,7 +174,11 @@ export interface FileRoutesById {
   '/power-on': typeof PowerOnRoute
   '/privacidade': typeof PrivacidadeRoute
   '/termos': typeof TermosRoute
+  '/_app/admin-audit': typeof AppAdminAuditRoute
+  '/_app/admin-exec': typeof AppAdminExecRoute
+  '/_app/admin-support': typeof AppAdminSupportRoute
   '/_app/admindev': typeof AppAdmindevRoute
+  '/_app/comprovantes': typeof AppComprovantesRoute
   '/_app/create': typeof AppCreateRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/payment': typeof AppPaymentRoute
@@ -160,7 +196,11 @@ export interface FileRouteTypes {
     | '/power-on'
     | '/privacidade'
     | '/termos'
+    | '/admin-audit'
+    | '/admin-exec'
+    | '/admin-support'
     | '/admindev'
+    | '/comprovantes'
     | '/create'
     | '/dashboard'
     | '/payment'
@@ -176,7 +216,11 @@ export interface FileRouteTypes {
     | '/power-on'
     | '/privacidade'
     | '/termos'
+    | '/admin-audit'
+    | '/admin-exec'
+    | '/admin-support'
     | '/admindev'
+    | '/comprovantes'
     | '/create'
     | '/dashboard'
     | '/payment'
@@ -193,7 +237,11 @@ export interface FileRouteTypes {
     | '/power-on'
     | '/privacidade'
     | '/termos'
+    | '/_app/admin-audit'
+    | '/_app/admin-exec'
+    | '/_app/admin-support'
     | '/_app/admindev'
+    | '/_app/comprovantes'
     | '/_app/create'
     | '/_app/dashboard'
     | '/_app/payment'
@@ -294,11 +342,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCreateRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/comprovantes': {
+      id: '/_app/comprovantes'
+      path: '/comprovantes'
+      fullPath: '/comprovantes'
+      preLoaderRoute: typeof AppComprovantesRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/admindev': {
       id: '/_app/admindev'
       path: '/admindev'
       fullPath: '/admindev'
       preLoaderRoute: typeof AppAdmindevRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/admin-support': {
+      id: '/_app/admin-support'
+      path: '/admin-support'
+      fullPath: '/admin-support'
+      preLoaderRoute: typeof AppAdminSupportRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/admin-exec': {
+      id: '/_app/admin-exec'
+      path: '/admin-exec'
+      fullPath: '/admin-exec'
+      preLoaderRoute: typeof AppAdminExecRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/admin-audit': {
+      id: '/_app/admin-audit'
+      path: '/admin-audit'
+      fullPath: '/admin-audit'
+      preLoaderRoute: typeof AppAdminAuditRouteImport
       parentRoute: typeof AppRoute
     }
     '/api/public/asaas-webhook': {
@@ -326,7 +402,11 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteChildren {
+  AppAdminAuditRoute: typeof AppAdminAuditRoute
+  AppAdminExecRoute: typeof AppAdminExecRoute
+  AppAdminSupportRoute: typeof AppAdminSupportRoute
   AppAdmindevRoute: typeof AppAdmindevRoute
+  AppComprovantesRoute: typeof AppComprovantesRoute
   AppCreateRoute: typeof AppCreateRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppPaymentRoute: typeof AppPaymentRoute
@@ -335,7 +415,11 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAdminAuditRoute: AppAdminAuditRoute,
+  AppAdminExecRoute: AppAdminExecRoute,
+  AppAdminSupportRoute: AppAdminSupportRoute,
   AppAdmindevRoute: AppAdmindevRoute,
+  AppComprovantesRoute: AppComprovantesRoute,
   AppCreateRoute: AppCreateRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppPaymentRoute: AppPaymentRoute,
