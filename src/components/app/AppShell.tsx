@@ -17,7 +17,7 @@ export function AppShell() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
   useEffect(() => {
-    import("@/lib/sentry.client").then((m) => m.initSentryClient()).catch(() => { /* noop */ });
+    import("@/lib/sentry-browser").then((m) => m.initSentryClient()).catch(() => { /* noop */ });
   }, []);
 
   const onLogout = async (e: React.MouseEvent) => {
