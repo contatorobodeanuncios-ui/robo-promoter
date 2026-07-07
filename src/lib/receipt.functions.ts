@@ -80,3 +80,26 @@ export const generateReceiptPDF = createServerFn({ method: "POST" })
     const base64 = btoa(bin);
     return { pdf: base64, filename: `comprovante-${p.id.slice(0, 8)}.pdf` };
   });
+
+import { requireSupabaseAuth as _re } from "@/integrations/supabase/auth-middleware";
+
+export const listMyPayments = createServerFn({ method: "GET" })
+  .middleware([_re])
+  .handler(async ({ context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await supabaseAdmin
+      .from("payment_requests")
+      .select("id, amount, status, created_at, approved_at, asaas_payment_id")
+      .eq("user_id", context.userId)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (error) throw new Error(error.message);
+    return (data ?? []).map((r) => ({
+      id: r.id,
+      amount: Number(r.amount),
+      status: r.status,
+      created_at: r.created_at,
+      approved_at: r.approved_at,
+      asaas_payment_id: r.asaas_payment_id,
+    }));
+  });
