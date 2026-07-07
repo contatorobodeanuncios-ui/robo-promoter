@@ -5,7 +5,7 @@ import { SupportWidget } from "./SupportWidget";
 import { useAppStore } from "@/lib/store";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
-import { initSentryClient } from "@/lib/sentry.client";
+
 
 const nav = [
   { to: "/dashboard" as const, label: "Dashboard", icon: LayoutDashboard },
@@ -16,7 +16,9 @@ const nav = [
 export function AppShell() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
-  useEffect(() => { initSentryClient(); }, []);
+  useEffect(() => {
+    import("@/lib/sentry.client").then((m) => m.initSentryClient()).catch(() => { /* noop */ });
+  }, []);
 
   const onLogout = async (e: React.MouseEvent) => {
     e.preventDefault();
