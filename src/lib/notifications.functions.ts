@@ -44,7 +44,7 @@ export const updateMyNotificationPrefs = createServerFn({ method: "POST" })
     };
     const { error } = await context.supabase
       .from("profiles")
-      .update({ notification_prefs: merged })
+      .update({ notification_prefs: merged as unknown as Record<string, boolean> })
       .eq("id", context.userId);
     if (error) throw new Error(error.message);
     return merged;

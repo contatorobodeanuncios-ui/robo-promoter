@@ -60,6 +60,6 @@ export async function subscribeToPush(vapidPublicKey: string): Promise<PushSubsc
   if (permission !== "granted") return null;
   return reg.pushManager.subscribe({
     userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+    applicationServerKey: urlBase64ToUint8Array(vapidPublicKey).buffer as ArrayBuffer,
   });
 }
