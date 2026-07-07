@@ -202,7 +202,7 @@ export const adminSendMessage = createServerFn({ method: "POST" })
       .eq("id", data.conversation_id);
     // audit
     await sb.from("admin_audit_log").insert({
-      admin_email: (context.claims as { email?: string })?.email ?? null,
+      admin_email: (context.claims as { email?: string })?.email ?? "",
       action: "support_reply",
       target_type: "conversation",
       target_id: data.conversation_id,
@@ -232,7 +232,7 @@ export interface AuditLogRow {
   action: string;
   target_type: string | null;
   target_id: string | null;
-  details: Record<string, unknown> | null;
+  details: unknown;
   created_at: string;
 }
 
