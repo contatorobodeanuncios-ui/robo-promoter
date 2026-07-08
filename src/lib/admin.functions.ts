@@ -339,23 +339,199 @@ export const adminBulkSetStatus = createServerFn({ method: "POST" })
     return { ok: true, count: data.ids.length };
   });
 
-// ============ Export CSV de campanhas ============
+// ============ Export CSV de campanhas (completo) ============
 export const adminExportCampaignsCSV = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<{ csv: string }> => {
     await assertAdmin(context.userId, context.claims as { email?: string });
     const admin = await getSupabaseAdmin();
-    const { data } = await admin.from("campaigns").select("*").order("created_at", { ascending: false });
-    const rows = data ?? [];
-    const header = ["id","user_id","name","status","budget","spent","clicks","impressions","ctr","cpc","created_at"];
+    const { data: campaigns } = await admin
+      .from("campaigns")
+      .select("*")
+      .order("created_at", { ascending: false });
+    const rows = campaigns ?? [];
+    const userIds = Array.from(new Set(rows.map((r) => r.user_id)));
+    const { data: profiles } = await admin
+      .from("profiles")
+      .select("id, display_name, email")
+      .in("id", userIds.length ? userIds : ["00000000-0000-0000-0000-000000000000"]);
+    const pMap = new Map((profiles ?? []).map((p) => [p.id, p]));
+
+    const header = [
+      "id","cliente_nome","cliente_email","campanha_nome","status","funding_type",
+      "valor_total","criada_em","iniciou_em","pausada_em","encerrada_em",
+      "meta_campaign_id","meta_ad_account_id",
+      "cliques","impressoes","alcance","resultados",
+      "ctr","cpc","cpm","frequencia","custo_por_resultado","gasto","receita",
+    ];
     const esc = (v: unknown) => {
       const s = v == null ? "" : String(v);
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
     const lines = [header.join(",")];
     for (const r of rows) {
-      lines.push(header.map((h) => esc((r as Record<string, unknown>)[h])).join(","));
+      const p = pMap.get(r.user_id);
+      const valorTotal = Number(r.pix_total_budget ?? (Number(r.budget) * Number(r.days)));
+      const row = [
+        r.id,
+        p?.display_name ?? "",
+        p?.email ?? "",
+        r.name,
+        r.status,
+        r.funding_type ?? "wallet",
+        valorTotal,
+        r.created_at,
+        r.started_running_at ?? "",
+        r.paused_at ?? "",
+        r.ended_at ?? "",
+        r.meta_campaign_id ?? "",
+        r.meta_ad_account_id ?? "",
+        r.clicks,
+        r.impressions,
+        r.reach ?? 0,
+        r.results ?? 0,
+        r.ctr,
+        r.cpc,
+        r.cpm ?? 0,
+        r.frequency ?? 0,
+        r.cost_per_result ?? 0,
+        r.spent,
+        r.revenue ?? 0,
+      ];
+      lines.push(row.map(esc).join(","));
     }
     return { csv: lines.join("\n") };
   });
+
+// ============ Access Requests (aprovação de novos usuários) ============
+export interface AccessRequestRow {
+  id: string;
+  user_id: string;
+  email: string | null;
+  display_name: string | null;
+  status: "pending" | "approved" | "rejected";
+  reason: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+}
+
+export const adminListAccessRequests = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<AccessRequestRow[]> => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const { data, error } = await admin
+      .from("access_requests")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) throw new Error(error.message);
+    return (data ?? []) as AccessRequestRow[];
+  });
+
+export const adminApproveAccessRequest = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const { error } = await admin
+      .from("access_requests")
+      .update({
+        status: "approved",
+        reviewed_by: context.userId,
+        reviewed_at: new Date().toISOString(),
+      })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    await admin.from("admin_audit_log").insert({
+      admin_email: (context.claims as { email?: string })?.email ?? "",
+      action: "access_request_approve",
+      target_type: "access_request",
+      target_id: data.id,
+    });
+    return { ok: true };
+  });
+
+export const adminDenyAccessRequest = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ id: z.string().uuid(), reason: z.string().max(500).optional() }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const { error } = await admin
+      .from("access_requests")
+      .update({
+        status: "rejected",
+        reason: data.reason ?? null,
+        reviewed_by: context.userId,
+        reviewed_at: new Date().toISOString(),
+      })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    await admin.from("admin_audit_log").insert({
+      admin_email: (context.claims as { email?: string })?.email ?? "",
+      action: "access_request_deny",
+      target_type: "access_request",
+      target_id: data.id,
+      details: { reason: data.reason ?? null },
+    });
+    return { ok: true };
+  });
+
+// ============ Listar todos os clientes (para suporte proativo) ============
+export interface AdminClientRow {
+  id: string;
+  display_name: string | null;
+  email: string | null;
+  balance: number;
+  created_at: string;
+}
+
+export const adminListAllClients = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<AdminClientRow[]> => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const { data, error } = await admin
+      .from("profiles")
+      .select("id, display_name, email, balance, created_at")
+      .order("created_at", { ascending: false })
+      .limit(1000);
+    if (error) throw new Error(error.message);
+    return (data ?? []).map((r) => ({
+      id: r.id,
+      display_name: r.display_name,
+      email: r.email,
+      balance: Number(r.balance ?? 0),
+      created_at: r.created_at,
+    }));
+  });
+
+// ============ Admin inicia conversa com um cliente ============
+export const adminStartConversationWith = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ user_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const { data: existing } = await admin
+      .from("support_conversations")
+      .select("id")
+      .eq("user_id", data.user_id)
+      .order("last_message_at", { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle();
+    if (existing) return { id: existing.id };
+    const { data: created, error } = await admin
+      .from("support_conversations")
+      .insert({ user_id: data.user_id, status: "aberto", unread_by_client: true })
+      .select("id")
+      .single();
+    if (error) throw new Error(error.message);
+    return { id: created.id };
+  });
+
 
