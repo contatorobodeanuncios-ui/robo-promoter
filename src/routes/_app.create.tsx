@@ -116,6 +116,17 @@ function CreateWizard() {
         funding_type: fundingType,
         pix_total_budget: fundingType === "pix_dedicated" ? budget * days : 0,
         pix_remaining_budget: 0,
+        reach: 0,
+        results: 0,
+        revenue: 0,
+        frequency: 0,
+        cpm: 0,
+        cost_per_result: 0,
+        invoice_url: null,
+        paused_at: null,
+        started_running_at: null,
+        ended_at: null,
+        created_at: new Date().toISOString(),
       });
       if (result.paid) {
         toast.success("Anúncio pago com saldo do app!", {
