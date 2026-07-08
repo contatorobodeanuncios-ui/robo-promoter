@@ -161,15 +161,20 @@ export type Database = {
           city: string
           clicks: number
           copy: string
+          cost_per_result: number
           cpc: number
+          cpm: number
           created_at: string
           ctr: number
           days: number
+          ended_at: string | null
+          frequency: number
           funding_type: string
           headline: string
           id: string
           image: string
           impressions: number
+          invoice_url: string | null
           link: string
           meta_ad_account_id: string | null
           meta_campaign_id: string | null
@@ -178,10 +183,15 @@ export type Database = {
           metrics_last_synced_at: string | null
           name: string
           neighborhood: string
+          paused_at: string | null
           pix_remaining_budget: number | null
           pix_total_budget: number | null
           radius: number
+          reach: number
+          results: number
+          revenue: number
           spent: number
+          started_running_at: string | null
           status: Database["public"]["Enums"]["campaign_status"]
           total_paid: number
           updated_at: string
@@ -192,15 +202,20 @@ export type Database = {
           city?: string
           clicks?: number
           copy?: string
+          cost_per_result?: number
           cpc?: number
+          cpm?: number
           created_at?: string
           ctr?: number
           days?: number
+          ended_at?: string | null
+          frequency?: number
           funding_type?: string
           headline?: string
           id?: string
           image?: string
           impressions?: number
+          invoice_url?: string | null
           link?: string
           meta_ad_account_id?: string | null
           meta_campaign_id?: string | null
@@ -209,10 +224,15 @@ export type Database = {
           metrics_last_synced_at?: string | null
           name: string
           neighborhood?: string
+          paused_at?: string | null
           pix_remaining_budget?: number | null
           pix_total_budget?: number | null
           radius?: number
+          reach?: number
+          results?: number
+          revenue?: number
           spent?: number
+          started_running_at?: string | null
           status?: Database["public"]["Enums"]["campaign_status"]
           total_paid?: number
           updated_at?: string
@@ -223,15 +243,20 @@ export type Database = {
           city?: string
           clicks?: number
           copy?: string
+          cost_per_result?: number
           cpc?: number
+          cpm?: number
           created_at?: string
           ctr?: number
           days?: number
+          ended_at?: string | null
+          frequency?: number
           funding_type?: string
           headline?: string
           id?: string
           image?: string
           impressions?: number
+          invoice_url?: string | null
           link?: string
           meta_ad_account_id?: string | null
           meta_campaign_id?: string | null
@@ -240,10 +265,15 @@ export type Database = {
           metrics_last_synced_at?: string | null
           name?: string
           neighborhood?: string
+          paused_at?: string | null
           pix_remaining_budget?: number | null
           pix_total_budget?: number | null
           radius?: number
+          reach?: number
+          results?: number
+          revenue?: number
           spent?: number
+          started_running_at?: string | null
           status?: Database["public"]["Enums"]["campaign_status"]
           total_paid?: number
           updated_at?: string
@@ -555,6 +585,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      auto_pause_pix_campaigns: { Args: never; Returns: number }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
