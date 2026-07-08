@@ -40,8 +40,26 @@ export function SupportWidget() {
     queryKey: ["support-msgs", conversationId],
     queryFn: () => listFn({ data: { conversation_id: conversationId! } }),
     enabled: !!conversationId && open,
-    refetchInterval: open ? 5_000 : false,
   });
+
+  // Realtime: substitui polling anterior
+  useEffect(() => {
+    if (!conversationId || !open) return;
+    const channel = supabase
+      .channel(`support-msgs-${conversationId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "support_messages", filter: `conversation_id=eq.${conversationId}` },
+        () => {
+          qc.invalidateQueries({ queryKey: ["support-msgs", conversationId] });
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [conversationId, open, qc]);
+
 
   useEffect(() => {
     if (open && listRef.current) {
