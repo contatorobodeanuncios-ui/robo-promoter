@@ -260,48 +260,70 @@ export const adminListAuditLog = createServerFn({ method: "GET" })
 
 // ============ Dashboard executivo ============
 export interface ExecStats {
-  active_users: number;         // profiles com balance > 0 ou aprovados
+  active_users: number;
   total_users: number;
   campaigns_running: number;
-  total_spent_30d: number;
-  revenue_30d: number;          // soma de payment_requests aprovados
-  conversion_rate: number;      // aprovados / total requests
+  total_spent: number;
+  revenue: number;
+  conversion_rate: number;
   avg_ticket: number;
   open_support: number;
+  period_from: string;
+  period_to: string;
 }
 
-export const getExecDashboard = createServerFn({ method: "GET" })
+export const getExecDashboard = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }): Promise<ExecStats> => {
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        period: z.enum(["7d", "30d", "90d", "custom"]).default("30d"),
+        from: z.string().optional(),
+        to: z.string().optional(),
+      })
+      .parse(d ?? {}),
+  )
+  .handler(async ({ data, context }): Promise<ExecStats> => {
     if (!isAdminEmail(context.claims as { email?: string })) throw new Error("Forbidden");
     const sb = await admin();
-    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const now = new Date();
+    const days = data.period === "7d" ? 7 : data.period === "90d" ? 90 : 30;
+    const to = data.period === "custom" && data.to ? new Date(data.to) : now;
+    const from =
+      data.period === "custom" && data.from
+        ? new Date(data.from)
+        : new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
+    const fromIso = from.toISOString();
+    const toIso = to.toISOString();
 
     const [{ count: totalUsers }, { count: activeUsers }, { count: running }, campaignsRes, paymentsRes, supportRes] =
       await Promise.all([
         sb.from("profiles").select("*", { count: "exact", head: true }),
         sb.from("profiles").select("*", { count: "exact", head: true }).eq("status", "approved"),
         sb.from("campaigns").select("*", { count: "exact", head: true }).in("status", ["running", "rodando"]),
-        sb.from("campaigns").select("spent").gte("created_at", since),
-        sb.from("payment_requests").select("amount, status").gte("created_at", since),
-        sb.from("support_conversations").select("*", { count: "exact", head: true }).eq("status", "open"),
+        sb.from("campaigns").select("spent, revenue").gte("created_at", fromIso).lte("created_at", toIso),
+        sb.from("payment_requests").select("amount, status").gte("created_at", fromIso).lte("created_at", toIso),
+        sb.from("support_conversations").select("*", { count: "exact", head: true }).eq("status", "aberto"),
       ]);
 
-    const spent30 = (campaignsRes.data ?? []).reduce((s, c) => s + Number(c.spent ?? 0), 0);
-    const approved = (paymentsRes.data ?? []).filter((p) => p.status === "approved");
-    const revenue30 = approved.reduce((s, p) => s + Number(p.amount ?? 0), 0);
+    const spent = (campaignsRes.data ?? []).reduce((s, c) => s + Number(c.spent ?? 0), 0);
+    const approved = (paymentsRes.data ?? []).filter((p) => p.status === "approved" || p.status === "paid");
+    const revenue = approved.reduce((s, p) => s + Number(p.amount ?? 0), 0);
     const total = (paymentsRes.data ?? []).length;
     const convRate = total > 0 ? approved.length / total : 0;
-    const avgTicket = approved.length > 0 ? revenue30 / approved.length : 0;
+    const avgTicket = approved.length > 0 ? revenue / approved.length : 0;
 
     return {
       active_users: activeUsers ?? 0,
       total_users: totalUsers ?? 0,
       campaigns_running: running ?? 0,
-      total_spent_30d: spent30,
-      revenue_30d: revenue30,
+      total_spent: spent,
+      revenue,
       conversion_rate: convRate,
       avg_ticket: avgTicket,
       open_support: supportRes.count ?? 0,
+      period_from: fromIso,
+      period_to: toIso,
     };
   });
+
