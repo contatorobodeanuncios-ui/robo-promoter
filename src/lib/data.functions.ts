@@ -39,6 +39,18 @@ export interface CampaignRow {
   funding_type: FundingType;
   pix_total_budget: number;
   pix_remaining_budget: number;
+  // Novos campos
+  reach: number;
+  results: number;
+  revenue: number;
+  frequency: number;
+  cpm: number;
+  cost_per_result: number;
+  invoice_url: string | null;
+  paused_at: string | null;
+  started_running_at: string | null;
+  ended_at: string | null;
+  created_at: string;
 }
 
 interface DbCampaign {
@@ -63,6 +75,17 @@ interface DbCampaign {
   funding_type?: FundingType | null;
   pix_total_budget?: string | number | null;
   pix_remaining_budget?: string | number | null;
+  reach?: number | null;
+  results?: number | null;
+  revenue?: string | number | null;
+  frequency?: string | number | null;
+  cpm?: string | number | null;
+  cost_per_result?: string | number | null;
+  invoice_url?: string | null;
+  paused_at?: string | null;
+  started_running_at?: string | null;
+  ended_at?: string | null;
+  created_at?: string;
 }
 
 const num = (v: string | number | null | undefined) => (v == null ? 0 : Number(v));
@@ -89,7 +112,19 @@ const mapCampaign = (r: DbCampaign): CampaignRow => ({
   funding_type: (r.funding_type ?? "wallet") as FundingType,
   pix_total_budget: num(r.pix_total_budget),
   pix_remaining_budget: num(r.pix_remaining_budget),
+  reach: r.reach ?? 0,
+  results: r.results ?? 0,
+  revenue: num(r.revenue),
+  frequency: num(r.frequency),
+  cpm: num(r.cpm),
+  cost_per_result: num(r.cost_per_result),
+  invoice_url: r.invoice_url ?? null,
+  paused_at: r.paused_at ?? null,
+  started_running_at: r.started_running_at ?? null,
+  ended_at: r.ended_at ?? null,
+  created_at: r.created_at ?? "",
 });
+
 
 export const getAppData = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
