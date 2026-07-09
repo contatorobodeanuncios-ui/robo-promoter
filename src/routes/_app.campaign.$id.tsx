@@ -149,10 +149,11 @@ function CampaignDetail() {
                   <span className="text-xs text-muted-foreground">{m.label}</span>
                   <m.icon className="h-4 w-4 text-primary" />
                 </div>
-                <p className="text-xl font-bold mt-2 tabular-nums">{m.value}</p>
+                <p className={`text-xl font-bold mt-2 tabular-nums ${m.dim ? "text-muted-foreground italic" : ""}`}>{m.value}</p>
               </div>
             ))}
           </div>
+
 
           {!hasRealMetrics && (
             <div className="glass rounded-2xl p-6 flex items-start gap-3 border border-primary/20">
