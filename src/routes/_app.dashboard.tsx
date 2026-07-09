@@ -132,69 +132,96 @@ function Dashboard() {
             const s = statusMeta[c.status] ?? { label: c.status, cls: "text-muted-foreground bg-white/5 border-white/10", dot: "bg-muted-foreground" };
             const range = reachRange(c.budget, c.days);
             const isRunning = c.status === "running" || c.status === "rodando";
+            const isAwaitingPay =
+              c.status === "aguardando_vinculo_meta" &&
+              c.funding_type === "pix_dedicated" &&
+              !!c.invoice_url;
+            const M = ({ label, value, dim }: { label: string; value: string; dim?: boolean }) => (
+              <div className="glass rounded-md p-1.5 min-w-0">
+                <p className="text-[10px] text-muted-foreground truncate">{label}</p>
+                <p className={`text-xs font-semibold tabular-nums truncate ${dim ? "text-muted-foreground italic" : ""}`}>{value}</p>
+              </div>
+            );
+            const na = "não disponível";
             return (
-              <Link
-                to="/campaign/$id"
-                params={{ id: c.id }}
-                key={c.id}
-                className="block px-5 py-4 hover:bg-white/[0.03] transition-colors border-b border-white/5 last:border-0"
-              >
-                <div className="flex items-start gap-3">
-                  <SafeImage src={c.image} alt="" className="h-14 w-14 rounded-lg object-cover border border-white/10 shrink-0" fallbackClassName="h-14 w-14 rounded-lg border border-white/10 shrink-0 grid place-items-center bg-white/5 text-muted-foreground" />
-                  <div className="flex-1 min-w-0 space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="font-medium truncate">{c.name}</p>
-                        <p className="text-xs text-muted-foreground truncate">{c.headline}</p>
-                      </div>
-                      <span className={`inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-full border shrink-0 ${s.cls}`}>
-                        <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
-                        {s.label}
-                      </span>
-                    </div>
-
-                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                      <span className="inline-flex items-center gap-1">
-                        <MapPin className="h-3 w-3 text-primary" />
-                        {c.neighborhood}, {c.city} · {c.radius} km
-                      </span>
-                      <span className="inline-flex items-center gap-1">
-                        <CalendarDays className="h-3 w-3 text-primary" />
-                        {c.days} dias · R$ {c.budget}/dia
-                      </span>
-                      <span className="inline-flex items-center gap-1">
-                        <Users className="h-3 w-3 text-primary" />
-                        alcance estimado {fmtRange(range)}
-                      </span>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs pt-1">
-                      <span className="tabular-nums">
-                        <span className="text-muted-foreground">Pago pelo anúncio</span>{" "}
-                        <span className="font-semibold text-primary">{fmtBRL(c.total_paid)}</span>
-                      </span>
-                      {isRunning ? (
-                        <>
-                          <span className="tabular-nums">
-                            <span className="text-muted-foreground">Gasto (FB)</span>{" "}
-                            <span className="font-semibold">{fmtBRL(c.spent)}</span>
-                          </span>
-                          <span className="tabular-nums">
-                            <span className="text-muted-foreground">Cliques reais</span>{" "}
-                            <span className="font-semibold">{c.clicks.toLocaleString("pt-BR")}</span>
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-[11px] text-muted-foreground italic">
-                          Métricas aparecem aqui assim que a campanha ficar ativa (Facebook/Pixel).
+              <div key={c.id} className="block px-5 py-4 border-b border-white/5 last:border-0">
+                <Link
+                  to="/campaign/$id"
+                  params={{ id: c.id }}
+                  className="block hover:bg-white/[0.02] transition-colors -mx-2 px-2 rounded-lg"
+                >
+                  <div className="flex items-start gap-3">
+                    <SafeImage src={c.image} alt="" className="h-14 w-14 rounded-lg object-cover border border-white/10 shrink-0" fallbackClassName="h-14 w-14 rounded-lg border border-white/10 shrink-0 grid place-items-center bg-white/5 text-muted-foreground" />
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">{c.name}</p>
+                          <p className="text-xs text-muted-foreground truncate">{c.headline}</p>
+                        </div>
+                        <span className={`inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-full border shrink-0 ${s.cls}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
+                          {s.label}
                         </span>
-                      )}
+                      </div>
+
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                        <span className="inline-flex items-center gap-1">
+                          <MapPin className="h-3 w-3 text-primary" />
+                          {c.neighborhood}, {c.city} · {c.radius} km
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <CalendarDays className="h-3 w-3 text-primary" />
+                          {c.days} dias · R$ {c.budget}/dia
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <Users className="h-3 w-3 text-primary" />
+                          alcance estimado {fmtRange(range)}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 pt-1">
+                        <M label="Cliques" value={isRunning && c.clicks ? c.clicks.toLocaleString("pt-BR") : na} dim={!isRunning || !c.clicks} />
+                        <M label="Impr." value={isRunning && c.impressions ? c.impressions.toLocaleString("pt-BR") : na} dim={!isRunning || !c.impressions} />
+                        <M label="CTR" value={isRunning && c.ctr ? `${c.ctr.toFixed(2)}%` : na} dim={!isRunning || !c.ctr} />
+                        <M label="CPC" value={isRunning && c.cpc ? fmtBRL(c.cpc) : na} dim={!isRunning || !c.cpc} />
+                        <M label="Gasto" value={isRunning && c.spent ? fmtBRL(c.spent) : na} dim={!isRunning || !c.spent} />
+                        <M label="CPM" value={isRunning && c.cpm ? fmtBRL(c.cpm) : na} dim={!isRunning || !c.cpm} />
+                        <M label="Freq." value={isRunning && c.frequency ? c.frequency.toFixed(2) : na} dim={!isRunning || !c.frequency} />
+                        <M label="C/Result." value={isRunning && c.cost_per_result ? fmtBRL(c.cost_per_result) : na} dim={!isRunning || !c.cost_per_result} />
+                        <M label="ROI" value={isRunning && c.revenue && c.spent ? `${(((c.revenue - c.spent) / c.spent) * 100).toFixed(1)}%` : na} dim={!isRunning || !c.revenue} />
+                      </div>
                     </div>
                   </div>
-                </div>
-              </Link>
+                </Link>
+
+                {isAwaitingPay && (
+                  <div className="mt-3 rounded-xl border border-warning/40 bg-warning/10 p-3 flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-warning font-medium">
+                      Pague este PIX para o robô iniciar a campanha.
+                    </span>
+                    <div className="ml-auto flex gap-2">
+                      <Button
+                        variant="glass"
+                        size="sm"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          navigator.clipboard.writeText(c.invoice_url ?? "").then(() => toast.success("Link copiado"));
+                        }}
+                      >
+                        <Copy className="h-3.5 w-3.5" /> Copiar link
+                      </Button>
+                      <a href={c.invoice_url ?? "#"} target="_blank" rel="noreferrer">
+                        <Button variant="neon" size="sm">
+                          <ExternalLink className="h-3.5 w-3.5" /> Pagar agora
+                        </Button>
+                      </a>
+                    </div>
+                  </div>
+                )}
+              </div>
             );
           })}
+
         </div>
       </section>
 
