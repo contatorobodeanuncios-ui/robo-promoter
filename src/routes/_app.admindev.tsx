@@ -15,8 +15,12 @@ import {
   adminListWipeEvents,
   getMetaMetricsHealth,
   adminExportCampaignsCSV,
+  adminListAccessRequests,
+  adminApproveAccessRequest,
+  adminDenyAccessRequest,
   type AdminCampaignRow,
 } from "@/lib/admin.functions";
+
 import {
   getPaymentSettings,
   setAsaasConfig,
