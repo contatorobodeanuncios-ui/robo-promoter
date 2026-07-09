@@ -539,77 +539,116 @@ function AdminDevPage() {
                   <th className="px-4 py-3">Campanha</th>
                   <th className="px-4 py-3 text-right">Orçamento</th>
                   <th className="px-4 py-3 text-center">Dias</th>
-                  <th className="px-4 py-3">Status Interno</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Datas</th>
+                  <th className="px-4 py-3">Link cobrança</th>
                   <th className="px-4 py-3">Métricas Reais (Meta)</th>
                   <th className="px-4 py-3 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody>
-                {campaignsQuery.data.map((c) => (
-                  <tr key={c.id} className="border-b border-white/5 hover:bg-white/[0.02]">
-                    <td className="px-4 py-3">
-                      <p className="font-medium">{c.client_name ?? "—"}</p>
-                      <p className="text-[11px] text-muted-foreground font-mono">{c.user_id.slice(0, 8)}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="font-medium truncate max-w-[200px]">{c.name}</p>
-                      <p className="text-[11px] text-muted-foreground truncate max-w-[200px]">{c.headline}</p>
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums">{fmtBRL(c.budget)}</td>
-                    <td className="px-4 py-3 text-center tabular-nums">{c.days}</td>
-                    <td className="px-4 py-3">
-                      <select
-                        value={c.status}
-                        onChange={(e) =>
-                          statusMutation.mutate({
-                            id: c.id,
-                            status: e.target.value as "running" | "analyzing" | "paused",
-                          })
-                        }
-                        className="bg-background border border-white/10 rounded-md px-2 py-1 text-xs"
-                      >
-                        <option value="analyzing">⏳ Em Análise</option>
-                        <option value="running">🟢 Ativo</option>
-                        <option value="paused">🔴 Desativado</option>
-                      </select>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="grid grid-cols-3 gap-1 text-[10px] min-w-[260px]">
-                        <Metric label="Cliques" value={c.clicks.toLocaleString("pt-BR")} />
-                        <Metric label="Impr." value={c.impressions.toLocaleString("pt-BR")} />
-                        <Metric label="CTR" value={`${c.ctr.toFixed(2)}%`} />
-                        <Metric label="CPC" value={fmtBRL(c.cpc)} />
-                        <Metric label="Gasto" value={fmtBRL(c.spent)} />
-                        <Metric label="ROI" value="—" />
-                        <Metric label="CPM" value={c.impressions ? fmtBRL((c.spent / c.impressions) * 1000) : "—"} />
-                        <Metric label="Freq." value="—" />
-                        <Metric label="C/Result." value={c.clicks ? fmtBRL(c.spent / c.clicks) : "—"} />
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="glass"
-                          size="sm"
-                          onClick={() => setPreview(c)}
-                          title="Pré-visualizar anúncio"
+                {campaignsQuery.data.map((c) => {
+                  const isRunning = c.status === "running" || c.status === "rodando";
+                  const isPaused = c.status === "paused" || c.status === "encerrada_saldo_consumido";
+                  const isPending = c.status === "aguardando_vinculo_meta" || c.status === "analyzing";
+                  const rowCls = isRunning
+                    ? "bg-success/5 border-l-2 border-l-success"
+                    : isPaused
+                      ? "bg-destructive/5 border-l-2 border-l-destructive"
+                      : "";
+                  const fmtDate = (d: string | null) => (d ? new Date(d).toLocaleString("pt-BR") : "—");
+                  return (
+                    <tr key={c.id} className={`border-b border-white/5 hover:bg-white/[0.02] ${rowCls}`}>
+                      <td className="px-4 py-3">
+                        <p className="font-medium">{c.client_name ?? "—"}</p>
+                        <p className="text-[11px] text-muted-foreground">{c.client_email ?? c.user_id.slice(0, 8)}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="font-medium truncate max-w-[200px]">{c.name}</p>
+                        <p className="text-[11px] text-muted-foreground truncate max-w-[200px]">{c.headline}</p>
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">{fmtBRL(c.budget)}</td>
+                      <td className="px-4 py-3 text-center tabular-nums">{c.days}</td>
+                      <td className="px-4 py-3">
+                        <select
+                          value={c.status}
+                          onChange={(e) =>
+                            statusMutation.mutate({
+                              id: c.id,
+                              status: e.target.value as "running" | "analyzing" | "paused",
+                            })
+                          }
+                          className="bg-background border border-white/10 rounded-md px-2 py-1 text-xs"
                         >
-                          <Eye className="h-3.5 w-3.5" /> Prévia
-                        </Button>
-                        <Button
-                          variant="neon"
-                          size="sm"
-                          disabled={c.status === "running" || statusMutation.isPending}
-                          onClick={() => statusMutation.mutate({ id: c.id, status: "running" })}
-                        >
-                          <Rocket className="h-3.5 w-3.5" /> Forçar Ativação
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          <option value="analyzing">⏳ Em Análise</option>
+                          <option value="running">🟢 Ativo</option>
+                          <option value="paused">🔴 Desativado</option>
+                          <option value="aguardando_vinculo_meta">💰 Aguardando pagamento</option>
+                          <option value="encerrada_saldo_consumido">⛔ Encerrada</option>
+                        </select>
+                      </td>
+                      <td className="px-4 py-3 text-[10px] text-muted-foreground space-y-0.5 min-w-[160px]">
+                        <div>Criada: <span className="text-foreground">{fmtDate(c.created_at)}</span></div>
+                        <div>Iniciou: <span className="text-foreground">{fmtDate(c.started_running_at)}</span></div>
+                        <div>Pausada: <span className="text-foreground">{fmtDate(c.paused_at)}</span></div>
+                        <div>Encerrada: <span className="text-foreground">{fmtDate(c.ended_at)}</span></div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {c.invoice_url ? (
+                          <div className="flex items-center gap-1">
+                            <a href={c.invoice_url} target="_blank" rel="noreferrer" className="text-[11px] text-primary underline truncate inline-block max-w-[180px]">
+                              {c.invoice_url}
+                            </a>
+                            <button
+                              type="button"
+                              className="p-1 rounded hover:bg-white/10"
+                              onClick={() => {
+                                navigator.clipboard.writeText(c.invoice_url!).then(() => toast.success("Link copiado"));
+                              }}
+                            >
+                              <Copy className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-muted-foreground italic">
+                            {isPending && c.funding_type === "pix_dedicated" ? "sem cobrança" : "—"}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="grid grid-cols-3 gap-1 text-[10px] min-w-[260px]">
+                          <Metric label="Cliques" value={c.clicks.toLocaleString("pt-BR")} />
+                          <Metric label="Impr." value={c.impressions.toLocaleString("pt-BR")} />
+                          <Metric label="CTR" value={`${c.ctr.toFixed(2)}%`} />
+                          <Metric label="CPC" value={fmtBRL(c.cpc)} />
+                          <Metric label="Gasto" value={fmtBRL(c.spent)} />
+                          <Metric label="CPM" value={c.cpm ? fmtBRL(c.cpm) : "—"} />
+                          <Metric label="Freq." value={c.frequency ? c.frequency.toFixed(2) : "—"} />
+                          <Metric label="C/Result." value={c.cost_per_result ? fmtBRL(c.cost_per_result) : "—"} />
+                          <Metric label="ROI" value={c.revenue && c.spent ? `${(((c.revenue - c.spent) / c.spent) * 100).toFixed(1)}%` : "—"} />
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button variant="glass" size="sm" onClick={() => setPreview(c)} title="Pré-visualizar anúncio">
+                            <Eye className="h-3.5 w-3.5" /> Prévia
+                          </Button>
+                          <Button
+                            variant="neon"
+                            size="sm"
+                            disabled={c.status === "running" || statusMutation.isPending}
+                            onClick={() => statusMutation.mutate({ id: c.id, status: "running" })}
+                          >
+                            <Rocket className="h-3.5 w-3.5" /> Ativar
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
+
           </div>
         )}
       </section>
