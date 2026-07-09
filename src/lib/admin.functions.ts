@@ -57,6 +57,7 @@ export interface AdminCampaignRow {
   id: string;
   user_id: string;
   client_name: string | null;
+  client_email: string | null;
   name: string;
   status: "running" | "analyzing" | "paused" | "aguardando_vinculo_meta" | "rodando" | "encerrada_saldo_consumido";
   budget: number;
@@ -66,11 +67,22 @@ export interface AdminCampaignRow {
   impressions: number;
   ctr: number;
   cpc: number;
+  reach: number;
+  results: number;
+  revenue: number;
+  frequency: number;
+  cpm: number;
+  cost_per_result: number;
+  invoice_url: string | null;
+  funding_type: "wallet" | "pix_dedicated";
   image: string;
   headline: string;
   copy: string;
   link: string;
   created_at: string;
+  started_running_at: string | null;
+  paused_at: string | null;
+  ended_at: string | null;
 }
 
 export const adminListCampaigns = createServerFn({ method: "GET" })
@@ -86,29 +98,45 @@ export const adminListCampaigns = createServerFn({ method: "GET" })
     const userIds = Array.from(new Set((campaigns ?? []).map((c) => c.user_id)));
     const { data: profiles } = await supabaseAdmin
       .from("profiles")
-      .select("id, display_name")
+      .select("id, display_name, email")
       .in("id", userIds.length ? userIds : ["00000000-0000-0000-0000-000000000000"]);
-    const nameById = new Map((profiles ?? []).map((p) => [p.id, p.display_name]));
-    return (campaigns ?? []).map((c) => ({
-      id: c.id,
-      user_id: c.user_id,
-      client_name: nameById.get(c.user_id) ?? null,
-      name: c.name,
-      status: c.status,
-      budget: c.budget,
-      days: c.days,
-      spent: Number(c.spent),
-      clicks: c.clicks,
-      impressions: c.impressions,
-      ctr: Number(c.ctr),
-      cpc: Number(c.cpc),
-      image: c.image,
-      headline: c.headline,
-      copy: c.copy,
-      link: c.link,
-      created_at: c.created_at,
-    }));
+    const pMap = new Map((profiles ?? []).map((p) => [p.id, p]));
+    return (campaigns ?? []).map((c) => {
+      const p = pMap.get(c.user_id);
+      return {
+        id: c.id,
+        user_id: c.user_id,
+        client_name: p?.display_name ?? null,
+        client_email: p?.email ?? null,
+        name: c.name,
+        status: c.status,
+        budget: c.budget,
+        days: c.days,
+        spent: Number(c.spent),
+        clicks: c.clicks,
+        impressions: c.impressions,
+        ctr: Number(c.ctr),
+        cpc: Number(c.cpc),
+        reach: c.reach ?? 0,
+        results: c.results ?? 0,
+        revenue: Number(c.revenue ?? 0),
+        frequency: Number(c.frequency ?? 0),
+        cpm: Number(c.cpm ?? 0),
+        cost_per_result: Number(c.cost_per_result ?? 0),
+        invoice_url: c.invoice_url ?? null,
+        funding_type: (c.funding_type ?? "wallet") as "wallet" | "pix_dedicated",
+        image: c.image,
+        headline: c.headline,
+        copy: c.copy,
+        link: c.link,
+        created_at: c.created_at,
+        started_running_at: c.started_running_at ?? null,
+        paused_at: c.paused_at ?? null,
+        ended_at: c.ended_at ?? null,
+      };
+    });
   });
+
 
 export const adminSetCampaignStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
