@@ -775,3 +775,81 @@ function safeHostname(link: string | null | undefined): string {
     return "link inválido";
   }
 }
+
+function AccessRequestsSection() {
+  const qc = useQueryClient();
+  const listFn = useServerFn(adminListAccessRequests);
+  const approveFn = useServerFn(adminApproveAccessRequest);
+  const denyFn = useServerFn(adminDenyAccessRequest);
+  const q = useQuery({
+    queryKey: ["admin-access-requests"],
+    queryFn: () => listFn(),
+    refetchInterval: 30_000,
+  });
+  const approveMut = useMutation({
+    mutationFn: (id: string) => approveFn({ data: { id } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-access-requests"] });
+      toast.success("Acesso liberado");
+    },
+    onError: (e) => toast.error(String(e)),
+  });
+  const denyMut = useMutation({
+    mutationFn: (id: string) => denyFn({ data: { id, reason: "Recusado pelo admin" } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-access-requests"] });
+      toast.info("Solicitação recusada");
+    },
+  });
+  const pending = (q.data ?? []).filter((r) => r.status === "pending");
+  return (
+    <section className="glass-strong rounded-2xl overflow-hidden border border-primary/20">
+      <div className="p-5 border-b border-white/5 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <UserPlus className="h-5 w-5 text-primary" />
+          <h2 className="font-semibold">Solicitações de Acesso</h2>
+        </div>
+        <span className="text-xs text-muted-foreground">{pending.length} aguardando</span>
+      </div>
+      {q.isLoading ? (
+        <div className="p-8 text-center text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin mx-auto" /></div>
+      ) : !(q.data ?? []).length ? (
+        <div className="p-8 text-center text-sm text-muted-foreground">Nenhuma solicitação registrada.</div>
+      ) : (
+        <div className="divide-y divide-white/5">
+          {(q.data ?? []).map((r) => (
+            <div key={r.id} className="p-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-medium">{r.display_name ?? "(sem nome)"}</p>
+                <p className="text-[11px] text-muted-foreground">{r.email ?? r.user_id.slice(0, 8)}</p>
+                <p className="text-[10px] text-muted-foreground">
+                  {new Date(r.created_at).toLocaleString("pt-BR")}
+                  {r.reviewed_at && r.status !== "pending" && ` · revisado em ${new Date(r.reviewed_at).toLocaleString("pt-BR")}`}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`text-[11px] px-2 py-1 rounded-full border ${
+                  r.status === "approved" ? "border-success/40 text-success bg-success/10" :
+                  r.status === "rejected" ? "border-destructive/40 text-destructive bg-destructive/10" :
+                  "border-warning/40 text-warning bg-warning/10"
+                }`}>
+                  {r.status === "approved" ? "Aprovado" : r.status === "rejected" ? "Recusado" : "Pendente"}
+                </span>
+                {r.status === "pending" && (
+                  <>
+                    <Button variant="neon" size="sm" disabled={approveMut.isPending} onClick={() => approveMut.mutate(r.id)}>
+                      <Check className="h-3.5 w-3.5" /> Aprovar
+                    </Button>
+                    <Button variant="glass" size="sm" disabled={denyMut.isPending} onClick={() => denyMut.mutate(r.id)}>
+                      <Ban className="h-3.5 w-3.5" /> Recusar
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
