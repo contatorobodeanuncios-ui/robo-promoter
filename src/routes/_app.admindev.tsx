@@ -222,6 +222,9 @@ function AdminDevPage() {
       <MetaHealthCard />
       <ExportCsvButton />
 
+      <AccessRequestsSection />
+
+
 
       {/* Mode toggle */}
       <section
