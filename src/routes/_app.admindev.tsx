@@ -15,8 +15,12 @@ import {
   adminListWipeEvents,
   getMetaMetricsHealth,
   adminExportCampaignsCSV,
+  adminListAccessRequests,
+  adminApproveAccessRequest,
+  adminDenyAccessRequest,
   type AdminCampaignRow,
 } from "@/lib/admin.functions";
+
 import {
   getPaymentSettings,
   setAsaasConfig,
@@ -26,7 +30,7 @@ import {
   adminRejectPayment,
 } from "@/lib/payment.functions";
 import { supabase } from "@/integrations/supabase/client";
-import { Shield, Zap, Hand, Eye, X, Rocket, Loader2, Link2, Check, Ban, CreditCard, AlertTriangle, Trash2, PowerOff } from "lucide-react";
+import { Shield, Zap, Hand, Eye, X, Rocket, Loader2, Link2, Check, Ban, CreditCard, AlertTriangle, Trash2, PowerOff, UserPlus, Copy } from "lucide-react";
 
 export const Route = createFileRoute("/_app/admindev")({
   ssr: false,
@@ -217,6 +221,9 @@ function AdminDevPage() {
 
       <MetaHealthCard />
       <ExportCsvButton />
+
+      <AccessRequestsSection />
+
 
 
       {/* Mode toggle */}
@@ -532,77 +539,116 @@ function AdminDevPage() {
                   <th className="px-4 py-3">Campanha</th>
                   <th className="px-4 py-3 text-right">Orçamento</th>
                   <th className="px-4 py-3 text-center">Dias</th>
-                  <th className="px-4 py-3">Status Interno</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Datas</th>
+                  <th className="px-4 py-3">Link cobrança</th>
                   <th className="px-4 py-3">Métricas Reais (Meta)</th>
                   <th className="px-4 py-3 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody>
-                {campaignsQuery.data.map((c) => (
-                  <tr key={c.id} className="border-b border-white/5 hover:bg-white/[0.02]">
-                    <td className="px-4 py-3">
-                      <p className="font-medium">{c.client_name ?? "—"}</p>
-                      <p className="text-[11px] text-muted-foreground font-mono">{c.user_id.slice(0, 8)}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="font-medium truncate max-w-[200px]">{c.name}</p>
-                      <p className="text-[11px] text-muted-foreground truncate max-w-[200px]">{c.headline}</p>
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums">{fmtBRL(c.budget)}</td>
-                    <td className="px-4 py-3 text-center tabular-nums">{c.days}</td>
-                    <td className="px-4 py-3">
-                      <select
-                        value={c.status}
-                        onChange={(e) =>
-                          statusMutation.mutate({
-                            id: c.id,
-                            status: e.target.value as "running" | "analyzing" | "paused",
-                          })
-                        }
-                        className="bg-background border border-white/10 rounded-md px-2 py-1 text-xs"
-                      >
-                        <option value="analyzing">⏳ Em Análise</option>
-                        <option value="running">🟢 Ativo</option>
-                        <option value="paused">🔴 Desativado</option>
-                      </select>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="grid grid-cols-3 gap-1 text-[10px] min-w-[260px]">
-                        <Metric label="Cliques" value={c.clicks.toLocaleString("pt-BR")} />
-                        <Metric label="Impr." value={c.impressions.toLocaleString("pt-BR")} />
-                        <Metric label="CTR" value={`${c.ctr.toFixed(2)}%`} />
-                        <Metric label="CPC" value={fmtBRL(c.cpc)} />
-                        <Metric label="Gasto" value={fmtBRL(c.spent)} />
-                        <Metric label="ROI" value="—" />
-                        <Metric label="CPM" value={c.impressions ? fmtBRL((c.spent / c.impressions) * 1000) : "—"} />
-                        <Metric label="Freq." value="—" />
-                        <Metric label="C/Result." value={c.clicks ? fmtBRL(c.spent / c.clicks) : "—"} />
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="glass"
-                          size="sm"
-                          onClick={() => setPreview(c)}
-                          title="Pré-visualizar anúncio"
+                {campaignsQuery.data.map((c) => {
+                  const isRunning = c.status === "running" || c.status === "rodando";
+                  const isPaused = c.status === "paused" || c.status === "encerrada_saldo_consumido";
+                  const isPending = c.status === "aguardando_vinculo_meta" || c.status === "analyzing";
+                  const rowCls = isRunning
+                    ? "bg-success/5 border-l-2 border-l-success"
+                    : isPaused
+                      ? "bg-destructive/5 border-l-2 border-l-destructive"
+                      : "";
+                  const fmtDate = (d: string | null) => (d ? new Date(d).toLocaleString("pt-BR") : "—");
+                  return (
+                    <tr key={c.id} className={`border-b border-white/5 hover:bg-white/[0.02] ${rowCls}`}>
+                      <td className="px-4 py-3">
+                        <p className="font-medium">{c.client_name ?? "—"}</p>
+                        <p className="text-[11px] text-muted-foreground">{c.client_email ?? c.user_id.slice(0, 8)}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="font-medium truncate max-w-[200px]">{c.name}</p>
+                        <p className="text-[11px] text-muted-foreground truncate max-w-[200px]">{c.headline}</p>
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">{fmtBRL(c.budget)}</td>
+                      <td className="px-4 py-3 text-center tabular-nums">{c.days}</td>
+                      <td className="px-4 py-3">
+                        <select
+                          value={c.status}
+                          onChange={(e) =>
+                            statusMutation.mutate({
+                              id: c.id,
+                              status: e.target.value as "running" | "analyzing" | "paused",
+                            })
+                          }
+                          className="bg-background border border-white/10 rounded-md px-2 py-1 text-xs"
                         >
-                          <Eye className="h-3.5 w-3.5" /> Prévia
-                        </Button>
-                        <Button
-                          variant="neon"
-                          size="sm"
-                          disabled={c.status === "running" || statusMutation.isPending}
-                          onClick={() => statusMutation.mutate({ id: c.id, status: "running" })}
-                        >
-                          <Rocket className="h-3.5 w-3.5" /> Forçar Ativação
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          <option value="analyzing">⏳ Em Análise</option>
+                          <option value="running">🟢 Ativo</option>
+                          <option value="paused">🔴 Desativado</option>
+                          <option value="aguardando_vinculo_meta">💰 Aguardando pagamento</option>
+                          <option value="encerrada_saldo_consumido">⛔ Encerrada</option>
+                        </select>
+                      </td>
+                      <td className="px-4 py-3 text-[10px] text-muted-foreground space-y-0.5 min-w-[160px]">
+                        <div>Criada: <span className="text-foreground">{fmtDate(c.created_at)}</span></div>
+                        <div>Iniciou: <span className="text-foreground">{fmtDate(c.started_running_at)}</span></div>
+                        <div>Pausada: <span className="text-foreground">{fmtDate(c.paused_at)}</span></div>
+                        <div>Encerrada: <span className="text-foreground">{fmtDate(c.ended_at)}</span></div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {c.invoice_url ? (
+                          <div className="flex items-center gap-1">
+                            <a href={c.invoice_url} target="_blank" rel="noreferrer" className="text-[11px] text-primary underline truncate inline-block max-w-[180px]">
+                              {c.invoice_url}
+                            </a>
+                            <button
+                              type="button"
+                              className="p-1 rounded hover:bg-white/10"
+                              onClick={() => {
+                                navigator.clipboard.writeText(c.invoice_url!).then(() => toast.success("Link copiado"));
+                              }}
+                            >
+                              <Copy className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-muted-foreground italic">
+                            {isPending && c.funding_type === "pix_dedicated" ? "sem cobrança" : "—"}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="grid grid-cols-3 gap-1 text-[10px] min-w-[260px]">
+                          <Metric label="Cliques" value={c.clicks.toLocaleString("pt-BR")} />
+                          <Metric label="Impr." value={c.impressions.toLocaleString("pt-BR")} />
+                          <Metric label="CTR" value={`${c.ctr.toFixed(2)}%`} />
+                          <Metric label="CPC" value={fmtBRL(c.cpc)} />
+                          <Metric label="Gasto" value={fmtBRL(c.spent)} />
+                          <Metric label="CPM" value={c.cpm ? fmtBRL(c.cpm) : "—"} />
+                          <Metric label="Freq." value={c.frequency ? c.frequency.toFixed(2) : "—"} />
+                          <Metric label="C/Result." value={c.cost_per_result ? fmtBRL(c.cost_per_result) : "—"} />
+                          <Metric label="ROI" value={c.revenue && c.spent ? `${(((c.revenue - c.spent) / c.spent) * 100).toFixed(1)}%` : "—"} />
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button variant="glass" size="sm" onClick={() => setPreview(c)} title="Pré-visualizar anúncio">
+                            <Eye className="h-3.5 w-3.5" /> Prévia
+                          </Button>
+                          <Button
+                            variant="neon"
+                            size="sm"
+                            disabled={c.status === "running" || statusMutation.isPending}
+                            onClick={() => statusMutation.mutate({ id: c.id, status: "running" })}
+                          >
+                            <Rocket className="h-3.5 w-3.5" /> Ativar
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
+
           </div>
         )}
       </section>
@@ -728,4 +774,82 @@ function safeHostname(link: string | null | undefined): string {
   } catch {
     return "link inválido";
   }
+}
+
+function AccessRequestsSection() {
+  const qc = useQueryClient();
+  const listFn = useServerFn(adminListAccessRequests);
+  const approveFn = useServerFn(adminApproveAccessRequest);
+  const denyFn = useServerFn(adminDenyAccessRequest);
+  const q = useQuery({
+    queryKey: ["admin-access-requests"],
+    queryFn: () => listFn(),
+    refetchInterval: 30_000,
+  });
+  const approveMut = useMutation({
+    mutationFn: (id: string) => approveFn({ data: { id } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-access-requests"] });
+      toast.success("Acesso liberado");
+    },
+    onError: (e) => toast.error(String(e)),
+  });
+  const denyMut = useMutation({
+    mutationFn: (id: string) => denyFn({ data: { id, reason: "Recusado pelo admin" } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-access-requests"] });
+      toast.info("Solicitação recusada");
+    },
+  });
+  const pending = (q.data ?? []).filter((r) => r.status === "pending");
+  return (
+    <section className="glass-strong rounded-2xl overflow-hidden border border-primary/20">
+      <div className="p-5 border-b border-white/5 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <UserPlus className="h-5 w-5 text-primary" />
+          <h2 className="font-semibold">Solicitações de Acesso</h2>
+        </div>
+        <span className="text-xs text-muted-foreground">{pending.length} aguardando</span>
+      </div>
+      {q.isLoading ? (
+        <div className="p-8 text-center text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin mx-auto" /></div>
+      ) : !(q.data ?? []).length ? (
+        <div className="p-8 text-center text-sm text-muted-foreground">Nenhuma solicitação registrada.</div>
+      ) : (
+        <div className="divide-y divide-white/5">
+          {(q.data ?? []).map((r) => (
+            <div key={r.id} className="p-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-medium">{r.display_name ?? "(sem nome)"}</p>
+                <p className="text-[11px] text-muted-foreground">{r.email ?? r.user_id.slice(0, 8)}</p>
+                <p className="text-[10px] text-muted-foreground">
+                  {new Date(r.created_at).toLocaleString("pt-BR")}
+                  {r.reviewed_at && r.status !== "pending" && ` · revisado em ${new Date(r.reviewed_at).toLocaleString("pt-BR")}`}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`text-[11px] px-2 py-1 rounded-full border ${
+                  r.status === "approved" ? "border-success/40 text-success bg-success/10" :
+                  r.status === "rejected" ? "border-destructive/40 text-destructive bg-destructive/10" :
+                  "border-warning/40 text-warning bg-warning/10"
+                }`}>
+                  {r.status === "approved" ? "Aprovado" : r.status === "rejected" ? "Recusado" : "Pendente"}
+                </span>
+                {r.status === "pending" && (
+                  <>
+                    <Button variant="neon" size="sm" disabled={approveMut.isPending} onClick={() => approveMut.mutate(r.id)}>
+                      <Check className="h-3.5 w-3.5" /> Aprovar
+                    </Button>
+                    <Button variant="glass" size="sm" disabled={denyMut.isPending} onClick={() => denyMut.mutate(r.id)}>
+                      <Ban className="h-3.5 w-3.5" /> Recusar
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
 }

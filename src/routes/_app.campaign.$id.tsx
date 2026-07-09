@@ -45,8 +45,9 @@ function CampaignDetail() {
     );
   }
 
-  const isRunning = c.status === "running";
+  const isRunning = c.status === "running" || c.status === "rodando";
   const hasRealMetrics = isRunning && (c.clicks > 0 || c.impressions > 0);
+  const na = "não disponível";
 
   const togglePause = () => {
     const next = c.status === "paused" ? "running" : "paused";
@@ -54,12 +55,21 @@ function CampaignDetail() {
     toast.success(next === "paused" ? "Campanha pausada" : "Campanha retomada");
   };
 
-  const metrics = [
-    { label: "Impressões reais", value: hasRealMetrics ? c.impressions.toLocaleString("pt-BR") : "—", icon: Eye },
-    { label: "Cliques reais", value: hasRealMetrics ? c.clicks.toLocaleString("pt-BR") : "—", icon: MousePointerClick },
-    { label: "CTR real", value: hasRealMetrics ? `${c.ctr.toFixed(2)}%` : "—", icon: Percent },
-    { label: "Gasto (Facebook)", value: hasRealMetrics ? fmtBRL(c.spent) : "—", icon: DollarSign },
+  const metrics: Array<{ label: string; value: string; icon: typeof Eye; dim?: boolean }> = [
+    { label: "Impressões", value: hasRealMetrics ? c.impressions.toLocaleString("pt-BR") : na, icon: Eye, dim: !hasRealMetrics },
+    { label: "Cliques", value: hasRealMetrics ? c.clicks.toLocaleString("pt-BR") : na, icon: MousePointerClick, dim: !hasRealMetrics },
+    { label: "CTR", value: hasRealMetrics ? `${c.ctr.toFixed(2)}%` : na, icon: Percent, dim: !hasRealMetrics },
+    { label: "CPC", value: hasRealMetrics && c.cpc ? fmtBRL(c.cpc) : na, icon: DollarSign, dim: !hasRealMetrics || !c.cpc },
+    { label: "Gasto (Facebook)", value: hasRealMetrics ? fmtBRL(c.spent) : na, icon: DollarSign, dim: !hasRealMetrics },
+    { label: "CPM", value: hasRealMetrics && c.cpm ? fmtBRL(c.cpm) : na, icon: DollarSign, dim: !hasRealMetrics || !c.cpm },
+    { label: "Frequência", value: hasRealMetrics && c.frequency ? c.frequency.toFixed(2) : na, icon: Percent, dim: !hasRealMetrics || !c.frequency },
+    { label: "Custo por resultado", value: hasRealMetrics && c.cost_per_result ? fmtBRL(c.cost_per_result) : na, icon: DollarSign, dim: !hasRealMetrics || !c.cost_per_result },
+    { label: "Alcance", value: hasRealMetrics && c.reach ? c.reach.toLocaleString("pt-BR") : na, icon: Eye, dim: !hasRealMetrics || !c.reach },
+    { label: "Resultados", value: hasRealMetrics && c.results ? c.results.toLocaleString("pt-BR") : na, icon: MousePointerClick, dim: !hasRealMetrics || !c.results },
+    { label: "Receita", value: hasRealMetrics && c.revenue ? fmtBRL(c.revenue) : na, icon: DollarSign, dim: !hasRealMetrics || !c.revenue },
+    { label: "ROI", value: hasRealMetrics && c.revenue && c.spent ? `${(((c.revenue - c.spent) / c.spent) * 100).toFixed(1)}%` : na, icon: Percent, dim: !hasRealMetrics || !c.revenue },
   ];
+
 
   return (
     <div className="p-6 lg:p-10 max-w-7xl mx-auto space-y-8">
@@ -139,10 +149,11 @@ function CampaignDetail() {
                   <span className="text-xs text-muted-foreground">{m.label}</span>
                   <m.icon className="h-4 w-4 text-primary" />
                 </div>
-                <p className="text-xl font-bold mt-2 tabular-nums">{m.value}</p>
+                <p className={`text-xl font-bold mt-2 tabular-nums ${m.dim ? "text-muted-foreground italic" : ""}`}>{m.value}</p>
               </div>
             ))}
           </div>
+
 
           {!hasRealMetrics && (
             <div className="glass rounded-2xl p-6 flex items-start gap-3 border border-primary/20">
