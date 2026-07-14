@@ -112,11 +112,17 @@ function AdminDevPage() {
   const [preview, setPreview] = useState<AdminCampaignRow | null>(null);
   const [asaasLink, setAsaasLink] = useState("");
   const [apiKeySet, setApiKeySet] = useState(false);
+  const [manualPixKey, setManualPixKey] = useState("");
+  const [manualPixBeneficiary, setManualPixBeneficiary] = useState("");
+  const [manualPixEnabled, setManualPixEnabled] = useState(false);
 
   useEffect(() => {
     if (paySettingsQuery.data) {
       setAsaasLink(paySettingsQuery.data.asaas.link_template || "");
       setApiKeySet(!!paySettingsQuery.data.asaas.api_key_set);
+      setManualPixKey(paySettingsQuery.data.manualPix?.key || "");
+      setManualPixBeneficiary(paySettingsQuery.data.manualPix?.beneficiary || "");
+      setManualPixEnabled(!!paySettingsQuery.data.manualPix?.enabled);
     }
   }, [paySettingsQuery.data]);
 
