@@ -559,7 +559,9 @@ export const adminDenyAccessRequest = createServerFn({ method: "POST" })
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (req) {
-      await admin.from("profiles").update({ status: "banned" }).eq("id", req.user_id);
+      await admin
+        .from("profiles")
+        .upsert({ id: req.user_id, status: "banned" }, { onConflict: "id" });
     }
     await admin.from("admin_audit_log").insert({
       admin_email: (context.claims as { email?: string })?.email ?? "",
