@@ -83,6 +83,8 @@ export interface AdminCampaignRow {
   started_running_at: string | null;
   paused_at: string | null;
   ended_at: string | null;
+  meta_campaign_id: string | null;
+
 }
 
 export const adminListCampaigns = createServerFn({ method: "GET" })
