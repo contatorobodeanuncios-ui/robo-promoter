@@ -117,7 +117,6 @@ function AdminDevPage() {
 
   useEffect(() => {
     if (paySettingsQuery.data) {
-      setAsaasLink(paySettingsQuery.data.asaas.link_template || "");
       setApiKeySet(!!paySettingsQuery.data.asaas.api_key_set);
       setManualPixKey(paySettingsQuery.data.manualPix?.key || "");
       setManualPixBeneficiary(paySettingsQuery.data.manualPix?.beneficiary || "");
