@@ -25,6 +25,7 @@ import {
 import {
   getPaymentSettings,
   setAsaasConfig,
+  setManualPixConfig,
   setPaymentConfirmMode,
   adminListPayments,
   adminApprovePayment,
@@ -57,6 +58,7 @@ function AdminDevPage() {
   const setStatusFn = useServerFn(adminSetCampaignStatus);
   const getPaySettings = useServerFn(getPaymentSettings);
   const setAsaasFn = useServerFn(setAsaasConfig);
+  const setManualPixFn = useServerFn(setManualPixConfig);
   const setConfirmFn = useServerFn(setPaymentConfirmMode);
   const listPaymentsFn = useServerFn(adminListPayments);
   const approvePayFn = useServerFn(adminApprovePayment);
@@ -110,11 +112,17 @@ function AdminDevPage() {
   const [preview, setPreview] = useState<AdminCampaignRow | null>(null);
   const [asaasLink, setAsaasLink] = useState("");
   const [apiKeySet, setApiKeySet] = useState(false);
+  const [manualPixKey, setManualPixKey] = useState("");
+  const [manualPixBeneficiary, setManualPixBeneficiary] = useState("");
+  const [manualPixEnabled, setManualPixEnabled] = useState(false);
 
   useEffect(() => {
     if (paySettingsQuery.data) {
       setAsaasLink(paySettingsQuery.data.asaas.link_template || "");
       setApiKeySet(!!paySettingsQuery.data.asaas.api_key_set);
+      setManualPixKey(paySettingsQuery.data.manualPix?.key || "");
+      setManualPixBeneficiary(paySettingsQuery.data.manualPix?.beneficiary || "");
+      setManualPixEnabled(!!paySettingsQuery.data.manualPix?.enabled);
     }
   }, [paySettingsQuery.data]);
 
@@ -146,6 +154,23 @@ function AdminDevPage() {
     },
     onError: (e) => toast.error("Falha ao salvar Asaas", { description: String(e) }),
   });
+
+  const saveManualPix = useMutation({
+    mutationFn: () =>
+      setManualPixFn({
+        data: {
+          key: manualPixKey.trim(),
+          beneficiary: manualPixBeneficiary.trim(),
+          enabled: manualPixEnabled,
+        },
+      }),
+    onSuccess: () => {
+      toast.success("Chave PIX manual salva");
+      qc.invalidateQueries({ queryKey: ["pay-settings"] });
+    },
+    onError: (e) => toast.error("Falha ao salvar chave PIX", { description: String(e) }),
+  });
+
 
   const toggleConfirmMode = useMutation({
     mutationFn: (mode: "manual" | "webhook") => setConfirmFn({ data: { mode } }),
@@ -313,7 +338,53 @@ function AdminDevPage() {
             {saveAsaas.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
             Salvar link
           </Button>
+
+          <div className="pt-4 mt-2 border-t border-white/10 space-y-3">
+            <div className="flex items-center gap-2">
+              <Copy className="h-4 w-4 text-primary" />
+              <p className="font-semibold text-sm">Chave PIX manual (fallback)</p>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Se a API do Asaas falhar em gerar a cobrança, o app mostra esta chave PIX para o cliente
+              copiar. O pagamento entra como manual — depois você aprova em "Solicitações de pagamento".
+            </p>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Chave PIX (CPF/CNPJ/Email/Telefone/Aleatória)</Label>
+              <Input
+                placeholder="ex: 000.000.000-00"
+                value={manualPixKey}
+                onChange={(e) => setManualPixKey(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Nome do beneficiário (opcional)</Label>
+              <Input
+                placeholder="ex: Robô de Lucro LTDA"
+                value={manualPixBeneficiary}
+                onChange={(e) => setManualPixBeneficiary(e.target.value)}
+              />
+            </div>
+            <label className="flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={manualPixEnabled}
+                onChange={(e) => setManualPixEnabled(e.target.checked)}
+              />
+              Habilitar fallback manual
+            </label>
+            <Button
+              variant="glass"
+              size="sm"
+              onClick={() => saveManualPix.mutate()}
+              disabled={saveManualPix.isPending}
+            >
+              {saveManualPix.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              Salvar chave PIX
+            </Button>
+          </div>
         </div>
+
+
 
         <div className="glass-strong rounded-2xl p-6 space-y-4 border border-primary/20">
           <div className="flex items-center gap-2">
