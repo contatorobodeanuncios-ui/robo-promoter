@@ -542,6 +542,7 @@ function AdminDevPage() {
                   <th className="px-4 py-3 text-center">Dias</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Datas</th>
+                  <th className="px-4 py-3">ID da campanha no Meta</th>
                   <th className="px-4 py-3">Link cobrança</th>
                   <th className="px-4 py-3">Métricas Reais (Meta)</th>
                   <th className="px-4 py-3 text-right">Ações</th>
