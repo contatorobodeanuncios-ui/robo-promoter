@@ -160,6 +160,38 @@ export const adminSetCampaignStatus = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+// Vincula manualmente o ID da campanha no Meta a uma campanha do sistema.
+// Após salvo, o cron meta-metrics-sync passa a sincronizar as métricas reais.
+export const adminSetMetaCampaignId = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      id: z.string().uuid(),
+      meta_campaign_id: z.string().trim().max(64).nullable(),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const supabaseAdmin = await getSupabaseAdmin();
+    const value = data.meta_campaign_id && data.meta_campaign_id.length > 0
+      ? data.meta_campaign_id.replace(/[^0-9]/g, "")
+      : null;
+    if (value && value.length < 6) throw new Error("ID do Meta inválido");
+    const { error } = await supabaseAdmin
+      .from("campaigns")
+      .update({ meta_campaign_id: value })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    await supabaseAdmin.from("admin_audit_log").insert({
+      admin_email: (context.claims as { email?: string })?.email ?? "",
+      action: "campaign_meta_link",
+      target_type: "campaign",
+      target_id: data.id,
+      details: { meta_campaign_id: value },
+    });
+    return { ok: true, meta_campaign_id: value };
+  });
+
 // Submits campaign through Meta Marketing API (skeleton).
 // In manual mode → returns analyzing; automatic mode → tries Meta API and falls back to analyzing on failure.
 export const submitCampaignToMeta = createServerFn({ method: "POST" })
