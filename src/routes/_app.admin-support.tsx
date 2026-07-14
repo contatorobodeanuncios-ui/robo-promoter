@@ -14,7 +14,7 @@ import {
   adminCloseConversation,
   type SupportConversationRow,
 } from "@/lib/support.functions";
-import { adminListAllClients, adminStartConversationWith } from "@/lib/admin.functions";
+import { adminListAllClients, adminStartConversationWith, adminGetClientContext } from "@/lib/admin.functions";
 
 export const Route = createFileRoute("/_app/admin-support")({
   ssr: false,
