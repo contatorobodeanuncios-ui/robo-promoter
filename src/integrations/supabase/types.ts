@@ -386,6 +386,7 @@ export type Database = {
       profiles: {
         Row: {
           admin_notes: string | null
+          asaas_customer_id: string | null
           balance: number
           created_at: string
           display_name: string | null
@@ -400,6 +401,7 @@ export type Database = {
         }
         Insert: {
           admin_notes?: string | null
+          asaas_customer_id?: string | null
           balance?: number
           created_at?: string
           display_name?: string | null
@@ -414,6 +416,7 @@ export type Database = {
         }
         Update: {
           admin_notes?: string | null
+          asaas_customer_id?: string | null
           balance?: number
           created_at?: string
           display_name?: string | null
