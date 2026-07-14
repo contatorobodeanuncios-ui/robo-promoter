@@ -238,11 +238,37 @@ function SupportAdminPage() {
               </div>
             ) : (
               <>
-                <div className="flex items-center justify-between p-3 border-b border-white/10">
-                  <div className="text-sm font-semibold">Conversa</div>
-                  <Button size="sm" variant="ghost" onClick={() => closeMut.mutate()}>
-                    <X className="h-4 w-4 mr-1" /> Encerrar
-                  </Button>
+                <div className="p-3 border-b border-white/10 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold">Conversa</div>
+                    <Button size="sm" variant="ghost" onClick={() => closeMut.mutate()}>
+                      <X className="h-4 w-4 mr-1" /> Encerrar
+                    </Button>
+                  </div>
+                  {clientCtx.data && (
+                    <div className="rounded-lg bg-white/5 p-3 text-xs space-y-1">
+                      <div className="flex flex-wrap gap-x-4 gap-y-1">
+                        <span><span className="text-muted-foreground">Nome:</span> <b>{clientCtx.data.display_name ?? "—"}</b></span>
+                        <span><span className="text-muted-foreground">Email:</span> {clientCtx.data.email ?? "—"}</span>
+                        <span><span className="text-muted-foreground">Código:</span> <code className="text-primary">{clientCtx.data.code}</code></span>
+                        <span><span className="text-muted-foreground">Saldo:</span> R$ {clientCtx.data.balance.toFixed(2)}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Campanhas ativas ({clientCtx.data.active_campaigns.length}):</span>{" "}
+                        {clientCtx.data.active_campaigns.length === 0 ? (
+                          <span className="italic text-muted-foreground">nenhuma</span>
+                        ) : (
+                          <span className="inline-flex flex-wrap gap-1 mt-1">
+                            {clientCtx.data.active_campaigns.map((c) => (
+                              <span key={c.id} className="px-1.5 py-0.5 rounded bg-primary/10 border border-primary/30 text-[10px]">
+                                {c.name} <span className="text-muted-foreground">· {c.status}</span>
+                              </span>
+                            ))}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div ref={listRef} className="flex-1 overflow-y-auto p-3 space-y-2">
                   {(msgs.data ?? []).map((m) => (
