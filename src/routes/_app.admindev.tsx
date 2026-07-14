@@ -595,6 +595,9 @@ function AdminDevPage() {
                         <div>Pausada: <span className="text-foreground">{fmtDate(c.paused_at)}</span></div>
                         <div>Encerrada: <span className="text-foreground">{fmtDate(c.ended_at)}</span></div>
                       </td>
+                      <td className="px-4 py-3 min-w-[200px]">
+                        <MetaCampaignIdCell id={c.id} value={c.meta_campaign_id} />
+                      </td>
                       <td className="px-4 py-3">
                         {c.invoice_url ? (
                           <div className="flex items-center gap-1">
