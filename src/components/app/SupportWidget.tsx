@@ -139,11 +139,11 @@ export function SupportWidget() {
             <Input
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="Escreva sua mensagem..."
+              placeholder={conversationId ? "Escreva sua mensagem..." : "Preparando canal..."}
               className="flex-1"
-              disabled={!conversationId || sendMut.isPending}
+              disabled={sendMut.isPending}
             />
-            <Button type="submit" size="icon" disabled={!text.trim() || sendMut.isPending}>
+            <Button type="submit" size="icon" disabled={!text.trim() || !conversationId || sendMut.isPending}>
               {sendMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </Button>
           </form>
