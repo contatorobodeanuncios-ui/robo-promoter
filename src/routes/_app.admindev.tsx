@@ -155,6 +155,23 @@ function AdminDevPage() {
     onError: (e) => toast.error("Falha ao salvar Asaas", { description: String(e) }),
   });
 
+  const saveManualPix = useMutation({
+    mutationFn: () =>
+      setManualPixFn({
+        data: {
+          key: manualPixKey.trim(),
+          beneficiary: manualPixBeneficiary.trim(),
+          enabled: manualPixEnabled,
+        },
+      }),
+    onSuccess: () => {
+      toast.success("Chave PIX manual salva");
+      qc.invalidateQueries({ queryKey: ["pay-settings"] });
+    },
+    onError: (e) => toast.error("Falha ao salvar chave PIX", { description: String(e) }),
+  });
+
+
   const toggleConfirmMode = useMutation({
     mutationFn: (mode: "manual" | "webhook") => setConfirmFn({ data: { mode } }),
     onSuccess: (r) => {
