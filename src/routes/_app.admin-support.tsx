@@ -37,6 +37,7 @@ function SupportAdminPage() {
   const closeFn = useServerFn(adminCloseConversation);
   const clientsFn = useServerFn(adminListAllClients);
   const startFn = useServerFn(adminStartConversationWith);
+  const ctxFn = useServerFn(adminGetClientContext);
 
   const [tab, setTab] = useState<Tab>("conversations");
   const [selected, setSelected] = useState<string | null>(null);
@@ -53,6 +54,12 @@ function SupportAdminPage() {
     queryKey: ["admin-support-msgs", selected],
     queryFn: () => msgsFn({ data: { conversation_id: selected! } }),
     enabled: !!selected,
+  });
+  const selectedUserId = (convs.data ?? []).find((c) => c.id === selected)?.user_id ?? null;
+  const clientCtx = useQuery({
+    queryKey: ["admin-client-ctx", selectedUserId],
+    queryFn: () => ctxFn({ data: { user_id: selectedUserId! } }),
+    enabled: !!selectedUserId,
   });
   const clients = useQuery({
     queryKey: ["admin-all-clients"],
