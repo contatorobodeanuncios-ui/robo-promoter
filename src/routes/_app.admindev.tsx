@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import {
   adminListCampaigns,
   adminSetCampaignStatus,
+  adminSetMetaCampaignId,
   getCampaignMode,
   setCampaignMode,
   checkIsAdmin,
