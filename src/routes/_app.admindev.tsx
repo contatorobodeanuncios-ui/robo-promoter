@@ -58,6 +58,7 @@ function AdminDevPage() {
   const setStatusFn = useServerFn(adminSetCampaignStatus);
   const getPaySettings = useServerFn(getPaymentSettings);
   const setAsaasFn = useServerFn(setAsaasConfig);
+  const setManualPixFn = useServerFn(setManualPixConfig);
   const setConfirmFn = useServerFn(setPaymentConfirmMode);
   const listPaymentsFn = useServerFn(adminListPayments);
   const approvePayFn = useServerFn(adminApprovePayment);
