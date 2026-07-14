@@ -510,11 +510,24 @@ export const adminApproveAccessRequest = createServerFn({ method: "POST" })
       .maybeSingle();
     if (rErr) throw new Error(rErr.message);
     if (!req) throw new Error("Solicitação não encontrada.");
-    // Libera acesso real do usuário no profiles.
+    // Libera acesso real do usuário no profiles (upsert garante linha existente).
+    const { data: authUser } = await admin.auth.admin.getUserById(req.user_id);
+    const meta = (authUser?.user?.user_metadata ?? {}) as Record<string, unknown>;
+    const displayName =
+      (meta.full_name as string) ||
+      (meta.name as string) ||
+      (authUser?.user?.email ? authUser.user.email.split("@")[0] : null);
     const { error: pErr } = await admin
       .from("profiles")
-      .update({ status: "approved" })
-      .eq("id", req.user_id);
+      .upsert(
+        {
+          id: req.user_id,
+          status: "approved",
+          email: authUser?.user?.email ?? null,
+          display_name: displayName,
+        },
+        { onConflict: "id" },
+      );
     if (pErr) throw new Error(pErr.message);
     await admin.from("admin_audit_log").insert({
       admin_email: (context.claims as { email?: string })?.email ?? "",
@@ -546,7 +559,9 @@ export const adminDenyAccessRequest = createServerFn({ method: "POST" })
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (req) {
-      await admin.from("profiles").update({ status: "banned" }).eq("id", req.user_id);
+      await admin
+        .from("profiles")
+        .upsert({ id: req.user_id, status: "banned" }, { onConflict: "id" });
     }
     await admin.from("admin_audit_log").insert({
       admin_email: (context.claims as { email?: string })?.email ?? "",
