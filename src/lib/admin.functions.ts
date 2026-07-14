@@ -463,15 +463,24 @@ export const adminApproveAccessRequest = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertAdmin(context.userId, context.claims as { email?: string });
     const admin = await getSupabaseAdmin();
-    const { error } = await admin
+    const { data: req, error: rErr } = await admin
       .from("access_requests")
       .update({
         status: "approved",
         reviewed_by: context.userId,
         reviewed_at: new Date().toISOString(),
       })
-      .eq("id", data.id);
-    if (error) throw new Error(error.message);
+      .eq("id", data.id)
+      .select("user_id")
+      .maybeSingle();
+    if (rErr) throw new Error(rErr.message);
+    if (!req) throw new Error("Solicitação não encontrada.");
+    // Libera acesso real do usuário no profiles.
+    const { error: pErr } = await admin
+      .from("profiles")
+      .update({ status: "approved" })
+      .eq("id", req.user_id);
+    if (pErr) throw new Error(pErr.message);
     await admin.from("admin_audit_log").insert({
       admin_email: (context.claims as { email?: string })?.email ?? "",
       action: "access_request_approve",
@@ -489,7 +498,7 @@ export const adminDenyAccessRequest = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertAdmin(context.userId, context.claims as { email?: string });
     const admin = await getSupabaseAdmin();
-    const { error } = await admin
+    const { data: req, error } = await admin
       .from("access_requests")
       .update({
         status: "rejected",
@@ -497,8 +506,13 @@ export const adminDenyAccessRequest = createServerFn({ method: "POST" })
         reviewed_by: context.userId,
         reviewed_at: new Date().toISOString(),
       })
-      .eq("id", data.id);
+      .eq("id", data.id)
+      .select("user_id")
+      .maybeSingle();
     if (error) throw new Error(error.message);
+    if (req) {
+      await admin.from("profiles").update({ status: "banned" }).eq("id", req.user_id);
+    }
     await admin.from("admin_audit_log").insert({
       admin_email: (context.claims as { email?: string })?.email ?? "",
       action: "access_request_deny",
@@ -563,3 +577,63 @@ export const adminStartConversationWith = createServerFn({ method: "POST" })
   });
 
 
+
+// ============ Contexto do cliente para a Central de Suporte ============
+export interface AdminClientContext {
+  id: string;
+  display_name: string | null;
+  email: string | null;
+  phone: string | null;
+  balance: number;
+  status: string | null;
+  created_at: string;
+  code: string;
+  active_campaigns: Array<{
+    id: string;
+    name: string;
+    status: string;
+    budget: number;
+    days: number;
+    spent: number;
+    created_at: string;
+  }>;
+}
+
+export const adminGetClientContext = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ user_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }): Promise<AdminClientContext> => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const { data: p } = await admin
+      .from("profiles")
+      .select("id, display_name, email, phone, balance, status, created_at")
+      .eq("id", data.user_id)
+      .maybeSingle();
+    const { data: camps } = await admin
+      .from("campaigns")
+      .select("id, name, status, budget, days, spent, created_at")
+      .eq("user_id", data.user_id)
+      .in("status", ["running", "rodando", "analyzing", "aguardando_vinculo_meta", "paused"])
+      .order("created_at", { ascending: false })
+      .limit(50);
+    return {
+      id: data.user_id,
+      display_name: p?.display_name ?? null,
+      email: p?.email ?? null,
+      phone: p?.phone ?? null,
+      balance: Number(p?.balance ?? 0),
+      status: p?.status ?? null,
+      created_at: p?.created_at ?? new Date().toISOString(),
+      code: data.user_id.slice(0, 8).toUpperCase(),
+      active_campaigns: (camps ?? []).map((c) => ({
+        id: c.id,
+        name: c.name,
+        status: c.status,
+        budget: Number(c.budget ?? 0),
+        days: Number(c.days ?? 0),
+        spent: Number(c.spent ?? 0),
+        created_at: c.created_at,
+      })),
+    };
+  });
