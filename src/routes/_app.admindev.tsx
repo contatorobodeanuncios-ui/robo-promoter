@@ -25,6 +25,7 @@ import {
 import {
   getPaymentSettings,
   setAsaasConfig,
+  setManualPixConfig,
   setPaymentConfirmMode,
   adminListPayments,
   adminApprovePayment,
