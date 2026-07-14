@@ -110,7 +110,6 @@ function AdminDevPage() {
   });
 
   const [preview, setPreview] = useState<AdminCampaignRow | null>(null);
-  const [asaasLink, setAsaasLink] = useState("");
   const [apiKeySet, setApiKeySet] = useState(false);
   const [manualPixKey, setManualPixKey] = useState("");
   const [manualPixBeneficiary, setManualPixBeneficiary] = useState("");
