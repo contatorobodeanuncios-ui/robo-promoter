@@ -86,6 +86,36 @@ function CampaignDetail() {
         </div>
       </header>
 
+      {(() => {
+        const totalCost = Math.round(c.budget * c.days);
+        const unpaid = Number(c.total_paid ?? 0) < totalCost;
+        if (!unpaid) return null;
+        return (
+          <section className="rounded-2xl p-5 border-2 border-warning/50 bg-warning/5 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <CreditCard className="h-5 w-5 text-warning shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">Pagamento não concluído</p>
+                <p className="text-xs text-muted-foreground">
+                  Esta campanha ainda não foi paga ({fmtBRL(totalCost)}). Conclua o pagamento para o anúncio subir.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="neon"
+              onClick={() =>
+                nav({
+                  to: "/payment",
+                  search: { campaignId: c.id, budget: c.budget, days: c.days, name: c.name },
+                })
+              }
+            >
+              <CreditCard className="h-4 w-4" /> Concluir pagamento
+            </Button>
+          </section>
+        );
+      })()}
+
       {/* Bloco de valor pago — sempre visível, separado do saldo */}
       <section className="glass-strong rounded-2xl p-5 grid sm:grid-cols-3 gap-4">
         <div>
