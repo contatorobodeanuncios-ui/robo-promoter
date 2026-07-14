@@ -135,6 +135,7 @@ export const adminListCampaigns = createServerFn({ method: "GET" })
         started_running_at: c.started_running_at ?? null,
         paused_at: c.paused_at ?? null,
         ended_at: c.ended_at ?? null,
+        meta_campaign_id: c.meta_campaign_id ?? null,
       };
     });
   });
