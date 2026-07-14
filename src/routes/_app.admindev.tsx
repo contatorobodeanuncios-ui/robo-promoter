@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import {
   adminListCampaigns,
   adminSetCampaignStatus,
+  adminSetMetaCampaignId,
   getCampaignMode,
   setCampaignMode,
   checkIsAdmin,
@@ -541,6 +542,7 @@ function AdminDevPage() {
                   <th className="px-4 py-3 text-center">Dias</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Datas</th>
+                  <th className="px-4 py-3">ID da campanha no Meta</th>
                   <th className="px-4 py-3">Link cobrança</th>
                   <th className="px-4 py-3">Métricas Reais (Meta)</th>
                   <th className="px-4 py-3 text-right">Ações</th>
@@ -592,6 +594,9 @@ function AdminDevPage() {
                         <div>Iniciou: <span className="text-foreground">{fmtDate(c.started_running_at)}</span></div>
                         <div>Pausada: <span className="text-foreground">{fmtDate(c.paused_at)}</span></div>
                         <div>Encerrada: <span className="text-foreground">{fmtDate(c.ended_at)}</span></div>
+                      </td>
+                      <td className="px-4 py-3 min-w-[200px]">
+                        <MetaCampaignIdCell id={c.id} value={c.meta_campaign_id} />
                       </td>
                       <td className="px-4 py-3">
                         {c.invoice_url ? (
@@ -663,6 +668,41 @@ function Metric({ label, value }: { label: string; value: string }) {
     <div className="glass rounded p-1.5">
       <p className="text-muted-foreground">{label}</p>
       <p className="font-semibold tabular-nums truncate">{value}</p>
+    </div>
+  );
+}
+
+function MetaCampaignIdCell({ id, value }: { id: string; value: string | null }) {
+  const qc = useQueryClient();
+  const [val, setVal] = useState(value ?? "");
+  useEffect(() => { setVal(value ?? ""); }, [value]);
+  const saveFn = useServerFn(adminSetMetaCampaignId);
+  const mut = useMutation({
+    mutationFn: (v: string) => saveFn({ data: { id, meta_campaign_id: v.trim() || null } }),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["admin-campaigns"] });
+      toast.success(r.meta_campaign_id ? "Vinculado ao Meta — entrará no próximo sync" : "Vínculo removido");
+    },
+    onError: (e) => toast.error("Falha ao salvar", { description: String(e) }),
+  });
+  const dirty = (val ?? "") !== (value ?? "");
+  return (
+    <div className="flex items-center gap-1">
+      <Input
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        placeholder="ex: 120210000012345678"
+        className="h-8 text-xs font-mono"
+      />
+      <Button
+        size="sm"
+        variant={dirty ? "neon" : "glass"}
+        disabled={!dirty || mut.isPending}
+        onClick={() => mut.mutate(val)}
+        title="Salvar ID do Meta"
+      >
+        {mut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+      </Button>
     </div>
   );
 }

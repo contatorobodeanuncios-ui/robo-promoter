@@ -83,6 +83,8 @@ export interface AdminCampaignRow {
   started_running_at: string | null;
   paused_at: string | null;
   ended_at: string | null;
+  meta_campaign_id: string | null;
+
 }
 
 export const adminListCampaigns = createServerFn({ method: "GET" })
@@ -133,6 +135,7 @@ export const adminListCampaigns = createServerFn({ method: "GET" })
         started_running_at: c.started_running_at ?? null,
         paused_at: c.paused_at ?? null,
         ended_at: c.ended_at ?? null,
+        meta_campaign_id: c.meta_campaign_id ?? null,
       };
     });
   });
@@ -158,6 +161,38 @@ export const adminSetCampaignStatus = createServerFn({ method: "POST" })
       .eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
+  });
+
+// Vincula manualmente o ID da campanha no Meta a uma campanha do sistema.
+// Após salvo, o cron meta-metrics-sync passa a sincronizar as métricas reais.
+export const adminSetMetaCampaignId = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      id: z.string().uuid(),
+      meta_campaign_id: z.string().trim().max(64).nullable(),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const supabaseAdmin = await getSupabaseAdmin();
+    const value = data.meta_campaign_id && data.meta_campaign_id.length > 0
+      ? data.meta_campaign_id.replace(/[^0-9]/g, "")
+      : null;
+    if (value && value.length < 6) throw new Error("ID do Meta inválido");
+    const { error } = await supabaseAdmin
+      .from("campaigns")
+      .update({ meta_campaign_id: value })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    await supabaseAdmin.from("admin_audit_log").insert({
+      admin_email: (context.claims as { email?: string })?.email ?? "",
+      action: "campaign_meta_link",
+      target_type: "campaign",
+      target_id: data.id,
+      details: { meta_campaign_id: value },
+    });
+    return { ok: true, meta_campaign_id: value };
   });
 
 // Submits campaign through Meta Marketing API (skeleton).
