@@ -463,15 +463,24 @@ export const adminApproveAccessRequest = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertAdmin(context.userId, context.claims as { email?: string });
     const admin = await getSupabaseAdmin();
-    const { error } = await admin
+    const { data: req, error: rErr } = await admin
       .from("access_requests")
       .update({
         status: "approved",
         reviewed_by: context.userId,
         reviewed_at: new Date().toISOString(),
       })
-      .eq("id", data.id);
-    if (error) throw new Error(error.message);
+      .eq("id", data.id)
+      .select("user_id")
+      .maybeSingle();
+    if (rErr) throw new Error(rErr.message);
+    if (!req) throw new Error("Solicitação não encontrada.");
+    // Libera acesso real do usuário no profiles.
+    const { error: pErr } = await admin
+      .from("profiles")
+      .update({ status: "approved" })
+      .eq("id", req.user_id);
+    if (pErr) throw new Error(pErr.message);
     await admin.from("admin_audit_log").insert({
       admin_email: (context.claims as { email?: string })?.email ?? "",
       action: "access_request_approve",
@@ -489,7 +498,7 @@ export const adminDenyAccessRequest = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertAdmin(context.userId, context.claims as { email?: string });
     const admin = await getSupabaseAdmin();
-    const { error } = await admin
+    const { data: req, error } = await admin
       .from("access_requests")
       .update({
         status: "rejected",
@@ -497,8 +506,13 @@ export const adminDenyAccessRequest = createServerFn({ method: "POST" })
         reviewed_by: context.userId,
         reviewed_at: new Date().toISOString(),
       })
-      .eq("id", data.id);
+      .eq("id", data.id)
+      .select("user_id")
+      .maybeSingle();
     if (error) throw new Error(error.message);
+    if (req) {
+      await admin.from("profiles").update({ status: "banned" }).eq("id", req.user_id);
+    }
     await admin.from("admin_audit_log").insert({
       admin_email: (context.claims as { email?: string })?.email ?? "",
       action: "access_request_deny",
