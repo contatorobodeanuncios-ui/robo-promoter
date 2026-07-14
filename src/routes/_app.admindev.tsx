@@ -672,6 +672,41 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
+function MetaCampaignIdCell({ id, value }: { id: string; value: string | null }) {
+  const qc = useQueryClient();
+  const [val, setVal] = useState(value ?? "");
+  useEffect(() => { setVal(value ?? ""); }, [value]);
+  const saveFn = useServerFn(adminSetMetaCampaignId);
+  const mut = useMutation({
+    mutationFn: (v: string) => saveFn({ data: { id, meta_campaign_id: v.trim() || null } }),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["admin-campaigns"] });
+      toast.success(r.meta_campaign_id ? "Vinculado ao Meta — entrará no próximo sync" : "Vínculo removido");
+    },
+    onError: (e) => toast.error("Falha ao salvar", { description: String(e) }),
+  });
+  const dirty = (val ?? "") !== (value ?? "");
+  return (
+    <div className="flex items-center gap-1">
+      <Input
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        placeholder="ex: 120210000012345678"
+        className="h-8 text-xs font-mono"
+      />
+      <Button
+        size="sm"
+        variant={dirty ? "neon" : "glass"}
+        disabled={!dirty || mut.isPending}
+        onClick={() => mut.mutate(val)}
+        title="Salvar ID do Meta"
+      >
+        {mut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+      </Button>
+    </div>
+  );
+}
+
 function FbPreview({ campaign, onClose }: { campaign: AdminCampaignRow; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" onClick={onClose}>
