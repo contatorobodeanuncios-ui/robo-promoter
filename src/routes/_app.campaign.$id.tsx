@@ -34,7 +34,6 @@ function CampaignDetail() {
   const c = useAppStore((s) => s.campaigns.find((x) => x.id === id));
   const updateCampaign = useAppStore((s) => s.updateCampaign);
   const nav = useNavigate();
-  void nav;
 
   if (!c) {
     return (
