@@ -3,7 +3,7 @@ import { useAppStore } from "@/lib/store";
 import { toast } from "sonner";
 import {
   ArrowLeft, Eye, MousePointerClick, Percent, DollarSign, Sparkles,
-  ThumbsUp, MessageCircle, Share2, MoreHorizontal, Info,
+  ThumbsUp, MessageCircle, Share2, MoreHorizontal, Info, CreditCard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SafeImage } from "@/components/app/SafeImage";
