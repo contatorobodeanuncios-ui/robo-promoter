@@ -230,23 +230,30 @@ export const adminApprovePayment = createServerFn({ method: "POST" })
       .from("payment_requests")
       .select("*")
       .eq("id", data.id)
-      .single();
+      .maybeSingle();
     if (error) throw new Error(error.message);
+    if (!pr) throw new Error("Solicitação de pagamento não encontrada.");
     if (pr.status === "paid" || pr.status === "approved") return { ok: true, already: true };
 
     const { data: profile, error: pErr } = await admin
       .from("profiles")
       .select("balance")
       .eq("id", pr.user_id)
-      .single();
+      .maybeSingle();
     if (pErr) throw new Error(pErr.message);
-    const next = Number(profile.balance) + Number(pr.amount);
+    const currentBalance = Number(profile?.balance ?? 0);
+    const next = Number((currentBalance + Number(pr.amount)).toFixed(2));
 
-    const { error: uErr } = await admin
-      .from("profiles")
-      .update({ balance: next })
-      .eq("id", pr.user_id);
-    if (uErr) throw new Error(uErr.message);
+    if (!profile) {
+      // Cria profile mínimo se não existir, para não perder a aprovação.
+      await admin.from("profiles").insert({ id: pr.user_id, balance: next }).select().maybeSingle();
+    } else {
+      const { error: uErr } = await admin
+        .from("profiles")
+        .update({ balance: next })
+        .eq("id", pr.user_id);
+      if (uErr) throw new Error(uErr.message);
+    }
     const { error: sErr } = await admin
       .from("payment_requests")
       .update({ status: "paid", approved_at: new Date().toISOString() })
