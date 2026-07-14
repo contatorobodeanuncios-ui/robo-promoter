@@ -145,7 +145,7 @@ function AdminDevPage() {
   });
 
   const saveAsaas = useMutation({
-    mutationFn: () => setAsaasFn({ data: { link_template: asaasLink.trim(), api_key_set: apiKeySet } }),
+    mutationFn: () => setAsaasFn({ data: { api_key_set: apiKeySet } }),
     onSuccess: () => {
       toast.success("Configuração do Asaas salva");
       qc.invalidateQueries({ queryKey: ["pay-settings"] });
