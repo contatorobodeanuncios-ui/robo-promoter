@@ -110,7 +110,6 @@ function AdminDevPage() {
   });
 
   const [preview, setPreview] = useState<AdminCampaignRow | null>(null);
-  const [asaasLink, setAsaasLink] = useState("");
   const [apiKeySet, setApiKeySet] = useState(false);
   const [manualPixKey, setManualPixKey] = useState("");
   const [manualPixBeneficiary, setManualPixBeneficiary] = useState("");
@@ -118,7 +117,6 @@ function AdminDevPage() {
 
   useEffect(() => {
     if (paySettingsQuery.data) {
-      setAsaasLink(paySettingsQuery.data.asaas.link_template || "");
       setApiKeySet(!!paySettingsQuery.data.asaas.api_key_set);
       setManualPixKey(paySettingsQuery.data.manualPix?.key || "");
       setManualPixBeneficiary(paySettingsQuery.data.manualPix?.beneficiary || "");
@@ -147,7 +145,7 @@ function AdminDevPage() {
   });
 
   const saveAsaas = useMutation({
-    mutationFn: () => setAsaasFn({ data: { link_template: asaasLink.trim(), api_key_set: apiKeySet } }),
+    mutationFn: () => setAsaasFn({ data: { api_key_set: apiKeySet } }),
     onSuccess: () => {
       toast.success("Configuração do Asaas salva");
       qc.invalidateQueries({ queryKey: ["pay-settings"] });
@@ -306,21 +304,15 @@ function AdminDevPage() {
         <div className="glass-strong rounded-2xl p-6 space-y-4 border border-primary/20">
           <div className="flex items-center gap-2">
             <Link2 className="h-5 w-5 text-primary" />
-            <h2 className="font-semibold">Asaas — Link de pagamento</h2>
+            <h2 className="font-semibold">Asaas — Integração PIX</h2>
           </div>
           <p className="text-xs text-muted-foreground">
-            Cole o link base de cobrança do Asaas. Use os marcadores{" "}
-            <code className="text-primary">{"{amount}"}</code> ou{" "}
-            <code className="text-primary">{"{value}"}</code> para substituir o valor da cobrança.
+            As cobranças PIX são geradas automaticamente via API do Asaas
+            (<code className="text-primary">/v3/customers</code> +{" "}
+            <code className="text-primary">/v3/payments</code>). O código copia-e-cola
+            é buscado em <code className="text-primary">/v3/payments/&#123;id&#125;/pixQrCode</code>
+            e exibido diretamente ao cliente. Nenhum link ou template manual é necessário.
           </p>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Link/Template do Asaas</Label>
-            <Input
-              placeholder="https://www.asaas.com/c/SEU-LINK?value={amount}"
-              value={asaasLink}
-              onChange={(e) => setAsaasLink(e.target.value)}
-            />
-          </div>
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <input
               type="checkbox"
@@ -336,8 +328,9 @@ function AdminDevPage() {
             disabled={saveAsaas.isPending}
           >
             {saveAsaas.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-            Salvar link
+            Salvar
           </Button>
+
 
           <div className="pt-4 mt-2 border-t border-white/10 space-y-3">
             <div className="flex items-center gap-2">
