@@ -1,20 +1,17 @@
 import { createFileRoute, Link, useSearch, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
-import { ShieldCheck, Sparkles, ArrowRight, ExternalLink, Loader2, Hourglass } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ShieldCheck, Sparkles, Loader2, Copy, Check, AlertTriangle } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { EnergyOrb } from "@/components/app/EnergyOrb";
 import { useServerFn } from "@tanstack/react-start";
-import { createPaymentRequest } from "@/lib/payment.functions";
+import { createPaymentRequest, getPaymentRequestStatus } from "@/lib/payment.functions";
 
 const search = z.object({
-  // Top-up flow
   topup: z.coerce.number().int().min(20).optional(),
-  // Campaign flow
   campaignId: z.string().optional(),
-  budget: z.coerce.number().min(7).optional(),
-  days: z.coerce.number().min(7).optional(),
+  budget: z.coerce.number().min(1).optional(),
+  days: z.coerce.number().min(1).optional(),
   name: z.string().optional(),
 });
 
@@ -24,7 +21,7 @@ export const Route = createFileRoute("/_app/payment")({
   head: () => ({
     meta: [
       { title: "Pagamento — Robô de Lucro" },
-      { name: "description", content: "Pagamento seguro via Asaas." },
+      { name: "description", content: "Pagamento via PIX." },
     ],
   }),
   component: PaymentPage,
@@ -39,34 +36,73 @@ function PaymentPage() {
   const amount = topup ?? (budget && days ? Math.round(budget * days) : 0);
   const isCampaign = !!campaignId;
   const createFn = useServerFn(createPaymentRequest);
+  const statusFn = useServerFn(getPaymentRequestStatus);
 
-  const [state, setState] = useState<"loading" | "ready" | "no-config" | "error">("loading");
-  const [link, setLink] = useState<string | null>(null);
+  const [state, setState] = useState<"loading" | "ready" | "fallback" | "error" | "paid">("loading");
+  const [pixCode, setPixCode] = useState<string | null>(null);
+  const [fallback, setFallback] = useState<{ key: string; beneficiary: string } | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const startedRef = useRef(false);
 
   useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
     if (!amount) {
       setState("error");
       return;
     }
-    let cancelled = false;
     (async () => {
       try {
         const r = await createFn({ data: { amount, campaignId: campaignId || undefined } });
-        if (cancelled) return;
         setRequestId(r.id);
-        setLink(r.link || null);
-        setState(r.configured ? "ready" : "no-config");
+        if (r.pixCode) {
+          setPixCode(r.pixCode);
+          setState("ready");
+        } else if (r.fallbackPix) {
+          setFallback(r.fallbackPix);
+          setState("fallback");
+        } else {
+          setState("error");
+        }
       } catch (e) {
         console.error(e);
-        toast.error("Falha ao criar a cobrança", { description: String(e) });
+        toast.error("Falha ao gerar cobrança", { description: String(e) });
         setState("error");
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [amount, createFn]);
+  }, [amount, campaignId, createFn]);
+
+  // Polling do status: quando confirmar, redireciona.
+  useEffect(() => {
+    if (!requestId || state === "paid" || state === "error") return;
+    const t = setInterval(async () => {
+      try {
+        const s = await statusFn({ data: { id: requestId } });
+        if (s.status === "paid") {
+          setState("paid");
+          toast.success("Pagamento confirmado!");
+          setTimeout(() => nav({ to: "/dashboard" }), 1200);
+        }
+      } catch {
+        /* silencia; segue tentando */
+      }
+    }, 5000);
+    return () => clearInterval(t);
+  }, [requestId, state, statusFn, nav]);
+
+  const copyPix = async () => {
+    const value = pixCode ?? fallback?.key ?? "";
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      toast.success("Copiado! Cole no seu app do banco para pagar.");
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      toast.error("Não foi possível copiar automaticamente.");
+    }
+  };
 
   if (!amount) {
     return (
@@ -76,97 +112,94 @@ function PaymentPage() {
     );
   }
 
+  const codeToShow = pixCode ?? fallback?.key ?? "";
+
   return (
-    <div className="p-6 lg:p-10 max-w-3xl mx-auto space-y-6">
+    <div className="p-6 lg:p-10 max-w-xl mx-auto space-y-6">
       <header>
         <p className="text-sm text-muted-foreground flex items-center gap-2">
           <Sparkles className="h-3.5 w-3.5 text-primary" />
           {isCampaign ? "Pagamento da campanha" : "Adicionar saldo"}
         </p>
         <h1 className="text-3xl font-bold tracking-tight">
-          {isCampaign ? `Pagar campanha "${name ?? ""}"` : "Pagamento via Asaas"}
+          {isCampaign ? (name ? `Pagar "${name}"` : "Pagar campanha") : "Pagamento via PIX"}
         </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {isCampaign
-            ? "Este valor é registrado como pagamento do anúncio — não entra no saldo do app."
-            : "Após a confirmação do pagamento, o saldo será creditado no app."}
-        </p>
       </header>
 
-      <div className="grid lg:grid-cols-[1.1fr_1fr] gap-6">
-        <div className="glass-strong rounded-2xl p-6 space-y-5">
-          <div>
-            <p className="text-xs text-muted-foreground uppercase tracking-wider">Total a pagar</p>
-            <p className="text-4xl font-bold text-gradient tabular-nums">{fmtBRL(amount)}</p>
+      <div className="glass-strong rounded-2xl p-6 space-y-6">
+        <div className="text-center">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider">Valor</p>
+          <p className="text-4xl font-bold text-gradient tabular-nums">{fmtBRL(amount)}</p>
+        </div>
+
+        {state === "loading" && (
+          <div className="py-10 text-center text-sm text-muted-foreground">
+            <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
+            Gerando código PIX...
           </div>
+        )}
 
-          {state === "loading" && (
-            <div className="py-8 text-center text-sm text-muted-foreground">
-              <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
-              Gerando link de pagamento...
-            </div>
-          )}
+        {state === "paid" && (
+          <div className="rounded-xl border border-success/40 bg-success/10 p-5 text-center text-sm">
+            <Check className="h-6 w-6 text-success mx-auto mb-2" />
+            Pagamento confirmado. Redirecionando...
+          </div>
+        )}
 
-          {state === "ready" && link && (
-            <>
-              <a href={link} target="_blank" rel="noreferrer noopener" className="block">
-                <Button variant="neon" className="w-full">
-                  Pagar agora no Asaas <ExternalLink className="h-4 w-4" />
-                </Button>
-              </a>
-              <p className="text-xs text-muted-foreground text-center">
-                Você será redirecionado para o checkout seguro do Asaas.
-              </p>
-            </>
-          )}
-
-          {state === "no-config" && (
-            <div className="space-y-3">
-              <div className="rounded-xl border border-warning/40 bg-warning/5 p-4 text-sm">
-                <p className="font-semibold text-warning">Link do Asaas ainda não configurado</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Sua solicitação <span className="font-mono">{requestId?.slice(0, 8)}</span> foi registrada como{" "}
-                  <strong>pendente</strong>. O administrador irá liberar manualmente assim que confirmar o pagamento.
-                </p>
+        {(state === "ready" || state === "fallback") && codeToShow && (
+          <div className="space-y-3">
+            {state === "fallback" && (
+              <div className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs text-warning">
+                <AlertTriangle className="h-3.5 w-3.5 inline mr-1" />
+                A API automática está indisponível no momento. Use a chave PIX manual abaixo
+                {fallback?.beneficiary ? ` (${fallback.beneficiary})` : ""}. Após pagar,
+                o administrador libera o crédito manualmente.
               </div>
-              <Link to="/dashboard">
-                <Button variant="glass" className="w-full">Voltar ao dashboard</Button>
-              </Link>
-            </div>
-          )}
+            )}
 
-          {state === "error" && (
-            <div className="space-y-3 text-sm">
-              <p className="text-destructive">Não foi possível gerar o pagamento. Tente novamente.</p>
-              <Button variant="glass" onClick={() => nav({ to: "/dashboard" })}>Voltar</Button>
+            <div>
+              <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wider">
+                PIX Copia e Cola
+              </p>
+              <div className="rounded-xl border border-primary/30 bg-background/50 p-4 font-mono text-xs break-all select-all">
+                {codeToShow}
+              </div>
             </div>
-          )}
 
-          <div className="glass rounded-xl p-3 flex items-start gap-2 text-xs text-muted-foreground">
-            <ShieldCheck className="h-4 w-4 text-success shrink-0 mt-0.5" />
-            <span>
-              {isCampaign
-                ? "O saldo do app só aparece após confirmação. Pagamentos de campanhas ficam registrados como 'valor pago pelo anúncio' separadamente do saldo."
-                : "Cobrança segura via Asaas. O saldo só será creditado após confirmação do pagamento."}
-            </span>
+            <Button variant="neon" className="w-full" onClick={copyPix}>
+              {copied ? <><Check className="h-4 w-4" /> Copiado</> : <><Copy className="h-4 w-4" /> Copiar código PIX</>}
+            </Button>
+
+            <p className="text-[11px] text-muted-foreground text-center">
+              Abra o app do seu banco → PIX → Copia e Cola → cole o código → confirme.
+              Esta tela detecta o pagamento automaticamente.
+            </p>
           </div>
+        )}
+
+        {state === "error" && (
+          <div className="space-y-3 text-sm">
+            <p className="text-destructive">Não foi possível gerar o pagamento agora.</p>
+            <Button variant="glass" className="w-full" onClick={() => nav({ to: "/dashboard" })}>
+              Voltar ao dashboard
+            </Button>
+          </div>
+        )}
+
+        <div className="glass rounded-xl p-3 flex items-start gap-2 text-xs text-muted-foreground">
+          <ShieldCheck className="h-4 w-4 text-success shrink-0 mt-0.5" />
+          <span>
+            {isCampaign
+              ? "Este valor é registrado como pagamento do anúncio — não entra no saldo do app."
+              : "Assim que confirmado, o saldo será creditado automaticamente."}
+          </span>
         </div>
 
-        <div className="glass-strong rounded-2xl p-6 flex flex-col items-center justify-center gap-10 min-h-[360px] pt-16 pb-10">
-          <EnergyOrb state="analyzing" size={200} labelPosition="top" label="Aguardando pagamento" />
-          <div className="text-center max-w-xs mx-auto">
-            <p className="text-sm font-semibold flex items-center justify-center gap-2">
-              <Hourglass className="h-4 w-4" /> Pendente
-            </p>
-            <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-              Assim que o Asaas confirmar o pagamento (ou o admin liberar manualmente),
-              {isCampaign ? " a campanha entra no ar." : " o saldo aparece no app."}
-            </p>
-            <Link to="/dashboard" className="inline-flex items-center gap-1 text-xs text-primary mt-4">
-              Ir para o dashboard <ArrowRight className="h-3 w-3" />
-            </Link>
-          </div>
-        </div>
+        {requestId && (
+          <p className="text-[10px] text-muted-foreground text-center font-mono">
+            #{requestId.slice(0, 8)}
+          </p>
+        )}
       </div>
     </div>
   );
