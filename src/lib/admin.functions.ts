@@ -543,12 +543,14 @@ export const adminDenyAccessRequest = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// ============ Listar todos os clientes (para suporte proativo) ============
+// ============ Listar todos os clientes (para suporte proativo e gestão) ============
 export interface AdminClientRow {
   id: string;
   display_name: string | null;
   email: string | null;
+  phone: string | null;
   balance: number;
+  status: string;
   created_at: string;
 }
 
@@ -559,7 +561,7 @@ export const adminListAllClients = createServerFn({ method: "GET" })
     const admin = await getSupabaseAdmin();
     const { data, error } = await admin
       .from("profiles")
-      .select("id, display_name, email, balance, created_at")
+      .select("id, display_name, email, phone, balance, status, created_at")
       .order("created_at", { ascending: false })
       .limit(1000);
     if (error) throw new Error(error.message);
@@ -567,7 +569,9 @@ export const adminListAllClients = createServerFn({ method: "GET" })
       id: r.id,
       display_name: r.display_name,
       email: r.email,
+      phone: r.phone,
       balance: Number(r.balance ?? 0),
+      status: r.status ?? "approved",
       created_at: r.created_at,
     }));
   });
@@ -687,7 +691,7 @@ export const adminListPixAttempts = createServerFn({ method: "GET" })
     return (data ?? []) as PixAttemptRow[];
   });
 
-// ============ Banir / devolver acesso / editar saldo / editar métricas ============
+// ============ Banir / devolver acesso / editar saldo / editar perfil / editar métricas ============
 export const adminSetUserStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
@@ -749,6 +753,36 @@ export const adminAdjustBalance = createServerFn({ method: "POST" })
       details: { delta: data.delta, reason: data.reason, balance_after: next },
     });
     return { ok: true, balance: next };
+  });
+
+export const adminUpdateProfile = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      user_id: z.string().uuid(),
+      display_name: z.string().max(200).nullable().optional(),
+      email: z.string().email().nullable().optional(),
+      phone: z.string().max(30).nullable().optional(),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const { user_id, ...rest } = data;
+    const update = Object.fromEntries(
+      Object.entries(rest).filter(([, v]) => v !== undefined),
+    );
+    if (Object.keys(update).length === 0) return { ok: true };
+    const { error } = await admin.from("profiles").update(update).eq("id", user_id);
+    if (error) throw new Error(error.message);
+    await admin.from("admin_audit_log").insert({
+      admin_email: (context.claims as { email?: string })?.email ?? "",
+      action: "profile_edit",
+      target_type: "user",
+      target_id: user_id,
+      details: update,
+    });
+    return { ok: true };
   });
 
 export const adminUpdateCampaignMetrics = createServerFn({ method: "POST" })
