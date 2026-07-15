@@ -122,7 +122,7 @@ export function SupportWidget() {
                 <div
                   key={m.id}
                   className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
-                    m.sender === "user"
+                    m.sender === "user" || m.sender === "client"
                       ? "ml-auto bg-primary text-primary-foreground"
                       : "bg-white/5 text-foreground"
                   }`}
