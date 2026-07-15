@@ -16,7 +16,7 @@ function isAdminEmail(claims: { email?: string } | undefined) {
 export interface SupportMessageRow {
   id: string;
   conversation_id: string;
-  sender: "user" | "admin";
+  sender: "client" | "user" | "admin";
   content: string;
   created_at: string;
 }
