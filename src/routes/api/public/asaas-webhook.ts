@@ -84,10 +84,10 @@ export const Route = createFileRoute("/api/public/asaas-webhook")({
         if (!ref) return new Response("Missing externalReference", { status: 400 });
 
         // Parse do ref.
-        let campaignId: string | null = null;
+        let refCampaignId: string | null = null;
         let prId: string | null = null;
         for (const part of ref.split("|")) {
-          if (part.startsWith("cmp:")) campaignId = part.slice(4);
+          if (part.startsWith("cmp:")) refCampaignId = part.slice(4);
           else if (part.startsWith("pr:")) prId = part.slice(3);
           else if (!prId) prId = part; // formato legado sem prefixo
         }
@@ -105,7 +105,18 @@ export const Route = createFileRoute("/api/public/asaas-webhook")({
           return json({ ok: true, already: true }, 200);
         }
 
-        if (campaignId) {
+        // Roteia pelo TIPO da payment_request (fonte de verdade), fallback no ref.
+        const prAny = pr as unknown as {
+          type?: "campaign_budget" | "balance_topup" | null;
+          campaign_id?: string | null;
+          user_id: string;
+          amount: number | string;
+          id: string;
+        };
+        const isCampaign = prAny.type === "campaign_budget" || !!refCampaignId;
+        const campaignId = prAny.campaign_id ?? refCampaignId;
+
+        if (isCampaign && campaignId) {
           // PIX dedicado → credita saldo da campanha e coloca pra rodar.
           const { data: camp, error: cErr } = await supabaseAdmin
             .from("campaigns")
@@ -117,7 +128,7 @@ export const Route = createFileRoute("/api/public/asaas-webhook")({
           }
           const currentRemaining = Number(camp.pix_remaining_budget ?? 0);
           const currentTotal = Number(camp.pix_total_budget ?? 0);
-          const value = Number(pr.amount);
+          const value = Number(prAny.amount);
           await supabaseAdmin
             .from("campaigns")
             .update({
@@ -132,14 +143,14 @@ export const Route = createFileRoute("/api/public/asaas-webhook")({
           const { data: profile, error: pErr } = await supabaseAdmin
             .from("profiles")
             .select("balance")
-            .eq("id", pr.user_id)
+            .eq("id", prAny.user_id)
             .single();
           if (pErr) return new Response(pErr.message, { status: 500 });
-          const nextBalance = Number(profile.balance) + Number(pr.amount);
+          const nextBalance = Number(profile.balance) + Number(prAny.amount);
           await supabaseAdmin
             .from("profiles")
             .update({ balance: nextBalance })
-            .eq("id", pr.user_id);
+            .eq("id", prAny.user_id);
         }
 
         await supabaseAdmin
