@@ -148,7 +148,7 @@ export const adminSetCampaignStatus = createServerFn({ method: "POST" })
       id: z.string().uuid(),
       status: z.enum([
         "running","analyzing","paused",
-        "aguardando_vinculo_meta","rodando","encerrada_saldo_consumido",
+        "aguardando_vinculo_meta","rodando","encerrada_saldo_consumido","em_revisao",
       ]),
     }).parse(d),
   )
