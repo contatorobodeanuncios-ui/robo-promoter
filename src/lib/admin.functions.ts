@@ -59,7 +59,7 @@ export interface AdminCampaignRow {
   client_name: string | null;
   client_email: string | null;
   name: string;
-  status: "running" | "analyzing" | "paused" | "aguardando_vinculo_meta" | "rodando" | "encerrada_saldo_consumido";
+  status: "running" | "analyzing" | "paused" | "aguardando_vinculo_meta" | "rodando" | "encerrada_saldo_consumido" | "em_revisao";
   budget: number;
   days: number;
   spent: number;
