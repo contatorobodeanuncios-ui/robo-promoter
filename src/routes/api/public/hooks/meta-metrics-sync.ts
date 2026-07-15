@@ -109,7 +109,7 @@ export const Route = createFileRoute("/api/public/hooks/meta-metrics-sync")({
                 if (mappedStatus === "encerrada_saldo_consumido") update.ended_at = nowIso;
               }
 
-              await supabaseAdmin.from("campaigns").update(update).eq("id", c.id);
+              await supabaseAdmin.from("campaigns").update(update as never).eq("id", c.id);
               processed++;
             } catch (err) {
               errors++;
