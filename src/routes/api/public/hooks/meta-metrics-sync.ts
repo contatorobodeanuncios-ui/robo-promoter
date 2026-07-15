@@ -37,35 +37,91 @@ export const Route = createFileRoute("/api/public/hooks/meta-metrics-sync")({
 
           const { data: campaigns, error: cErr } = await supabaseAdmin
             .from("campaigns")
-            .select("id, meta_campaign_id")
+            .select("id, meta_campaign_id, started_at, status")
             .not("meta_campaign_id", "is", null)
-            .in("status", ["running", "rodando", "analyzing"]);
+            .in("status", ["running", "rodando", "analyzing", "em_revisao", "paused"]);
           if (cErr) throw new Error(cErr.message);
+
+          const mapEffectiveStatus = (
+            eff: string | undefined | null,
+          ): string | null => {
+            switch ((eff ?? "").toUpperCase()) {
+              case "ACTIVE": return "rodando";
+              case "PAUSED":
+              case "CAMPAIGN_PAUSED": return "paused";
+              case "ARCHIVED":
+              case "DELETED": return "encerrada_saldo_consumido";
+              case "PENDING_REVIEW":
+              case "IN_PROCESS":
+              case "WITH_ISSUES": return "em_revisao";
+              default: return null;
+            }
+          };
 
           for (const c of campaigns ?? []) {
             if (!c.meta_campaign_id) continue;
+            const nowIso = new Date().toISOString();
             try {
-              const url = `https://graph.facebook.com/v20.0/${c.meta_campaign_id}/insights?fields=spend,clicks,impressions,ctr,cpc&access_token=${encodeURIComponent(token)}`;
-              const res = await fetch(url);
-              if (!res.ok) throw new Error(`Meta Insights ${res.status}`);
-              const json = (await res.json()) as { data?: Array<Record<string, string>> };
-              const row = json.data?.[0];
-              if (!row) { processed++; continue; }
-              await supabaseAdmin
-                .from("campaigns")
-                .update({
-                  spent: Number(row.spend ?? 0),
-                  clicks: Number(row.clicks ?? 0),
-                  impressions: Number(row.impressions ?? 0),
-                  ctr: Number(row.ctr ?? 0),
-                  cpc: Number(row.cpc ?? 0),
-                  updated_at: new Date().toISOString(),
-                })
-                .eq("id", c.id);
+              // 1) Insights (métricas)
+              const insUrl = `https://graph.facebook.com/v20.0/${c.meta_campaign_id}/insights?fields=spend,clicks,impressions,ctr,cpc&access_token=${encodeURIComponent(token)}`;
+              const insRes = await fetch(insUrl);
+              if (!insRes.ok) {
+                const errTxt = await insRes.text();
+                throw new Error(`Meta Insights ${insRes.status}: ${errTxt.slice(0, 200)}`);
+              }
+              const insJson = (await insRes.json()) as { data?: Array<Record<string, string>> };
+              const row = insJson.data?.[0];
+
+              // 2) Effective status
+              const stUrl = `https://graph.facebook.com/v20.0/${c.meta_campaign_id}?fields=effective_status&access_token=${encodeURIComponent(token)}`;
+              const stRes = await fetch(stUrl);
+              const stJson = (await stRes.json()) as { effective_status?: string };
+              const effective = stJson.effective_status ?? null;
+              const mappedStatus = mapEffectiveStatus(effective);
+
+              const spend = Number(row?.spend ?? 0);
+              const clicks = Number(row?.clicks ?? 0);
+              const impressions = Number(row?.impressions ?? 0);
+              const hasDelivery = spend > 0 || clicks > 0 || impressions > 0;
+
+              const update: Record<string, unknown> = {
+                metrics_last_synced_at: nowIso,
+                metrics_last_error: null,
+                meta_effective_status: effective,
+                updated_at: nowIso,
+              };
+              if (row) {
+                update.spent = spend;
+                update.clicks = clicks;
+                update.impressions = impressions;
+                update.ctr = Number(row.ctr ?? 0);
+                update.cpc = Number(row.cpc ?? 0);
+              }
+              // Primeira detecção de entrega → grava started_at
+              if (hasDelivery && !c.started_at) {
+                update.started_at = nowIso;
+                if (!update.started_running_at) update.started_running_at = nowIso;
+              }
+              // Só atualiza status via Meta se não for "aguardando_vinculo_meta" (fluxo de pagamento)
+              if (mappedStatus && c.status !== "aguardando_vinculo_meta") {
+                update.status = mappedStatus;
+                if (mappedStatus === "paused") update.paused_at = nowIso;
+                if (mappedStatus === "encerrada_saldo_consumido") update.ended_at = nowIso;
+              }
+
+              await supabaseAdmin.from("campaigns").update(update).eq("id", c.id);
               processed++;
             } catch (err) {
               errors++;
-              console.error("meta-metrics-sync campaign error", c.id, err);
+              const msg = err instanceof Error ? err.message : String(err);
+              await supabaseAdmin
+                .from("campaigns")
+                .update({
+                  metrics_last_error: msg,
+                  metrics_last_synced_at: nowIso,
+                })
+                .eq("id", c.id);
+              console.error("meta-metrics-sync campaign error", c.id, msg);
             }
           }
 
