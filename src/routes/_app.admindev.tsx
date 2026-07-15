@@ -8,6 +8,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import {
   adminListCampaigns,
   adminSetCampaignStatus,
   adminSetMetaCampaignId,
@@ -21,7 +30,11 @@ import {
   adminApproveAccessRequest,
   adminDenyAccessRequest,
   adminListAllClients,
+  adminSetUserStatus,
+  adminAdjustBalance,
+  adminUpdateProfile,
   type AdminCampaignRow,
+  type AdminClientRow,
 } from "@/lib/admin.functions";
 
 import {
@@ -34,7 +47,7 @@ import {
   adminRejectPayment,
 } from "@/lib/payment.functions";
 import { supabase } from "@/integrations/supabase/client";
-import { Shield, Zap, Hand, Eye, X, Rocket, Loader2, Link2, Check, Ban, CreditCard, AlertTriangle, Trash2, PowerOff, UserPlus, Copy, Settings, Users, Megaphone } from "lucide-react";
+import { Shield, Zap, Hand, Eye, X, Rocket, Loader2, Link2, Check, Ban, CreditCard, AlertTriangle, Trash2, PowerOff, UserPlus, Copy, Settings, Users, Megaphone, Wallet, Pencil, UserCheck } from "lucide-react";
 
 export const Route = createFileRoute("/_app/admindev")({
   ssr: false,
@@ -757,47 +770,7 @@ function AdminDevPage() {
 
         {/* ============ Aba: Todos os Clientes ============ */}
         <TabsContent value="clients" className="space-y-6 mt-6">
-          <section className="glass-strong rounded-2xl overflow-hidden">
-            <div className="p-5 border-b border-white/5 flex items-center justify-between">
-              <h2 className="font-semibold">Todos os Clientes</h2>
-              <span className="text-xs text-muted-foreground">
-                {clientsQuery.data?.length ?? 0} no total
-              </span>
-            </div>
-            {clientsQuery.isLoading ? (
-              <div className="p-10 text-center text-muted-foreground">
-                <Loader2 className="h-5 w-5 animate-spin mx-auto" />
-              </div>
-            ) : !clientsQuery.data?.length ? (
-              <div className="p-10 text-center text-sm text-muted-foreground">Nenhum cliente ainda.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-white/5">
-                    <tr>
-                      <th className="px-4 py-3">Nome</th>
-                      <th className="px-4 py-3">E-mail</th>
-                      <th className="px-4 py-3 text-right">Saldo</th>
-                      <th className="px-4 py-3">Cliente desde</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {clientsQuery.data.map((c) => (
-                      <tr key={c.id} className="border-b border-white/5 hover:bg-white/[0.02]">
-                        <td className="px-4 py-3 font-medium">{c.display_name ?? "—"}</td>
-                        <td className="px-4 py-3 text-[11px] text-muted-foreground">{c.email ?? c.id.slice(0, 8)}</td>
-                        <td className="px-4 py-3 text-right tabular-nums font-semibold">{fmtBRL(c.balance)}</td>
-                        <td className="px-4 py-3 text-[11px] text-muted-foreground">{new Date(c.created_at).toLocaleDateString("pt-BR")}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            <p className="p-3 text-[11px] text-muted-foreground border-t border-white/5">
-              Ações de banir, editar saldo e editar perfil chegam na próxima etapa.
-            </p>
-          </section>
+          <AllClientsSection clientsQuery={clientsQuery} />
         </TabsContent>
       </Tabs>
 
@@ -1034,5 +1007,234 @@ function AccessRequestsSection() {
         </div>
       )}
     </section>
+  );
+}
+
+type ClientFilter = "active" | "banned";
+
+function AllClientsSection({
+  clientsQuery,
+}: {
+  clientsQuery: { data: AdminClientRow[] | undefined; isLoading: boolean };
+}) {
+  const qc = useQueryClient();
+  const [filter, setFilter] = useState<ClientFilter>("active");
+  const [balanceTarget, setBalanceTarget] = useState<AdminClientRow | null>(null);
+  const [profileTarget, setProfileTarget] = useState<AdminClientRow | null>(null);
+
+  const setStatusFn = useServerFn(adminSetUserStatus);
+  const banMut = useMutation({
+    mutationFn: (v: { user_id: string; status: "approved" | "banned" }) => setStatusFn({ data: v }),
+    onSuccess: (_r, v) => {
+      qc.invalidateQueries({ queryKey: ["admin-all-clients"] });
+      toast.success(v.status === "banned" ? "Usuário banido" : "Acesso devolvido");
+    },
+    onError: (e) => toast.error("Falha ao atualizar status", { description: String(e) }),
+  });
+
+  const all = clientsQuery.data ?? [];
+  const filtered = all.filter((c) => (filter === "active" ? c.status !== "banned" : c.status === "banned"));
+
+  return (
+    <section className="glass-strong rounded-2xl overflow-hidden">
+      <div className="p-5 border-b border-white/5 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="font-semibold">Todos os Clientes</h2>
+        <div className="flex items-center gap-2">
+          <Button variant={filter === "active" ? "neon" : "glass"} size="sm" onClick={() => setFilter("active")}>
+            Ativos ({all.filter((c) => c.status !== "banned").length})
+          </Button>
+          <Button variant={filter === "banned" ? "neon" : "glass"} size="sm" onClick={() => setFilter("banned")}>
+            Desativados ({all.filter((c) => c.status === "banned").length})
+          </Button>
+        </div>
+      </div>
+      {clientsQuery.isLoading ? (
+        <div className="p-10 text-center text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin mx-auto" />
+        </div>
+      ) : !filtered.length ? (
+        <div className="p-10 text-center text-sm text-muted-foreground">
+          {filter === "active" ? "Nenhum cliente ativo." : "Nenhum cliente desativado."}
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-white/5">
+              <tr>
+                <th className="px-4 py-3">Nome</th>
+                <th className="px-4 py-3">E-mail</th>
+                <th className="px-4 py-3">Telefone</th>
+                <th className="px-4 py-3 text-right">Saldo</th>
+                <th className="px-4 py-3">Cliente desde</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((c) => (
+                <tr key={c.id} className="border-b border-white/5 hover:bg-white/[0.02]">
+                  <td className="px-4 py-3 font-medium">{c.display_name ?? "—"}</td>
+                  <td className="px-4 py-3 text-[11px] text-muted-foreground">{c.email ?? c.id.slice(0, 8)}</td>
+                  <td className="px-4 py-3 text-[11px] text-muted-foreground">{c.phone ?? "—"}</td>
+                  <td className="px-4 py-3 text-right tabular-nums font-semibold">{fmtBRL(c.balance)}</td>
+                  <td className="px-4 py-3 text-[11px] text-muted-foreground">{new Date(c.created_at).toLocaleDateString("pt-BR")}</td>
+                  <td className="px-4 py-3">
+                    <span className={`text-[11px] px-2 py-1 rounded-full border ${
+                      c.status === "banned" ? "border-destructive/40 text-destructive bg-destructive/10" : "border-success/40 text-success bg-success/10"
+                    }`}>
+                      {c.status === "banned" ? "Banido" : "Ativo"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end gap-2">
+                      <Button variant="glass" size="sm" onClick={() => setBalanceTarget(c)} title="Editar saldo">
+                        <Wallet className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button variant="glass" size="sm" onClick={() => setProfileTarget(c)} title="Editar perfil">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      {c.status === "banned" ? (
+                        <Button
+                          variant="neon"
+                          size="sm"
+                          disabled={banMut.isPending}
+                          onClick={() => banMut.mutate({ user_id: c.id, status: "approved" })}
+                          title="Devolver acesso"
+                        >
+                          <UserCheck className="h-3.5 w-3.5" /> Devolver acesso
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="glass"
+                          size="sm"
+                          disabled={banMut.isPending}
+                          onClick={() => {
+                            if (window.confirm(`Banir ${c.display_name ?? c.email ?? "este usuário"}? Ele perde o acesso ao app.`)) {
+                              banMut.mutate({ user_id: c.id, status: "banned" });
+                            }
+                          }}
+                          title="Banir usuário"
+                        >
+                          <Ban className="h-3.5 w-3.5" /> Banir
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {balanceTarget && (
+        <BalanceDialog client={balanceTarget} onClose={() => setBalanceTarget(null)} />
+      )}
+      {profileTarget && (
+        <ProfileDialog client={profileTarget} onClose={() => setProfileTarget(null)} />
+      )}
+    </section>
+  );
+}
+
+function BalanceDialog({ client, onClose }: { client: AdminClientRow; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [delta, setDelta] = useState("");
+  const [reason, setReason] = useState("");
+  const fn = useServerFn(adminAdjustBalance);
+  const mut = useMutation({
+    mutationFn: () => fn({ data: { user_id: client.id, delta: Number(delta), reason: reason.trim() } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-all-clients"] });
+      toast.success("Saldo atualizado");
+      onClose();
+    },
+    onError: (e) => toast.error("Falha ao ajustar saldo", { description: String(e) }),
+  });
+  const deltaNum = Number(delta);
+  const valid = delta.trim() !== "" && !Number.isNaN(deltaNum) && deltaNum !== 0 && reason.trim().length >= 3;
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Editar saldo — {client.display_name ?? client.email ?? "cliente"}</DialogTitle>
+          <DialogDescription>
+            Saldo atual: {fmtBRL(client.balance)}. Informe o valor a somar (use negativo para descontar).
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Valor (ex: 50 ou -20)</Label>
+            <Input value={delta} onChange={(e) => setDelta(e.target.value)} placeholder="ex: 50" inputMode="decimal" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Motivo (obrigatório)</Label>
+            <Textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="ex: reembolso de campanha cancelada" rows={3} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="glass" size="sm" onClick={onClose}>Cancelar</Button>
+          <Button variant="neon" size="sm" disabled={!valid || mut.isPending} onClick={() => mut.mutate()}>
+            {mut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+            Salvar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ProfileDialog({ client, onClose }: { client: AdminClientRow; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [name, setName] = useState(client.display_name ?? "");
+  const [email, setEmail] = useState(client.email ?? "");
+  const [phone, setPhone] = useState(client.phone ?? "");
+  const fn = useServerFn(adminUpdateProfile);
+  const mut = useMutation({
+    mutationFn: () =>
+      fn({
+        data: {
+          user_id: client.id,
+          display_name: name.trim() || null,
+          email: email.trim() || null,
+          phone: phone.trim() || null,
+        },
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-all-clients"] });
+      toast.success("Perfil atualizado");
+      onClose();
+    },
+    onError: (e) => toast.error("Falha ao atualizar perfil", { description: String(e) }),
+  });
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Editar perfil — {client.display_name ?? client.email ?? "cliente"}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Nome</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome completo" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">E-mail</Label>
+            <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@exemplo.com" type="email" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Telefone</Label>
+            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(00) 00000-0000" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="glass" size="sm" onClick={onClose}>Cancelar</Button>
+          <Button variant="neon" size="sm" disabled={mut.isPending} onClick={() => mut.mutate()}>
+            {mut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+            Salvar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
