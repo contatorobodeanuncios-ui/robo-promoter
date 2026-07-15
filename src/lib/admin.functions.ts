@@ -687,3 +687,132 @@ export const adminGetClientContext = createServerFn({ method: "GET" })
       })),
     };
   });
+
+// ============ Falhas de integração Asaas (auditoria PIX) ============
+export interface PixAttemptRow {
+  id: string;
+  created_at: string;
+  user_id: string;
+  amount: number;
+  campaign_id: string | null;
+  asaas_customer_id: string | null;
+  asaas_payment_id: string | null;
+  http_status: number | null;
+  ok: boolean;
+  error_message: string | null;
+  raw_payload: unknown;
+}
+
+export const adminListPixAttempts = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<PixAttemptRow[]> => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const { data, error } = await admin
+      .from("pix_attempts")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (error) throw new Error(error.message);
+    return (data ?? []) as PixAttemptRow[];
+  });
+
+// ============ Banir / devolver acesso / editar saldo / editar métricas ============
+export const adminSetUserStatus = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ user_id: z.string().uuid(), status: z.enum(["approved", "banned"]) }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const { error } = await admin
+      .from("profiles")
+      .upsert({ id: data.user_id, status: data.status }, { onConflict: "id" });
+    if (error) throw new Error(error.message);
+    await admin.from("admin_audit_log").insert({
+      admin_email: (context.claims as { email?: string })?.email ?? "",
+      action: data.status === "banned" ? "user_ban" : "user_unban",
+      target_type: "user",
+      target_id: data.user_id,
+      details: {},
+    });
+    return { ok: true };
+  });
+
+export const adminAdjustBalance = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      user_id: z.string().uuid(),
+      delta: z.number(),
+      reason: z.string().min(3).max(500),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const { data: prof } = await admin
+      .from("profiles")
+      .select("balance")
+      .eq("id", data.user_id)
+      .maybeSingle();
+    const current = Number(prof?.balance ?? 0);
+    const next = Number((current + data.delta).toFixed(2));
+    const { error: uErr } = await admin
+      .from("profiles")
+      .update({ balance: next })
+      .eq("id", data.user_id);
+    if (uErr) throw new Error(uErr.message);
+    await admin.from("manual_balance_adjustments").insert({
+      user_id: data.user_id,
+      admin_id: context.userId,
+      delta: data.delta,
+      reason: data.reason,
+      balance_after: next,
+    });
+    await admin.from("admin_audit_log").insert({
+      admin_email: (context.claims as { email?: string })?.email ?? "",
+      action: "balance_adjust",
+      target_type: "user",
+      target_id: data.user_id,
+      details: { delta: data.delta, reason: data.reason, balance_after: next },
+    });
+    return { ok: true, balance: next };
+  });
+
+export const adminUpdateCampaignMetrics = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      id: z.string().uuid(),
+      spent: z.number().optional(),
+      clicks: z.number().int().optional(),
+      impressions: z.number().int().optional(),
+      ctr: z.number().optional(),
+      cpc: z.number().optional(),
+      cpm: z.number().optional(),
+      frequency: z.number().optional(),
+      results: z.number().int().optional(),
+      revenue: z.number().optional(),
+      cost_per_result: z.number().optional(),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const { id, ...rest } = data;
+    const update = Object.fromEntries(
+      Object.entries(rest).filter(([, v]) => v !== undefined),
+    );
+    const { error } = await admin.from("campaigns").update(update as never).eq("id", id);
+    if (error) throw new Error(error.message);
+    await admin.from("admin_audit_log").insert({
+      admin_email: (context.claims as { email?: string })?.email ?? "",
+      action: "campaign_metrics_edit",
+      target_type: "campaign",
+      target_id: id,
+      details: update,
+    });
+    return { ok: true };
+  });
