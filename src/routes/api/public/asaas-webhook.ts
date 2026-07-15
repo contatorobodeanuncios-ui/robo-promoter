@@ -160,7 +160,7 @@ export const Route = createFileRoute("/api/public/asaas-webhook")({
             asaas_payment_id: payment.id ?? null,
             approved_at: new Date().toISOString(),
           })
-          .eq("id", pr.id);
+          .eq("id", prAny.id);
 
         return json({ ok: true }, 200);
       },
