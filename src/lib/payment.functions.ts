@@ -262,6 +262,7 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
     z.object({
       amount: z.number().int().min(20).max(100000),
       campaignId: z.string().uuid().optional(),
+      billingType: z.enum(["PIX", "CREDIT_CARD"]).default("PIX"),
     }).parse(d),
   )
   .handler(async ({ data, context }) => {
@@ -277,7 +278,11 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
       enabled: false,
     };
 
-    // Reutiliza uma solicitação pendente com o mesmo valor, se existir.
+    const paymentType: "campaign_budget" | "balance_topup" = data.campaignId
+      ? "campaign_budget"
+      : "balance_topup";
+
+    // Reutiliza uma solicitação pendente com o mesmo valor + campanha se existir.
     let prId: string | null = null;
     let existingPaymentId: string | null = null;
     if (data.campaignId) {
@@ -287,6 +292,7 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
         .eq("user_id", context.userId)
         .eq("status", "pending")
         .eq("amount", data.amount)
+        .eq("campaign_id", data.campaignId)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -304,7 +310,9 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
           amount: data.amount,
           status: "pending",
           asaas_link: null,
-        })
+          type: paymentType,
+          campaign_id: data.campaignId ?? null,
+        } as never)
         .select("id")
         .single();
       if (error) throw new Error(error.message);
@@ -318,57 +326,91 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
     let pixCode: string | null = null;
     let invoiceUrl: string | null = null;
     let asaasPaymentId: string | null = existingPaymentId;
+    let asaasCustomerId: string | null = null;
+    let apiError: string | null = null;
+    let httpStatus: number | null = null;
     let via: "api" | "fallback" | "none" = "none";
 
     const apiKey = process.env.ASAAS_API_KEY;
-    if (apiKey) {
-      // Se já temos um payment_id salvo, tenta só buscar o QR de novo.
-      if (existingPaymentId) {
-        pixCode = await fetchAsaasPixCode(existingPaymentId, apiKey);
+    if (!apiKey) {
+      apiError = "ASAAS_API_KEY não configurada no servidor";
+    } else {
+      // Se já temos payment_id salvo e é PIX, tenta só buscar o QR de novo.
+      if (existingPaymentId && data.billingType === "PIX") {
+        const qr = await fetchAsaasPixCode(existingPaymentId, apiKey);
+        pixCode = qr.payload;
+        apiError = qr.error;
+        httpStatus = qr.status;
+        asaasPaymentId = existingPaymentId;
       }
-      if (!pixCode) {
+      if (!pixCode && !invoiceUrl) {
         const email =
           (context.claims as { email?: string } | undefined)?.email ??
           `user-${context.userId}@robolucro.app`;
         const name = email.split("@")[0] || "Cliente";
-        const customerId = await getOrCreateAsaasCustomer({
+        const cust = await getOrCreateAsaasCustomer({
           apiKey,
           userId: context.userId,
           email,
           name,
         });
-        if (customerId) {
-          const charge = await createAsaasPixCharge({
+        asaasCustomerId = cust.id;
+        if (!cust.id) {
+          apiError = cust.error ?? "Falha ao criar cliente Asaas";
+        } else {
+          const charge = await createAsaasCharge({
             apiKey,
-            customerId,
+            customerId: cust.id,
             amount: data.amount,
             externalReference,
             description: data.campaignId
               ? `Campanha PIX dedicado — ${data.campaignId}`
               : `Recarga de saldo — Robô de Lucro`,
+            billingType: data.billingType,
           });
-          if (charge) {
-            asaasPaymentId = charge.id;
-            invoiceUrl = charge.invoiceUrl;
-            pixCode = charge.pixCode;
-          }
+          asaasPaymentId = charge.id;
+          invoiceUrl = charge.invoiceUrl;
+          pixCode = charge.pixCode;
+          apiError = charge.error;
+          httpStatus = charge.status;
         }
       }
       if (pixCode || invoiceUrl) {
         via = "api";
+        apiError = null;
         await admin
           .from("payment_requests")
           .update({
             asaas_link: invoiceUrl,
             asaas_payment_id: asaasPaymentId,
-          })
+            last_error: null,
+          } as never)
+          .eq("id", prId);
+      } else if (apiError) {
+        await admin
+          .from("payment_requests")
+          .update({ last_error: apiError } as never)
           .eq("id", prId);
       }
     }
 
+    // Registra a tentativa (sucesso ou falha) para auditoria.
+    await logPixAttempt({
+      payment_request_id: prId,
+      user_id: context.userId,
+      amount: data.amount,
+      campaign_id: data.campaignId ?? null,
+      asaas_customer_id: asaasCustomerId,
+      asaas_payment_id: asaasPaymentId,
+      http_status: httpStatus,
+      ok: !!(pixCode || invoiceUrl),
+      error_message: pixCode || invoiceUrl ? null : apiError,
+      raw_payload: { billingType: data.billingType, via, type: paymentType },
+    });
+
     // Fallback: chave PIX manual configurada pelo admin.
     let fallbackPix: { key: string; beneficiary: string } | null = null;
-    if (!pixCode && manualPix.enabled && manualPix.key.trim()) {
+    if (!pixCode && !invoiceUrl && manualPix.enabled && manualPix.key.trim()) {
       fallbackPix = { key: manualPix.key.trim(), beneficiary: manualPix.beneficiary.trim() };
       via = "fallback";
     }
@@ -379,8 +421,10 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
       pixCode,
       invoiceUrl,
       fallbackPix,
-      configured: !!(pixCode || fallbackPix),
+      configured: !!(pixCode || invoiceUrl || fallbackPix),
       via,
+      billingType: data.billingType,
+      errorMessage: pixCode || invoiceUrl ? null : apiError,
     };
   });
 
