@@ -113,19 +113,52 @@ interface AsaasPixQrCode {
   errors?: Array<{ description?: string }>;
 }
 
-async function fetchAsaasPixCode(paymentId: string, apiKey: string): Promise<string | null> {
+function extractAsaasError(json: unknown, status: number): string {
+  const j = json as { errors?: Array<{ description?: string; code?: string }>; message?: string } | null;
+  if (j?.errors && j.errors.length > 0) {
+    return j.errors.map((e) => e.description || e.code || "").filter(Boolean).join("; ") || `HTTP ${status}`;
+  }
+  if (j?.message) return j.message;
+  return `HTTP ${status}`;
+}
+
+async function logPixAttempt(row: {
+  payment_request_id: string | null;
+  user_id: string;
+  amount: number;
+  campaign_id: string | null;
+  asaas_customer_id: string | null;
+  asaas_payment_id: string | null;
+  http_status: number | null;
+  ok: boolean;
+  error_message: string | null;
+  raw_payload?: unknown;
+}) {
+  try {
+    const admin = await getAdmin();
+    await admin.from("pix_attempts").insert({
+      ...row,
+      raw_payload: row.raw_payload as never,
+    });
+  } catch (e) {
+    console.error("logPixAttempt failed", e);
+  }
+}
+
+async function fetchAsaasPixCode(
+  paymentId: string,
+  apiKey: string,
+): Promise<{ payload: string | null; error: string | null; status: number }> {
   try {
     const resp = await fetch(`https://api.asaas.com/v3/payments/${paymentId}/pixQrCode`, {
       method: "GET",
       headers: asaasHeaders(apiKey),
     });
     const json = (await resp.json()) as AsaasPixQrCode;
-    if (json.payload) return json.payload;
-    console.error("Asaas pixQrCode error", json.errors);
-    return null;
+    if (json.payload) return { payload: json.payload, error: null, status: resp.status };
+    return { payload: null, error: extractAsaasError(json, resp.status), status: resp.status };
   } catch (e) {
-    console.error("fetchAsaasPixCode failed", e);
-    return null;
+    return { payload: null, error: String(e), status: 0 };
   }
 }
 
@@ -134,7 +167,7 @@ async function getOrCreateAsaasCustomer(params: {
   userId: string;
   email: string;
   name: string;
-}): Promise<string | null> {
+}): Promise<{ id: string | null; error: string | null }> {
   const admin = await getAdmin();
   const { data: prof } = await admin
     .from("profiles")
@@ -142,7 +175,7 @@ async function getOrCreateAsaasCustomer(params: {
     .eq("id", params.userId)
     .maybeSingle();
   const existing = (prof as { asaas_customer_id?: string | null } | null)?.asaas_customer_id;
-  if (existing) return existing;
+  if (existing) return { id: existing, error: null };
 
   try {
     const resp = await fetch("https://api.asaas.com/v3/customers", {
@@ -154,26 +187,29 @@ async function getOrCreateAsaasCustomer(params: {
         externalReference: params.userId,
       }),
     });
-    const json = (await resp.json()) as { id?: string; errors?: unknown };
-    if (!json.id) {
-      console.error("Asaas customer create failed", json.errors);
-      return null;
-    }
+    const json = (await resp.json()) as { id?: string };
+    if (!json.id) return { id: null, error: extractAsaasError(json, resp.status) };
     await admin.from("profiles").update({ asaas_customer_id: json.id }).eq("id", params.userId);
-    return json.id;
+    return { id: json.id, error: null };
   } catch (e) {
-    console.error("createAsaasCustomer failed", e);
-    return null;
+    return { id: null, error: String(e) };
   }
 }
 
-async function createAsaasPixCharge(params: {
+async function createAsaasCharge(params: {
   apiKey: string;
   customerId: string;
   amount: number;
   externalReference: string;
   description: string;
-}): Promise<{ id: string; invoiceUrl: string | null; pixCode: string | null } | null> {
+  billingType: "PIX" | "CREDIT_CARD" | "UNDEFINED";
+}): Promise<{
+  id: string | null;
+  invoiceUrl: string | null;
+  pixCode: string | null;
+  error: string | null;
+  status: number;
+}> {
   try {
     const due = new Date(Date.now() + 3 * 24 * 3600 * 1000).toISOString().slice(0, 10);
     const payResp = await fetch("https://api.asaas.com/v3/payments", {
@@ -181,27 +217,42 @@ async function createAsaasPixCharge(params: {
       headers: asaasHeaders(params.apiKey, true),
       body: JSON.stringify({
         customer: params.customerId,
-        billingType: "PIX",
+        billingType: params.billingType,
         value: params.amount,
         dueDate: due,
         externalReference: params.externalReference,
         description: params.description,
       }),
     });
-    const pay = (await payResp.json()) as {
-      id?: string;
-      invoiceUrl?: string;
-      errors?: Array<{ description?: string }>;
-    };
+    const pay = (await payResp.json()) as { id?: string; invoiceUrl?: string };
     if (!pay.id) {
-      console.error("Asaas payment create failed", pay.errors);
-      return null;
+      return {
+        id: null,
+        invoiceUrl: null,
+        pixCode: null,
+        error: extractAsaasError(pay, payResp.status),
+        status: payResp.status,
+      };
     }
-    const pixCode = await fetchAsaasPixCode(pay.id, params.apiKey);
-    return { id: pay.id, invoiceUrl: pay.invoiceUrl ?? null, pixCode };
+    if (params.billingType === "PIX") {
+      const qr = await fetchAsaasPixCode(pay.id, params.apiKey);
+      return {
+        id: pay.id,
+        invoiceUrl: pay.invoiceUrl ?? null,
+        pixCode: qr.payload,
+        error: qr.error,
+        status: payResp.status,
+      };
+    }
+    return {
+      id: pay.id,
+      invoiceUrl: pay.invoiceUrl ?? null,
+      pixCode: null,
+      error: null,
+      status: payResp.status,
+    };
   } catch (e) {
-    console.error("createAsaasPixCharge failed", e);
-    return null;
+    return { id: null, invoiceUrl: null, pixCode: null, error: String(e), status: 0 };
   }
 }
 
@@ -211,6 +262,7 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
     z.object({
       amount: z.number().int().min(20).max(100000),
       campaignId: z.string().uuid().optional(),
+      billingType: z.enum(["PIX", "CREDIT_CARD"]).default("PIX"),
     }).parse(d),
   )
   .handler(async ({ data, context }) => {
@@ -226,7 +278,11 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
       enabled: false,
     };
 
-    // Reutiliza uma solicitação pendente com o mesmo valor, se existir.
+    const paymentType: "campaign_budget" | "balance_topup" = data.campaignId
+      ? "campaign_budget"
+      : "balance_topup";
+
+    // Reutiliza uma solicitação pendente com o mesmo valor + campanha se existir.
     let prId: string | null = null;
     let existingPaymentId: string | null = null;
     if (data.campaignId) {
@@ -236,6 +292,7 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
         .eq("user_id", context.userId)
         .eq("status", "pending")
         .eq("amount", data.amount)
+        .eq("campaign_id", data.campaignId)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -253,7 +310,9 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
           amount: data.amount,
           status: "pending",
           asaas_link: null,
-        })
+          type: paymentType,
+          campaign_id: data.campaignId ?? null,
+        } as never)
         .select("id")
         .single();
       if (error) throw new Error(error.message);
@@ -267,57 +326,91 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
     let pixCode: string | null = null;
     let invoiceUrl: string | null = null;
     let asaasPaymentId: string | null = existingPaymentId;
+    let asaasCustomerId: string | null = null;
+    let apiError: string | null = null;
+    let httpStatus: number | null = null;
     let via: "api" | "fallback" | "none" = "none";
 
     const apiKey = process.env.ASAAS_API_KEY;
-    if (apiKey) {
-      // Se já temos um payment_id salvo, tenta só buscar o QR de novo.
-      if (existingPaymentId) {
-        pixCode = await fetchAsaasPixCode(existingPaymentId, apiKey);
+    if (!apiKey) {
+      apiError = "ASAAS_API_KEY não configurada no servidor";
+    } else {
+      // Se já temos payment_id salvo e é PIX, tenta só buscar o QR de novo.
+      if (existingPaymentId && data.billingType === "PIX") {
+        const qr = await fetchAsaasPixCode(existingPaymentId, apiKey);
+        pixCode = qr.payload;
+        apiError = qr.error;
+        httpStatus = qr.status;
+        asaasPaymentId = existingPaymentId;
       }
-      if (!pixCode) {
+      if (!pixCode && !invoiceUrl) {
         const email =
           (context.claims as { email?: string } | undefined)?.email ??
           `user-${context.userId}@robolucro.app`;
         const name = email.split("@")[0] || "Cliente";
-        const customerId = await getOrCreateAsaasCustomer({
+        const cust = await getOrCreateAsaasCustomer({
           apiKey,
           userId: context.userId,
           email,
           name,
         });
-        if (customerId) {
-          const charge = await createAsaasPixCharge({
+        asaasCustomerId = cust.id;
+        if (!cust.id) {
+          apiError = cust.error ?? "Falha ao criar cliente Asaas";
+        } else {
+          const charge = await createAsaasCharge({
             apiKey,
-            customerId,
+            customerId: cust.id,
             amount: data.amount,
             externalReference,
             description: data.campaignId
               ? `Campanha PIX dedicado — ${data.campaignId}`
               : `Recarga de saldo — Robô de Lucro`,
+            billingType: data.billingType,
           });
-          if (charge) {
-            asaasPaymentId = charge.id;
-            invoiceUrl = charge.invoiceUrl;
-            pixCode = charge.pixCode;
-          }
+          asaasPaymentId = charge.id;
+          invoiceUrl = charge.invoiceUrl;
+          pixCode = charge.pixCode;
+          apiError = charge.error;
+          httpStatus = charge.status;
         }
       }
       if (pixCode || invoiceUrl) {
         via = "api";
+        apiError = null;
         await admin
           .from("payment_requests")
           .update({
             asaas_link: invoiceUrl,
             asaas_payment_id: asaasPaymentId,
-          })
+            last_error: null,
+          } as never)
+          .eq("id", prId);
+      } else if (apiError) {
+        await admin
+          .from("payment_requests")
+          .update({ last_error: apiError } as never)
           .eq("id", prId);
       }
     }
 
+    // Registra a tentativa (sucesso ou falha) para auditoria.
+    await logPixAttempt({
+      payment_request_id: prId,
+      user_id: context.userId,
+      amount: data.amount,
+      campaign_id: data.campaignId ?? null,
+      asaas_customer_id: asaasCustomerId,
+      asaas_payment_id: asaasPaymentId,
+      http_status: httpStatus,
+      ok: !!(pixCode || invoiceUrl),
+      error_message: pixCode || invoiceUrl ? null : apiError,
+      raw_payload: { billingType: data.billingType, via, type: paymentType },
+    });
+
     // Fallback: chave PIX manual configurada pelo admin.
     let fallbackPix: { key: string; beneficiary: string } | null = null;
-    if (!pixCode && manualPix.enabled && manualPix.key.trim()) {
+    if (!pixCode && !invoiceUrl && manualPix.enabled && manualPix.key.trim()) {
       fallbackPix = { key: manualPix.key.trim(), beneficiary: manualPix.beneficiary.trim() };
       via = "fallback";
     }
@@ -328,8 +421,10 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
       pixCode,
       invoiceUrl,
       fallbackPix,
-      configured: !!(pixCode || fallbackPix),
+      configured: !!(pixCode || invoiceUrl || fallbackPix),
       via,
+      billingType: data.billingType,
+      errorMessage: pixCode || invoiceUrl ? null : apiError,
     };
   });
 

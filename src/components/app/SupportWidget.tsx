@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { MessageCircle, Send, X, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -74,6 +75,11 @@ export function SupportWidget() {
       setText("");
       qc.invalidateQueries({ queryKey: ["support-msgs", conversationId] });
     },
+    onError: (e) => {
+      toast.error("Não foi possível enviar a mensagem", {
+        description: e instanceof Error ? e.message : String(e),
+      });
+    },
   });
 
   if (!signed) return null;
@@ -116,7 +122,7 @@ export function SupportWidget() {
                 <div
                   key={m.id}
                   className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
-                    m.sender === "user"
+                    m.sender === "user" || m.sender === "client"
                       ? "ml-auto bg-primary text-primary-foreground"
                       : "bg-white/5 text-foreground"
                   }`}
