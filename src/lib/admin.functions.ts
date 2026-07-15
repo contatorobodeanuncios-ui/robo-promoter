@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import type { Json } from "@/integrations/supabase/types";
 
 export type CampaignMode = "manual" | "automatic";
 
@@ -324,37 +325,6 @@ export const getMetaMetricsHealth = createServerFn({ method: "GET" })
       duration_ms: data.duration_ms,
       stale: ageMin > 90 || data.status === "error",
     };
-  });
-
-// ============ Ajuste manual de saldo ============
-export const adminAdjustBalance = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) =>
-    z.object({
-      user_id: z.string().uuid(),
-      delta: z.number().refine((n) => n !== 0, "delta não pode ser zero"),
-      reason: z.string().min(3, "motivo obrigatório (mín. 3 chars)"),
-    }).parse(d),
-  )
-  .handler(async ({ data, context }) => {
-    await assertAdmin(context.userId, context.claims as { email?: string });
-    const admin = await getSupabaseAdmin();
-    const { data: prof, error: pErr } = await admin
-      .from("profiles").select("balance").eq("id", data.user_id).maybeSingle();
-    if (pErr) throw new Error(pErr.message);
-    const current = Number(prof?.balance ?? 0);
-    const next = Number((current + data.delta).toFixed(2));
-    const { error: uErr } = await admin
-      .from("profiles").update({ balance: next }).eq("id", data.user_id);
-    if (uErr) throw new Error(uErr.message);
-    await admin.from("manual_balance_adjustments").insert({
-      user_id: data.user_id,
-      admin_id: context.userId,
-      delta: data.delta,
-      reason: data.reason,
-      balance_after: next,
-    });
-    return { ok: true, balance_after: next };
   });
 
 // ============ Notas internas por cliente ============
@@ -700,7 +670,7 @@ export interface PixAttemptRow {
   http_status: number | null;
   ok: boolean;
   error_message: string | null;
-  raw_payload: unknown;
+  raw_payload: Json | null;
 }
 
 export const adminListPixAttempts = createServerFn({ method: "GET" })
