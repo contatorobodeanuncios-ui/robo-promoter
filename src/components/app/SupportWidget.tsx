@@ -75,6 +75,11 @@ export function SupportWidget() {
       setText("");
       qc.invalidateQueries({ queryKey: ["support-msgs", conversationId] });
     },
+    onError: (e) => {
+      toast.error("Não foi possível enviar a mensagem", {
+        description: e instanceof Error ? e.message : String(e),
+      });
+    },
   });
 
   if (!signed) return null;
