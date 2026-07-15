@@ -178,6 +178,7 @@ export type Database = {
           link: string
           meta_ad_account_id: string | null
           meta_campaign_id: string | null
+          meta_effective_status: string | null
           meta_pixel_id: string | null
           metrics_last_error: string | null
           metrics_last_synced_at: string | null
@@ -191,6 +192,7 @@ export type Database = {
           results: number
           revenue: number
           spent: number
+          started_at: string | null
           started_running_at: string | null
           status: Database["public"]["Enums"]["campaign_status"]
           total_paid: number
@@ -219,6 +221,7 @@ export type Database = {
           link?: string
           meta_ad_account_id?: string | null
           meta_campaign_id?: string | null
+          meta_effective_status?: string | null
           meta_pixel_id?: string | null
           metrics_last_error?: string | null
           metrics_last_synced_at?: string | null
@@ -232,6 +235,7 @@ export type Database = {
           results?: number
           revenue?: number
           spent?: number
+          started_at?: string | null
           started_running_at?: string | null
           status?: Database["public"]["Enums"]["campaign_status"]
           total_paid?: number
@@ -260,6 +264,7 @@ export type Database = {
           link?: string
           meta_ad_account_id?: string | null
           meta_campaign_id?: string | null
+          meta_effective_status?: string | null
           meta_pixel_id?: string | null
           metrics_last_error?: string | null
           metrics_last_synced_at?: string | null
@@ -273,6 +278,7 @@ export type Database = {
           results?: number
           revenue?: number
           spent?: number
+          started_at?: string | null
           started_running_at?: string | null
           status?: Database["public"]["Enums"]["campaign_status"]
           total_paid?: number
@@ -350,10 +356,13 @@ export type Database = {
           approved_at: string | null
           asaas_link: string | null
           asaas_payment_id: string | null
+          campaign_id: string | null
           created_at: string
           id: string
+          last_error: string | null
           note: string | null
           status: Database["public"]["Enums"]["payment_request_status"]
+          type: Database["public"]["Enums"]["payment_request_kind"] | null
           updated_at: string
           user_id: string
         }
@@ -362,10 +371,13 @@ export type Database = {
           approved_at?: string | null
           asaas_link?: string | null
           asaas_payment_id?: string | null
+          campaign_id?: string | null
           created_at?: string
           id?: string
+          last_error?: string | null
           note?: string | null
           status?: Database["public"]["Enums"]["payment_request_status"]
+          type?: Database["public"]["Enums"]["payment_request_kind"] | null
           updated_at?: string
           user_id: string
         }
@@ -374,14 +386,78 @@ export type Database = {
           approved_at?: string | null
           asaas_link?: string | null
           asaas_payment_id?: string | null
+          campaign_id?: string | null
           created_at?: string
           id?: string
+          last_error?: string | null
           note?: string | null
           status?: Database["public"]["Enums"]["payment_request_status"]
+          type?: Database["public"]["Enums"]["payment_request_kind"] | null
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "payment_requests_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pix_attempts: {
+        Row: {
+          amount: number
+          asaas_customer_id: string | null
+          asaas_payment_id: string | null
+          campaign_id: string | null
+          created_at: string
+          error_message: string | null
+          http_status: number | null
+          id: string
+          ok: boolean
+          payment_request_id: string | null
+          raw_payload: Json | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          asaas_customer_id?: string | null
+          asaas_payment_id?: string | null
+          campaign_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          http_status?: number | null
+          id?: string
+          ok?: boolean
+          payment_request_id?: string | null
+          raw_payload?: Json | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          asaas_customer_id?: string | null
+          asaas_payment_id?: string | null
+          campaign_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          http_status?: number | null
+          id?: string
+          ok?: boolean
+          payment_request_id?: string | null
+          raw_payload?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pix_attempts_payment_request_id_fkey"
+            columns: ["payment_request_id"]
+            isOneToOne: false
+            referencedRelation: "payment_requests"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -606,6 +682,8 @@ export type Database = {
         | "aguardando_vinculo_meta"
         | "rodando"
         | "encerrada_saldo_consumido"
+        | "em_revisao"
+      payment_request_kind: "campaign_budget" | "balance_topup"
       payment_request_status: "pending" | "approved" | "rejected" | "paid"
     }
     CompositeTypes: {
@@ -742,7 +820,9 @@ export const Constants = {
         "aguardando_vinculo_meta",
         "rodando",
         "encerrada_saldo_consumido",
+        "em_revisao",
       ],
+      payment_request_kind: ["campaign_budget", "balance_topup"],
       payment_request_status: ["pending", "approved", "rejected", "paid"],
     },
   },
