@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   adminListCampaigns,
   adminSetCampaignStatus,
@@ -19,6 +20,7 @@ import {
   adminListAccessRequests,
   adminApproveAccessRequest,
   adminDenyAccessRequest,
+  adminListAllClients,
   type AdminCampaignRow,
 } from "@/lib/admin.functions";
 
@@ -32,7 +34,7 @@ import {
   adminRejectPayment,
 } from "@/lib/payment.functions";
 import { supabase } from "@/integrations/supabase/client";
-import { Shield, Zap, Hand, Eye, X, Rocket, Loader2, Link2, Check, Ban, CreditCard, AlertTriangle, Trash2, PowerOff, UserPlus, Copy } from "lucide-react";
+import { Shield, Zap, Hand, Eye, X, Rocket, Loader2, Link2, Check, Ban, CreditCard, AlertTriangle, Trash2, PowerOff, UserPlus, Copy, Settings, Users, Megaphone } from "lucide-react";
 
 export const Route = createFileRoute("/_app/admindev")({
   ssr: false,
@@ -64,6 +66,7 @@ function AdminDevPage() {
   const approvePayFn = useServerFn(adminApprovePayment);
   const rejectPayFn = useServerFn(adminRejectPayment);
   const listWipesFn = useServerFn(adminListWipeEvents);
+  const listClientsFn = useServerFn(adminListAllClients);
 
   const adminQuery = useQuery({
     queryKey: ["admindev-access"],
@@ -107,6 +110,11 @@ function AdminDevPage() {
     queryFn: () => listWipesFn(),
     enabled,
     refetchInterval: 30_000,
+  });
+  const clientsQuery = useQuery({
+    queryKey: ["admin-all-clients"],
+    queryFn: () => listClientsFn(),
+    enabled,
   });
 
   const [preview, setPreview] = useState<AdminCampaignRow | null>(null);
@@ -243,484 +251,555 @@ function AdminDevPage() {
         </nav>
       </header>
 
-      <MetaHealthCard />
-      <ExportCsvButton />
+      <Tabs defaultValue="access" className="w-full">
+        <TabsList className="flex flex-wrap h-auto gap-1 bg-transparent p-0 justify-start">
+          <TabsTrigger value="access" className="gap-1.5">
+            <UserPlus className="h-3.5 w-3.5" /> Solicitações de Acesso
+          </TabsTrigger>
+          <TabsTrigger value="payments" className="gap-1.5">
+            <CreditCard className="h-3.5 w-3.5" /> Solicitações de Pagamento
+          </TabsTrigger>
+          <TabsTrigger value="settings" className="gap-1.5">
+            <Settings className="h-3.5 w-3.5" /> Configurações Internas
+          </TabsTrigger>
+          <TabsTrigger value="campaigns" className="gap-1.5">
+            <Megaphone className="h-3.5 w-3.5" /> Campanhas dos Clientes
+          </TabsTrigger>
+          <TabsTrigger value="clients" className="gap-1.5">
+            <Users className="h-3.5 w-3.5" /> Todos os Clientes
+          </TabsTrigger>
+        </TabsList>
 
-      <AccessRequestsSection />
+        {/* ============ Aba: Solicitações de Acesso ============ */}
+        <TabsContent value="access" className="space-y-6 mt-6">
+          <AccessRequestsSection />
+        </TabsContent>
 
+        {/* ============ Aba: Solicitações de Pagamento ============ */}
+        <TabsContent value="payments" className="space-y-6 mt-6">
+          <section className="glass-strong rounded-2xl overflow-hidden">
+            <div className="p-5 border-b border-white/5 flex items-center justify-between">
+              <h2 className="font-semibold">Solicitações de pagamento</h2>
+              <span className="text-xs text-muted-foreground">
+                {paymentsQuery.data?.filter((p) => p.status === "pending").length ?? 0} aguardando
+              </span>
+            </div>
+            {!paymentsQuery.data?.length ? (
+              <div className="p-8 text-center text-sm text-muted-foreground">Nenhuma solicitação ainda.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-white/5">
+                    <tr>
+                      <th className="px-4 py-3">Cliente</th>
+                      <th className="px-4 py-3 text-right">Valor</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Link Asaas</th>
+                      <th className="px-4 py-3 text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paymentsQuery.data.map((p) => (
+                      <tr key={p.id} className="border-b border-white/5">
+                        <td className="px-4 py-3">
+                          <p className="font-medium">{p.client_name ?? "—"}</p>
+                          <p className="text-[11px] text-muted-foreground font-mono">{p.user_id.slice(0, 8)}</p>
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums font-semibold">{fmtBRL(p.amount)}</td>
+                        <td className="px-4 py-3">
+                          <span className={`text-[11px] px-2 py-1 rounded-full border ${
+                            p.status === "paid" ? "border-success/40 text-success bg-success/10" :
+                            p.status === "rejected" ? "border-destructive/40 text-destructive bg-destructive/10" :
+                            p.status === "approved" ? "border-primary/40 text-primary bg-primary/10" :
+                            "border-warning/40 text-warning bg-warning/10"
+                          }`}>
+                            {p.status === "pending" ? "Aguardando" : p.status === "paid" ? "Pago" : p.status === "rejected" ? "Recusado" : "Aprovado"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {p.asaas_link ? (
+                            <a href={p.asaas_link} target="_blank" rel="noreferrer" className="text-[11px] text-primary truncate inline-block max-w-[220px]">
+                              {p.asaas_link}
+                            </a>
+                          ) : (
+                            <span className="text-[11px] text-muted-foreground italic">sem link</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {p.status === "pending" && (
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="neon"
+                                size="sm"
+                                onClick={() => approveMut.mutate(p.id)}
+                                disabled={approveMut.isPending}
+                              >
+                                <Check className="h-3.5 w-3.5" /> Aprovar
+                              </Button>
+                              <Button
+                                variant="glass"
+                                size="sm"
+                                onClick={() => rejectMut.mutate(p.id)}
+                                disabled={rejectMut.isPending}
+                              >
+                                <Ban className="h-3.5 w-3.5" /> Recusar
+                              </Button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </TabsContent>
 
+        {/* ============ Aba: Configurações Internas ============ */}
+        <TabsContent value="settings" className="space-y-6 mt-6">
+          <MetaHealthCard />
+          <ExportCsvButton />
 
-      {/* Mode toggle */}
-      <section
-        className={`glass-strong rounded-2xl p-6 border transition-all ${
-          isAuto ? "border-success/40 shadow-[0_0_40px_-10px_var(--color-success)]" : "border-warning/40"
-        }`}
-      >
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">Modo de Criação na BM</p>
-            <p className="text-lg font-semibold mt-1">
-              Como as campanhas dos clientes são publicadas
-            </p>
-          </div>
-          <button
-            type="button"
-            disabled={toggleMutation.isPending || modeQuery.isLoading}
-            onClick={() => toggleMutation.mutate(isAuto ? "manual" : "automatic")}
-            className={`relative h-14 w-72 rounded-full border-2 transition-all overflow-hidden ${
-              isAuto
-                ? "bg-success/15 border-success/60 shadow-[0_0_30px_-5px_var(--color-success)]"
-                : "bg-warning/15 border-warning/60"
+          {/* Mode toggle */}
+          <section
+            className={`glass-strong rounded-2xl p-6 border transition-all ${
+              isAuto ? "border-success/40 shadow-[0_0_40px_-10px_var(--color-success)]" : "border-warning/40"
             }`}
           >
-            <span
-              className={`absolute top-1 left-1 h-11 w-[140px] rounded-full transition-all flex items-center justify-center gap-2 font-semibold text-sm ${
-                isAuto
-                  ? "translate-x-[124px] bg-gradient-to-r from-success to-success/70 text-background"
-                  : "translate-x-0 bg-gradient-to-r from-warning to-warning/70 text-background"
-              }`}
-            >
-              {isAuto ? (
-                <><Zap className="h-4 w-4" /> AUTOMÁTICO</>
-              ) : (
-                <><Hand className="h-4 w-4" /> MANUAL</>
-              )}
-            </span>
-            <span className="absolute inset-0 flex items-center justify-between px-5 text-[11px] uppercase tracking-wider opacity-60 pointer-events-none">
-              <span>Manual</span>
-              <span>Auto</span>
-            </span>
-          </button>
-        </div>
-        <p className="text-xs text-muted-foreground mt-3">
-          {isAuto
-            ? "⚡ Campanhas pagas vão direto para a Meta API com o token da agência. Se a API falhar, cai automaticamente para 'Em Análise'."
-            : "✋ Campanhas pagas ficam com status 'Em Análise' aguardando aprovação manual nesta tela."}
-        </p>
-      </section>
-
-      {/* Asaas config + Confirmação de pagamento */}
-      <section className="grid lg:grid-cols-2 gap-6">
-        <div className="glass-strong rounded-2xl p-6 space-y-4 border border-primary/20">
-          <div className="flex items-center gap-2">
-            <Link2 className="h-5 w-5 text-primary" />
-            <h2 className="font-semibold">Asaas — Integração PIX</h2>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            As cobranças PIX são geradas automaticamente via API do Asaas
-            (<code className="text-primary">/v3/customers</code> +{" "}
-            <code className="text-primary">/v3/payments</code>). O código copia-e-cola
-            é buscado em <code className="text-primary">/v3/payments/&#123;id&#125;/pixQrCode</code>
-            e exibido diretamente ao cliente. Nenhum link ou template manual é necessário.
-          </p>
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={apiKeySet}
-              onChange={(e) => setApiKeySet(e.target.checked)}
-            />
-            Chave da API do Asaas já configurada (informativo)
-          </label>
-          <Button
-            variant="neon"
-            size="sm"
-            onClick={() => saveAsaas.mutate()}
-            disabled={saveAsaas.isPending}
-          >
-            {saveAsaas.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-            Salvar
-          </Button>
-
-
-          <div className="pt-4 mt-2 border-t border-white/10 space-y-3">
-            <div className="flex items-center gap-2">
-              <Copy className="h-4 w-4 text-primary" />
-              <p className="font-semibold text-sm">Chave PIX manual (fallback)</p>
-            </div>
-            <p className="text-[11px] text-muted-foreground">
-              Se a API do Asaas falhar em gerar a cobrança, o app mostra esta chave PIX para o cliente
-              copiar. O pagamento entra como manual — depois você aprova em "Solicitações de pagamento".
-            </p>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Chave PIX (CPF/CNPJ/Email/Telefone/Aleatória)</Label>
-              <Input
-                placeholder="ex: 000.000.000-00"
-                value={manualPixKey}
-                onChange={(e) => setManualPixKey(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Nome do beneficiário (opcional)</Label>
-              <Input
-                placeholder="ex: Robô de Lucro LTDA"
-                value={manualPixBeneficiary}
-                onChange={(e) => setManualPixBeneficiary(e.target.value)}
-              />
-            </div>
-            <label className="flex items-center gap-2 text-xs">
-              <input
-                type="checkbox"
-                checked={manualPixEnabled}
-                onChange={(e) => setManualPixEnabled(e.target.checked)}
-              />
-              Habilitar fallback manual
-            </label>
-            <Button
-              variant="glass"
-              size="sm"
-              onClick={() => saveManualPix.mutate()}
-              disabled={saveManualPix.isPending}
-            >
-              {saveManualPix.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-              Salvar chave PIX
-            </Button>
-          </div>
-        </div>
-
-
-
-        <div className="glass-strong rounded-2xl p-6 space-y-4 border border-primary/20">
-          <div className="flex items-center gap-2">
-            <CreditCard className="h-5 w-5 text-primary" />
-            <h2 className="font-semibold">Modo de confirmação do pagamento</h2>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant={confirmMode === "manual" ? "neon" : "glass"}
-              size="sm"
-              onClick={() => toggleConfirmMode.mutate("manual")}
-              disabled={toggleConfirmMode.isPending}
-            >
-              <Hand className="h-3.5 w-3.5" /> Manual
-            </Button>
-            <Button
-              variant={confirmMode === "webhook" ? "neon" : "glass"}
-              size="sm"
-              onClick={() => toggleConfirmMode.mutate("webhook")}
-              disabled={toggleConfirmMode.isPending}
-            >
-              <Zap className="h-3.5 w-3.5" /> Webhook Asaas
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {confirmMode === "webhook"
-              ? "⚡ O Asaas notifica o endpoint /api/public/asaas-webhook e o saldo é creditado automaticamente."
-              : "✋ Você aprova cada pagamento manualmente na lista abaixo antes do saldo ser creditado."}
-          </p>
-          <div className="text-[11px] text-muted-foreground glass rounded p-2 font-mono break-all">
-            URL do webhook: <span className="text-primary">/api/public/asaas-webhook</span>
-          </div>
-        </div>
-      </section>
-
-      {/* Pagamentos pendentes */}
-      <section className="glass-strong rounded-2xl overflow-hidden">
-        <div className="p-5 border-b border-white/5 flex items-center justify-between">
-          <h2 className="font-semibold">Solicitações de pagamento</h2>
-          <span className="text-xs text-muted-foreground">
-            {paymentsQuery.data?.filter((p) => p.status === "pending").length ?? 0} aguardando
-          </span>
-        </div>
-        {!paymentsQuery.data?.length ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">Nenhuma solicitação ainda.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-white/5">
-                <tr>
-                  <th className="px-4 py-3">Cliente</th>
-                  <th className="px-4 py-3 text-right">Valor</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Link Asaas</th>
-                  <th className="px-4 py-3 text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paymentsQuery.data.map((p) => (
-                  <tr key={p.id} className="border-b border-white/5">
-                    <td className="px-4 py-3">
-                      <p className="font-medium">{p.client_name ?? "—"}</p>
-                      <p className="text-[11px] text-muted-foreground font-mono">{p.user_id.slice(0, 8)}</p>
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums font-semibold">{fmtBRL(p.amount)}</td>
-                    <td className="px-4 py-3">
-                      <span className={`text-[11px] px-2 py-1 rounded-full border ${
-                        p.status === "paid" ? "border-success/40 text-success bg-success/10" :
-                        p.status === "rejected" ? "border-destructive/40 text-destructive bg-destructive/10" :
-                        p.status === "approved" ? "border-primary/40 text-primary bg-primary/10" :
-                        "border-warning/40 text-warning bg-warning/10"
-                      }`}>
-                        {p.status === "pending" ? "Aguardando" : p.status === "paid" ? "Pago" : p.status === "rejected" ? "Recusado" : "Aprovado"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {p.asaas_link ? (
-                        <a href={p.asaas_link} target="_blank" rel="noreferrer" className="text-[11px] text-primary truncate inline-block max-w-[220px]">
-                          {p.asaas_link}
-                        </a>
-                      ) : (
-                        <span className="text-[11px] text-muted-foreground italic">sem link</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {p.status === "pending" && (
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="neon"
-                            size="sm"
-                            onClick={() => approveMut.mutate(p.id)}
-                            disabled={approveMut.isPending}
-                          >
-                            <Check className="h-3.5 w-3.5" /> Aprovar
-                          </Button>
-                          <Button
-                            variant="glass"
-                            size="sm"
-                            onClick={() => rejectMut.mutate(p.id)}
-                            disabled={rejectMut.isPending}
-                          >
-                            <Ban className="h-3.5 w-3.5" /> Recusar
-                          </Button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-
-
-      {/* Resets — contas que apagaram o app na Zona de Perigo */}
-      <section className="rounded-2xl overflow-hidden border-2 border-destructive/50 bg-destructive/5">
-        <div className="p-5 border-b border-destructive/30 flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-destructive" />
-            <h2 className="font-semibold">Resets na Zona de Perigo</h2>
-          </div>
-          <span className="text-xs text-destructive font-semibold uppercase tracking-wider">
-            ⚠ Desligue os anúncios na Meta!
-          </span>
-        </div>
-        <div className="p-4 bg-destructive/10 border-b border-destructive/20 text-xs text-destructive">
-          <p className="font-bold">
-            Cada reset abaixo representa uma conta que APAGOU as campanhas no app.
-            Os anúncios ainda podem estar <strong>ATIVOS no Facebook</strong> gastando dinheiro.
-            É obrigatório <strong>desligar manualmente cada anúncio relacionado</strong> na Meta Ads Manager.
-          </p>
-        </div>
-        {wipesQuery.isLoading ? (
-          <div className="p-8 text-center text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin mx-auto" />
-          </div>
-        ) : !wipesQuery.data?.length ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">
-            Nenhum reset registrado ainda.
-          </div>
-        ) : (
-          <div className="divide-y divide-destructive/20">
-            {wipesQuery.data.map((w) => (
-              <div key={w.id} className="p-5 space-y-3">
-                <div className="flex items-start justify-between flex-wrap gap-2">
-                  <div>
-                    <p className="font-semibold flex items-center gap-2">
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                      {w.user_name ?? "(sem nome)"}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground font-mono">
-                      {w.user_email ?? w.user_id.slice(0, 8)}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[11px] text-muted-foreground">
-                      {new Date(w.created_at).toLocaleString("pt-BR")}
-                    </p>
-                    <p className="text-xs">
-                      <span className="text-destructive font-semibold">{w.active_count}</span>{" "}
-                      ativo(s) · {w.total_count} total
-                    </p>
-                  </div>
-                </div>
-                {w.campaigns_snapshot.length > 0 ? (
-                  <div className="rounded-lg bg-background/40 border border-destructive/20 p-3 space-y-2">
-                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                      <PowerOff className="h-3 w-3 text-destructive" /> Anúncios que estavam relacionados (desligar na Meta):
-                    </p>
-                    <ul className="space-y-1.5">
-                      {w.campaigns_snapshot.map((c) => (
-                        <li key={c.id} className="flex items-center justify-between gap-2 text-xs">
-                          <span className="truncate flex-1">
-                            <span className={`mr-2 inline-block px-1.5 py-0.5 rounded text-[10px] ${
-                              c.status === "running" ? "bg-success/20 text-success" :
-                              c.status === "analyzing" ? "bg-warning/20 text-warning" :
-                              "bg-white/10 text-muted-foreground"
-                            }`}>
-                              {c.status}
-                            </span>
-                            <span className="font-medium">{c.name}</span>
-                            {c.headline && <span className="text-muted-foreground"> — {c.headline}</span>}
-                          </span>
-                          {typeof c.budget === "number" && typeof c.days === "number" && (
-                            <span className="text-muted-foreground tabular-nums shrink-0">
-                              {fmtBRL(c.budget)}/dia · {c.days}d
-                            </span>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground italic">Sem campanhas no momento do reset.</p>
-                )}
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">Modo de Criação na BM</p>
+                <p className="text-lg font-semibold mt-1">
+                  Como as campanhas dos clientes são publicadas
+                </p>
               </div>
-            ))}
-          </div>
-        )}
-      </section>
+              <button
+                type="button"
+                disabled={toggleMutation.isPending || modeQuery.isLoading}
+                onClick={() => toggleMutation.mutate(isAuto ? "manual" : "automatic")}
+                className={`relative h-14 w-72 rounded-full border-2 transition-all overflow-hidden ${
+                  isAuto
+                    ? "bg-success/15 border-success/60 shadow-[0_0_30px_-5px_var(--color-success)]"
+                    : "bg-warning/15 border-warning/60"
+                }`}
+              >
+                <span
+                  className={`absolute top-1 left-1 h-11 w-[140px] rounded-full transition-all flex items-center justify-center gap-2 font-semibold text-sm ${
+                    isAuto
+                      ? "translate-x-[124px] bg-gradient-to-r from-success to-success/70 text-background"
+                      : "translate-x-0 bg-gradient-to-r from-warning to-warning/70 text-background"
+                  }`}
+                >
+                  {isAuto ? (
+                    <><Zap className="h-4 w-4" /> AUTOMÁTICO</>
+                  ) : (
+                    <><Hand className="h-4 w-4" /> MANUAL</>
+                  )}
+                </span>
+                <span className="absolute inset-0 flex items-center justify-between px-5 text-[11px] uppercase tracking-wider opacity-60 pointer-events-none">
+                  <span>Manual</span>
+                  <span>Auto</span>
+                </span>
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-3">
+              {isAuto
+                ? "⚡ Campanhas pagas vão direto para a Meta API com o token da agência. Se a API falhar, cai automaticamente para 'Em Análise'."
+                : "✋ Campanhas pagas ficam com status 'Em Análise' aguardando aprovação manual nesta tela."}
+            </p>
+          </section>
 
-      {/* Campaigns table */}
-      <section className="glass-strong rounded-2xl overflow-hidden">
-        <div className="p-5 border-b border-white/5 flex items-center justify-between">
-          <h2 className="font-semibold">Campanhas dos Clientes</h2>
-          <span className="text-xs text-muted-foreground">
-            {campaignsQuery.data?.length ?? 0} no total
-          </span>
-        </div>
-        {campaignsQuery.isLoading ? (
-          <div className="p-10 text-center text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin mx-auto" />
-          </div>
-        ) : !campaignsQuery.data?.length ? (
-          <div className="p-10 text-center text-sm text-muted-foreground">Nenhuma campanha ainda.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-white/5">
-                <tr>
-                  <th className="px-4 py-3">Cliente</th>
-                  <th className="px-4 py-3">Campanha</th>
-                  <th className="px-4 py-3 text-right">Orçamento</th>
-                  <th className="px-4 py-3 text-center">Dias</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Datas</th>
-                  <th className="px-4 py-3">ID da campanha no Meta</th>
-                  <th className="px-4 py-3">Link cobrança</th>
-                  <th className="px-4 py-3">Métricas Reais (Meta)</th>
-                  <th className="px-4 py-3 text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {campaignsQuery.data.map((c) => {
-                  const isRunning = c.status === "running" || c.status === "rodando";
-                  const isPaused = c.status === "paused" || c.status === "encerrada_saldo_consumido";
-                  const isPending = c.status === "aguardando_vinculo_meta" || c.status === "analyzing";
-                  const rowCls = isRunning
-                    ? "bg-success/5 border-l-2 border-l-success"
-                    : isPaused
-                      ? "bg-destructive/5 border-l-2 border-l-destructive"
-                      : "";
-                  const fmtDate = (d: string | null) => (d ? new Date(d).toLocaleString("pt-BR") : "—");
-                  return (
-                    <tr key={c.id} className={`border-b border-white/5 hover:bg-white/[0.02] ${rowCls}`}>
-                      <td className="px-4 py-3">
-                        <p className="font-medium">{c.client_name ?? "—"}</p>
-                        <p className="text-[11px] text-muted-foreground">{c.client_email ?? c.user_id.slice(0, 8)}</p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="font-medium truncate max-w-[200px]">{c.name}</p>
-                        <p className="text-[11px] text-muted-foreground truncate max-w-[200px]">{c.headline}</p>
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums">{fmtBRL(c.budget)}</td>
-                      <td className="px-4 py-3 text-center tabular-nums">{c.days}</td>
-                      <td className="px-4 py-3">
-                        <select
-                          value={c.status}
-                          onChange={(e) =>
-                            statusMutation.mutate({
-                              id: c.id,
-                              status: e.target.value as "running" | "analyzing" | "paused",
-                            })
-                          }
-                          className="bg-background border border-white/10 rounded-md px-2 py-1 text-xs"
-                        >
-                          <option value="analyzing">⏳ Em Análise</option>
-                          <option value="running">🟢 Ativo</option>
-                          <option value="paused">🔴 Desativado</option>
-                          <option value="aguardando_vinculo_meta">💰 Aguardando pagamento</option>
-                          <option value="encerrada_saldo_consumido">⛔ Encerrada</option>
-                        </select>
-                      </td>
-                      <td className="px-4 py-3 text-[10px] text-muted-foreground space-y-0.5 min-w-[160px]">
-                        <div>Criada: <span className="text-foreground">{fmtDate(c.created_at)}</span></div>
-                        <div>Iniciou: <span className="text-foreground">{fmtDate(c.started_running_at)}</span></div>
-                        <div>Pausada: <span className="text-foreground">{fmtDate(c.paused_at)}</span></div>
-                        <div>Encerrada: <span className="text-foreground">{fmtDate(c.ended_at)}</span></div>
-                      </td>
-                      <td className="px-4 py-3 min-w-[200px]">
-                        <MetaCampaignIdCell id={c.id} value={c.meta_campaign_id} />
-                      </td>
-                      <td className="px-4 py-3">
-                        {c.invoice_url ? (
-                          <div className="flex items-center gap-1">
-                            <a href={c.invoice_url} target="_blank" rel="noreferrer" className="text-[11px] text-primary underline truncate inline-block max-w-[180px]">
-                              {c.invoice_url}
-                            </a>
-                            <button
-                              type="button"
-                              className="p-1 rounded hover:bg-white/10"
-                              onClick={() => {
-                                navigator.clipboard.writeText(c.invoice_url!).then(() => toast.success("Link copiado"));
-                              }}
-                            >
-                              <Copy className="h-3 w-3" />
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="text-[11px] text-muted-foreground italic">
-                            {isPending && c.funding_type === "pix_dedicated" ? "sem cobrança" : "—"}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="grid grid-cols-3 gap-1 text-[10px] min-w-[260px]">
-                          <Metric label="Cliques" value={c.clicks.toLocaleString("pt-BR")} />
-                          <Metric label="Impr." value={c.impressions.toLocaleString("pt-BR")} />
-                          <Metric label="CTR" value={`${c.ctr.toFixed(2)}%`} />
-                          <Metric label="CPC" value={fmtBRL(c.cpc)} />
-                          <Metric label="Gasto" value={fmtBRL(c.spent)} />
-                          <Metric label="CPM" value={c.cpm ? fmtBRL(c.cpm) : "—"} />
-                          <Metric label="Freq." value={c.frequency ? c.frequency.toFixed(2) : "—"} />
-                          <Metric label="C/Result." value={c.cost_per_result ? fmtBRL(c.cost_per_result) : "—"} />
-                          <Metric label="ROI" value={c.revenue && c.spent ? `${(((c.revenue - c.spent) / c.spent) * 100).toFixed(1)}%` : "—"} />
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button variant="glass" size="sm" onClick={() => setPreview(c)} title="Pré-visualizar anúncio">
-                            <Eye className="h-3.5 w-3.5" /> Prévia
-                          </Button>
-                          <Button
-                            variant="neon"
-                            size="sm"
-                            disabled={c.status === "running" || statusMutation.isPending}
-                            onClick={() => statusMutation.mutate({ id: c.id, status: "running" })}
-                          >
-                            <Rocket className="h-3.5 w-3.5" /> Ativar
-                          </Button>
-                        </div>
-                      </td>
+          {/* Asaas config + Confirmação de pagamento */}
+          <section className="grid lg:grid-cols-2 gap-6">
+            <div className="glass-strong rounded-2xl p-6 space-y-4 border border-primary/20">
+              <div className="flex items-center gap-2">
+                <Link2 className="h-5 w-5 text-primary" />
+                <h2 className="font-semibold">Asaas — Integração PIX</h2>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                As cobranças PIX são geradas automaticamente via API do Asaas
+                (<code className="text-primary">/v3/customers</code> +{" "}
+                <code className="text-primary">/v3/payments</code>). O código copia-e-cola
+                é buscado em <code className="text-primary">/v3/payments/&#123;id&#125;/pixQrCode</code>
+                e exibido diretamente ao cliente. Nenhum link ou template manual é necessário.
+              </p>
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={apiKeySet}
+                  onChange={(e) => setApiKeySet(e.target.checked)}
+                />
+                Chave da API do Asaas já configurada (informativo)
+              </label>
+              <Button
+                variant="neon"
+                size="sm"
+                onClick={() => saveAsaas.mutate()}
+                disabled={saveAsaas.isPending}
+              >
+                {saveAsaas.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                Salvar
+              </Button>
+
+
+              <div className="pt-4 mt-2 border-t border-white/10 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Copy className="h-4 w-4 text-primary" />
+                  <p className="font-semibold text-sm">Chave PIX manual (fallback)</p>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Se a API do Asaas falhar em gerar a cobrança, o app mostra esta chave PIX para o cliente
+                  copiar. O pagamento entra como manual — depois você aprova em "Solicitações de pagamento".
+                </p>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Chave PIX (CPF/CNPJ/Email/Telefone/Aleatória)</Label>
+                  <Input
+                    placeholder="ex: 000.000.000-00"
+                    value={manualPixKey}
+                    onChange={(e) => setManualPixKey(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Nome do beneficiário (opcional)</Label>
+                  <Input
+                    placeholder="ex: Robô de Lucro LTDA"
+                    value={manualPixBeneficiary}
+                    onChange={(e) => setManualPixBeneficiary(e.target.value)}
+                  />
+                </div>
+                <label className="flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={manualPixEnabled}
+                    onChange={(e) => setManualPixEnabled(e.target.checked)}
+                  />
+                  Habilitar fallback manual
+                </label>
+                <Button
+                  variant="glass"
+                  size="sm"
+                  onClick={() => saveManualPix.mutate()}
+                  disabled={saveManualPix.isPending}
+                >
+                  {saveManualPix.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                  Salvar chave PIX
+                </Button>
+              </div>
+            </div>
+
+
+
+            <div className="glass-strong rounded-2xl p-6 space-y-4 border border-primary/20">
+              <div className="flex items-center gap-2">
+                <CreditCard className="h-5 w-5 text-primary" />
+                <h2 className="font-semibold">Modo de confirmação do pagamento</h2>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant={confirmMode === "manual" ? "neon" : "glass"}
+                  size="sm"
+                  onClick={() => toggleConfirmMode.mutate("manual")}
+                  disabled={toggleConfirmMode.isPending}
+                >
+                  <Hand className="h-3.5 w-3.5" /> Manual
+                </Button>
+                <Button
+                  variant={confirmMode === "webhook" ? "neon" : "glass"}
+                  size="sm"
+                  onClick={() => toggleConfirmMode.mutate("webhook")}
+                  disabled={toggleConfirmMode.isPending}
+                >
+                  <Zap className="h-3.5 w-3.5" /> Webhook Asaas
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {confirmMode === "webhook"
+                  ? "⚡ O Asaas notifica o endpoint /api/public/asaas-webhook e o saldo é creditado automaticamente."
+                  : "✋ Você aprova cada pagamento manualmente na lista abaixo antes do saldo ser creditado."}
+              </p>
+              <div className="text-[11px] text-muted-foreground glass rounded p-2 font-mono break-all">
+                URL do webhook: <span className="text-primary">/api/public/asaas-webhook</span>
+              </div>
+            </div>
+          </section>
+
+          {/* Resets — contas que apagaram o app na Zona de Perigo */}
+          <section className="rounded-2xl overflow-hidden border-2 border-destructive/50 bg-destructive/5">
+            <div className="p-5 border-b border-destructive/30 flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-destructive" />
+                <h2 className="font-semibold">Resets na Zona de Perigo</h2>
+              </div>
+              <span className="text-xs text-destructive font-semibold uppercase tracking-wider">
+                ⚠ Desligue os anúncios na Meta!
+              </span>
+            </div>
+            <div className="p-4 bg-destructive/10 border-b border-destructive/20 text-xs text-destructive">
+              <p className="font-bold">
+                Cada reset abaixo representa uma conta que APAGOU as campanhas no app.
+                Os anúncios ainda podem estar <strong>ATIVOS no Facebook</strong> gastando dinheiro.
+                É obrigatório <strong>desligar manualmente cada anúncio relacionado</strong> na Meta Ads Manager.
+              </p>
+            </div>
+            {wipesQuery.isLoading ? (
+              <div className="p-8 text-center text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin mx-auto" />
+              </div>
+            ) : !wipesQuery.data?.length ? (
+              <div className="p-8 text-center text-sm text-muted-foreground">
+                Nenhum reset registrado ainda.
+              </div>
+            ) : (
+              <div className="divide-y divide-destructive/20">
+                {wipesQuery.data.map((w) => (
+                  <div key={w.id} className="p-5 space-y-3">
+                    <div className="flex items-start justify-between flex-wrap gap-2">
+                      <div>
+                        <p className="font-semibold flex items-center gap-2">
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                          {w.user_name ?? "(sem nome)"}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground font-mono">
+                          {w.user_email ?? w.user_id.slice(0, 8)}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[11px] text-muted-foreground">
+                          {new Date(w.created_at).toLocaleString("pt-BR")}
+                        </p>
+                        <p className="text-xs">
+                          <span className="text-destructive font-semibold">{w.active_count}</span>{" "}
+                          ativo(s) · {w.total_count} total
+                        </p>
+                      </div>
+                    </div>
+                    {w.campaigns_snapshot.length > 0 ? (
+                      <div className="rounded-lg bg-background/40 border border-destructive/20 p-3 space-y-2">
+                        <p className="text-[11px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                          <PowerOff className="h-3 w-3 text-destructive" /> Anúncios que estavam relacionados (desligar na Meta):
+                        </p>
+                        <ul className="space-y-1.5">
+                          {w.campaigns_snapshot.map((c) => (
+                            <li key={c.id} className="flex items-center justify-between gap-2 text-xs">
+                              <span className="truncate flex-1">
+                                <span className={`mr-2 inline-block px-1.5 py-0.5 rounded text-[10px] ${
+                                  c.status === "running" ? "bg-success/20 text-success" :
+                                  c.status === "analyzing" ? "bg-warning/20 text-warning" :
+                                  "bg-white/10 text-muted-foreground"
+                                }`}>
+                                  {c.status}
+                                </span>
+                                <span className="font-medium">{c.name}</span>
+                                {c.headline && <span className="text-muted-foreground"> — {c.headline}</span>}
+                              </span>
+                              {typeof c.budget === "number" && typeof c.days === "number" && (
+                                <span className="text-muted-foreground tabular-nums shrink-0">
+                                  {fmtBRL(c.budget)}/dia · {c.days}d
+                                </span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground italic">Sem campanhas no momento do reset.</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </TabsContent>
+
+        {/* ============ Aba: Campanhas dos Clientes ============ */}
+        <TabsContent value="campaigns" className="space-y-6 mt-6">
+          <section className="glass-strong rounded-2xl overflow-hidden">
+            <div className="p-5 border-b border-white/5 flex items-center justify-between">
+              <h2 className="font-semibold">Campanhas dos Clientes</h2>
+              <span className="text-xs text-muted-foreground">
+                {campaignsQuery.data?.length ?? 0} no total
+              </span>
+            </div>
+            {campaignsQuery.isLoading ? (
+              <div className="p-10 text-center text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin mx-auto" />
+              </div>
+            ) : !campaignsQuery.data?.length ? (
+              <div className="p-10 text-center text-sm text-muted-foreground">Nenhuma campanha ainda.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-white/5">
+                    <tr>
+                      <th className="px-4 py-3">Cliente</th>
+                      <th className="px-4 py-3">Campanha</th>
+                      <th className="px-4 py-3 text-right">Orçamento</th>
+                      <th className="px-4 py-3 text-center">Dias</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Datas</th>
+                      <th className="px-4 py-3">ID da campanha no Meta</th>
+                      <th className="px-4 py-3">Link cobrança</th>
+                      <th className="px-4 py-3">Métricas Reais (Meta)</th>
+                      <th className="px-4 py-3 text-right">Ações</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody>
+                    {campaignsQuery.data.map((c) => {
+                      const isRunning = c.status === "running" || c.status === "rodando";
+                      const isPaused = c.status === "paused" || c.status === "encerrada_saldo_consumido";
+                      const isPending = c.status === "aguardando_vinculo_meta" || c.status === "analyzing";
+                      const rowCls = isRunning
+                        ? "bg-success/5 border-l-2 border-l-success"
+                        : isPaused
+                          ? "bg-destructive/5 border-l-2 border-l-destructive"
+                          : "";
+                      const fmtDate = (d: string | null) => (d ? new Date(d).toLocaleString("pt-BR") : "—");
+                      return (
+                        <tr key={c.id} className={`border-b border-white/5 hover:bg-white/[0.02] ${rowCls}`}>
+                          <td className="px-4 py-3">
+                            <p className="font-medium">{c.client_name ?? "—"}</p>
+                            <p className="text-[11px] text-muted-foreground">{c.client_email ?? c.user_id.slice(0, 8)}</p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <p className="font-medium truncate max-w-[200px]">{c.name}</p>
+                            <p className="text-[11px] text-muted-foreground truncate max-w-[200px]">{c.headline}</p>
+                          </td>
+                          <td className="px-4 py-3 text-right tabular-nums">{fmtBRL(c.budget)}</td>
+                          <td className="px-4 py-3 text-center tabular-nums">{c.days}</td>
+                          <td className="px-4 py-3">
+                            <select
+                              value={c.status}
+                              onChange={(e) =>
+                                statusMutation.mutate({
+                                  id: c.id,
+                                  status: e.target.value as "running" | "analyzing" | "paused",
+                                })
+                              }
+                              className="bg-background border border-white/10 rounded-md px-2 py-1 text-xs"
+                            >
+                              <option value="analyzing">⏳ Em Análise</option>
+                              <option value="running">🟢 Ativo</option>
+                              <option value="paused">🔴 Desativado</option>
+                              <option value="aguardando_vinculo_meta">💰 Aguardando pagamento</option>
+                              <option value="encerrada_saldo_consumido">⛔ Encerrada</option>
+                            </select>
+                          </td>
+                          <td className="px-4 py-3 text-[10px] text-muted-foreground space-y-0.5 min-w-[160px]">
+                            <div>Criada: <span className="text-foreground">{fmtDate(c.created_at)}</span></div>
+                            <div>Iniciou: <span className="text-foreground">{fmtDate(c.started_running_at)}</span></div>
+                            <div>Pausada: <span className="text-foreground">{fmtDate(c.paused_at)}</span></div>
+                            <div>Encerrada: <span className="text-foreground">{fmtDate(c.ended_at)}</span></div>
+                          </td>
+                          <td className="px-4 py-3 min-w-[200px]">
+                            <MetaCampaignIdCell id={c.id} value={c.meta_campaign_id} />
+                          </td>
+                          <td className="px-4 py-3">
+                            {c.invoice_url ? (
+                              <div className="flex items-center gap-1">
+                                <a href={c.invoice_url} target="_blank" rel="noreferrer" className="text-[11px] text-primary underline truncate inline-block max-w-[180px]">
+                                  {c.invoice_url}
+                                </a>
+                                <button
+                                  type="button"
+                                  className="p-1 rounded hover:bg-white/10"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(c.invoice_url!).then(() => toast.success("Link copiado"));
+                                  }}
+                                >
+                                  <Copy className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-[11px] text-muted-foreground italic">
+                                {isPending && c.funding_type === "pix_dedicated" ? "sem cobrança" : "—"}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="grid grid-cols-3 gap-1 text-[10px] min-w-[260px]">
+                              <Metric label="Cliques" value={c.clicks.toLocaleString("pt-BR")} />
+                              <Metric label="Impr." value={c.impressions.toLocaleString("pt-BR")} />
+                              <Metric label="CTR" value={`${c.ctr.toFixed(2)}%`} />
+                              <Metric label="CPC" value={fmtBRL(c.cpc)} />
+                              <Metric label="Gasto" value={fmtBRL(c.spent)} />
+                              <Metric label="CPM" value={c.cpm ? fmtBRL(c.cpm) : "—"} />
+                              <Metric label="Freq." value={c.frequency ? c.frequency.toFixed(2) : "—"} />
+                              <Metric label="C/Result." value={c.cost_per_result ? fmtBRL(c.cost_per_result) : "—"} />
+                              <Metric label="ROI" value={c.revenue && c.spent ? `${(((c.revenue - c.spent) / c.spent) * 100).toFixed(1)}%` : "—"} />
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button variant="glass" size="sm" onClick={() => setPreview(c)} title="Pré-visualizar anúncio">
+                                <Eye className="h-3.5 w-3.5" /> Prévia
+                              </Button>
+                              <Button
+                                variant="neon"
+                                size="sm"
+                                disabled={c.status === "running" || statusMutation.isPending}
+                                onClick={() => statusMutation.mutate({ id: c.id, status: "running" })}
+                              >
+                                <Rocket className="h-3.5 w-3.5" /> Ativar
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
 
-          </div>
-        )}
-      </section>
+              </div>
+            )}
+          </section>
+        </TabsContent>
+
+        {/* ============ Aba: Todos os Clientes ============ */}
+        <TabsContent value="clients" className="space-y-6 mt-6">
+          <section className="glass-strong rounded-2xl overflow-hidden">
+            <div className="p-5 border-b border-white/5 flex items-center justify-between">
+              <h2 className="font-semibold">Todos os Clientes</h2>
+              <span className="text-xs text-muted-foreground">
+                {clientsQuery.data?.length ?? 0} no total
+              </span>
+            </div>
+            {clientsQuery.isLoading ? (
+              <div className="p-10 text-center text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin mx-auto" />
+              </div>
+            ) : !clientsQuery.data?.length ? (
+              <div className="p-10 text-center text-sm text-muted-foreground">Nenhum cliente ainda.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-white/5">
+                    <tr>
+                      <th className="px-4 py-3">Nome</th>
+                      <th className="px-4 py-3">E-mail</th>
+                      <th className="px-4 py-3 text-right">Saldo</th>
+                      <th className="px-4 py-3">Cliente desde</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clientsQuery.data.map((c) => (
+                      <tr key={c.id} className="border-b border-white/5 hover:bg-white/[0.02]">
+                        <td className="px-4 py-3 font-medium">{c.display_name ?? "—"}</td>
+                        <td className="px-4 py-3 text-[11px] text-muted-foreground">{c.email ?? c.id.slice(0, 8)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums font-semibold">{fmtBRL(c.balance)}</td>
+                        <td className="px-4 py-3 text-[11px] text-muted-foreground">{new Date(c.created_at).toLocaleDateString("pt-BR")}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="p-3 text-[11px] text-muted-foreground border-t border-white/5">
+              Ações de banir, editar saldo e editar perfil chegam na próxima etapa.
+            </p>
+          </section>
+        </TabsContent>
+      </Tabs>
 
       {preview && <FbPreview campaign={preview} onClose={() => setPreview(null)} />}
     </div>
