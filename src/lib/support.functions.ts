@@ -102,7 +102,7 @@ export const sendMyMessage = createServerFn({ method: "POST" })
     const now = new Date().toISOString();
     const { error } = await sb.from("support_messages").insert({
       conversation_id: data.conversation_id,
-      sender: "user",
+      sender: "client",
       content: data.content,
     });
     if (error) throw new Error(error.message);
