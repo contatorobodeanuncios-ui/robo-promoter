@@ -187,6 +187,10 @@ async function getOrCreateAsaasCustomer(params: {
   userId: string;
   email: string;
   name: string;
+  cpfCnpj: string;
+  phone?: string | null;
+  postalCode?: string | null;
+  addressNumber?: string | null;
 }): Promise<{ id: string | null; error: string | null }> {
   const admin = await getAdmin();
   const { data: prof } = await admin
@@ -195,7 +199,26 @@ async function getOrCreateAsaasCustomer(params: {
     .eq("id", params.userId)
     .maybeSingle();
   const existing = (prof as { asaas_customer_id?: string | null } | null)?.asaas_customer_id;
-  if (existing) return { id: existing, error: null };
+  if (existing) {
+    // Garante que o CPF/CNPJ está atualizado no cliente já criado — sem isso
+    // clientes antigos (criados antes do campo ser obrigatório) continuam
+    // rejeitando cobranças com "necessário preencher o CPF ou CNPJ".
+    try {
+      await fetch(`https://api.asaas.com/v3/customers/${existing}`, {
+        method: "POST",
+        headers: asaasHeaders(params.apiKey, true),
+        body: JSON.stringify({
+          name: params.name,
+          email: params.email,
+          cpfCnpj: params.cpfCnpj,
+          mobilePhone: params.phone ?? undefined,
+          postalCode: params.postalCode ?? undefined,
+          addressNumber: params.addressNumber ?? undefined,
+        }),
+      });
+    } catch { /* ignora — a cobrança abaixo dirá se ainda falta algo */ }
+    return { id: existing, error: null };
+  }
 
   try {
     const resp = await fetch("https://api.asaas.com/v3/customers", {
@@ -204,6 +227,10 @@ async function getOrCreateAsaasCustomer(params: {
       body: JSON.stringify({
         name: params.name,
         email: params.email,
+        cpfCnpj: params.cpfCnpj,
+        mobilePhone: params.phone ?? undefined,
+        postalCode: params.postalCode ?? undefined,
+        addressNumber: params.addressNumber ?? undefined,
         externalReference: params.userId,
       }),
     });
