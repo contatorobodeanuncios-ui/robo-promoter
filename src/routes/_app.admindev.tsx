@@ -33,6 +33,7 @@ import {
   adminSetUserStatus,
   adminAdjustBalance,
   adminUpdateProfile,
+  adminUpdateCampaignMetrics,
   type AdminCampaignRow,
   type AdminClientRow,
 } from "@/lib/admin.functions";
@@ -131,6 +132,7 @@ function AdminDevPage() {
   });
 
   const [preview, setPreview] = useState<AdminCampaignRow | null>(null);
+  const [metricsTarget, setMetricsTarget] = useState<AdminCampaignRow | null>(null);
   const [apiKeySet, setApiKeySet] = useState(false);
   const [manualPixKey, setManualPixKey] = useState("");
   const [manualPixBeneficiary, setManualPixBeneficiary] = useState("");
@@ -747,6 +749,9 @@ function AdminDevPage() {
                               <Button variant="glass" size="sm" onClick={() => setPreview(c)} title="Pré-visualizar anúncio">
                                 <Eye className="h-3.5 w-3.5" /> Prévia
                               </Button>
+                              <Button variant="glass" size="sm" onClick={() => setMetricsTarget(c)} title="Editar métricas">
+                                <Pencil className="h-3.5 w-3.5" /> Métricas
+                              </Button>
                               <Button
                                 variant="neon"
                                 size="sm"
@@ -775,6 +780,7 @@ function AdminDevPage() {
       </Tabs>
 
       {preview && <FbPreview campaign={preview} onClose={() => setPreview(null)} />}
+      {metricsTarget && <EditMetricsDialog campaign={metricsTarget} onClose={() => setMetricsTarget(null)} />}
     </div>
   );
 }
@@ -1226,6 +1232,91 @@ function ProfileDialog({ client, onClose }: { client: AdminClientRow; onClose: (
             <Label className="text-xs">Telefone</Label>
             <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(00) 00000-0000" />
           </div>
+        </div>
+        <DialogFooter>
+          <Button variant="glass" size="sm" onClick={onClose}>Cancelar</Button>
+          <Button variant="neon" size="sm" disabled={mut.isPending} onClick={() => mut.mutate()}>
+            {mut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+            Salvar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditMetricsDialog({ campaign, onClose }: { campaign: AdminCampaignRow; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState({
+    spent: String(campaign.spent),
+    clicks: String(campaign.clicks),
+    impressions: String(campaign.impressions),
+    ctr: String(campaign.ctr),
+    cpc: String(campaign.cpc),
+    cpm: String(campaign.cpm),
+    frequency: String(campaign.frequency),
+    results: String(campaign.results),
+    revenue: String(campaign.revenue),
+    cost_per_result: String(campaign.cost_per_result),
+  });
+  const fn = useServerFn(adminUpdateCampaignMetrics);
+  const mut = useMutation({
+    mutationFn: () =>
+      fn({
+        data: {
+          id: campaign.id,
+          spent: Number(form.spent),
+          clicks: Math.round(Number(form.clicks)),
+          impressions: Math.round(Number(form.impressions)),
+          ctr: Number(form.ctr),
+          cpc: Number(form.cpc),
+          cpm: Number(form.cpm),
+          frequency: Number(form.frequency),
+          results: Math.round(Number(form.results)),
+          revenue: Number(form.revenue),
+          cost_per_result: Number(form.cost_per_result),
+        },
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-campaigns"] });
+      toast.success("Métricas atualizadas");
+      onClose();
+    },
+    onError: (e) => toast.error("Falha ao atualizar métricas", { description: String(e) }),
+  });
+
+  const field = (key: keyof typeof form, label: string) => (
+    <div className="space-y-1.5">
+      <Label className="text-xs">{label}</Label>
+      <Input
+        value={form[key]}
+        onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+        inputMode="decimal"
+      />
+    </div>
+  );
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Editar métricas — {campaign.name}</DialogTitle>
+          <DialogDescription>
+            Sobrescreve manualmente os números dessa campanha. Use com cuidado: a próxima sincronização
+            automática do Meta pode substituir esses valores de novo.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-3">
+          {field("spent", "Gasto (R$)")}
+          {field("clicks", "Cliques")}
+          {field("impressions", "Impressões")}
+          {field("ctr", "CTR (%)")}
+          {field("cpc", "CPC (R$)")}
+          {field("cpm", "CPM (R$)")}
+          {field("frequency", "Frequência")}
+          {field("results", "Resultados")}
+          {field("revenue", "Receita (R$)")}
+          {field("cost_per_result", "Custo por resultado (R$)")}
         </div>
         <DialogFooter>
           <Button variant="glass" size="sm" onClick={onClose}>Cancelar</Button>
