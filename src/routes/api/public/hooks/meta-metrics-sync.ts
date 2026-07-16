@@ -67,8 +67,10 @@ export const Route = createFileRoute("/api/public/hooks/meta-metrics-sync")({
             if (!c.meta_campaign_id) continue;
             const nowIso = new Date().toISOString();
             try {
-              // 1) Insights (métricas)
-              const insUrl = `https://graph.facebook.com/v20.0/${c.meta_campaign_id}/insights?fields=spend,clicks,impressions,ctr,cpc&access_token=${encodeURIComponent(token)}`;
+              // 1) Insights (métricas) — date_preset=maximum garante o total da vida inteira
+              // da campanha, não uma janela recente. Sem isso, o Meta usa o padrão dele
+              // (geralmente últimos ~28-30 dias), o que subestimaria campanhas mais antigas.
+              const insUrl = `https://graph.facebook.com/v20.0/${c.meta_campaign_id}/insights?fields=spend,clicks,impressions,ctr,cpc&date_preset=maximum&access_token=${encodeURIComponent(token)}`;
               const insRes = await fetch(insUrl);
               if (!insRes.ok) {
                 const errTxt = await insRes.text();
