@@ -657,6 +657,7 @@ function AdminDevPage() {
                       <th className="px-4 py-3">Status</th>
                       <th className="px-4 py-3">Datas</th>
                       <th className="px-4 py-3">ID da campanha no Meta</th>
+                      <th className="px-4 py-3">Sincronização</th>
                       <th className="px-4 py-3">Link cobrança</th>
                       <th className="px-4 py-3">Métricas Reais (Meta)</th>
                       <th className="px-4 py-3 text-right">Ações</th>
@@ -711,6 +712,9 @@ function AdminDevPage() {
                           </td>
                           <td className="px-4 py-3 min-w-[200px]">
                             <MetaCampaignIdCell id={c.id} value={c.meta_campaign_id} />
+                          </td>
+                          <td className="px-4 py-3 min-w-[150px]">
+                            <SyncIndicator campaign={c} />
                           </td>
                           <td className="px-4 py-3">
                             {c.invoice_url ? (
@@ -1420,6 +1424,51 @@ function PixAttemptRowItem({
           )}
         </pre>
       )}
+    </div>
+  );
+}
+
+type SyncState = "green" | "yellow" | "red";
+
+function computeSyncState(c: AdminCampaignRow): { state: SyncState; label: string } {
+  if (!c.meta_campaign_id) {
+    return { state: "red", label: "Sem vínculo com o Meta" };
+  }
+  if (c.metrics_last_error) {
+    return { state: "red", label: `Erro: ${c.metrics_last_error}` };
+  }
+  if (!c.metrics_last_synced_at) {
+    return { state: "yellow", label: "Vinculado, aguardando primeira sincronização" };
+  }
+  const hasRealData = c.spent > 0 || c.clicks > 0 || c.impressions > 0;
+  if (hasRealData) {
+    return { state: "green", label: "Sincronizado com dados reais do Meta" };
+  }
+  return { state: "yellow", label: "Sincronizado, mas ainda sem dados de entrega" };
+}
+
+function SyncIndicator({ campaign }: { campaign: AdminCampaignRow }) {
+  const { state, label } = computeSyncState(campaign);
+  const dotClass =
+    state === "green" ? "bg-success" : state === "yellow" ? "bg-warning" : "bg-destructive";
+  const textClass =
+    state === "green" ? "text-success" : state === "yellow" ? "text-warning" : "text-destructive";
+  return (
+    <div className="flex items-start gap-1.5" title={label}>
+      <span className={`mt-1 h-2 w-2 rounded-full shrink-0 ${dotClass}`} />
+      <div className="text-[10px] leading-tight">
+        <p className={`font-medium ${textClass}`}>
+          {state === "green" ? "Sincronizado" : state === "yellow" ? "Aguardando dados" : "Sem sincronizar"}
+        </p>
+        {campaign.metrics_last_synced_at && (
+          <p className="text-muted-foreground">
+            {new Date(campaign.metrics_last_synced_at).toLocaleString("pt-BR")}
+          </p>
+        )}
+        {campaign.meta_effective_status && (
+          <p className="text-muted-foreground">Meta: {campaign.meta_effective_status}</p>
+        )}
+      </div>
     </div>
   );
 }
