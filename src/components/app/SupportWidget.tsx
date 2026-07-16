@@ -16,6 +16,7 @@ export function SupportWidget() {
   const [open, setOpen] = useState(false);
   const [signed, setSigned] = useState(false);
   const [text, setText] = useState("");
+  const [hasUnread, setHasUnread] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const qc = useQueryClient();
 
@@ -29,13 +30,20 @@ export function SupportWidget() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
+  // Agora roda sempre que o usuário está logado, não só quando o chat está aberto —
+  // é o que permite saber se há mensagem não lida mesmo com o balão fechado.
   const convQuery = useQuery({
     queryKey: ["support-conv"],
     queryFn: () => openConv(),
-    enabled: open && signed,
+    enabled: signed,
     staleTime: 60_000,
   });
   const conversationId = convQuery.data?.id;
+
+  // Sincroniza o estado local de "não lido" com o que veio do servidor.
+  useEffect(() => {
+    if (convQuery.data) setHasUnread(!!convQuery.data.unread_by_client);
+  }, [convQuery.data]);
 
   const msgsQuery = useQuery({
     queryKey: ["support-msgs", conversationId],
@@ -43,7 +51,7 @@ export function SupportWidget() {
     enabled: !!conversationId && open,
   });
 
-  // Realtime: substitui polling anterior
+  // Realtime nas mensagens (só processa lista quando aberto)
   useEffect(() => {
     if (!conversationId || !open) return;
     const channel = supabase
@@ -61,12 +69,39 @@ export function SupportWidget() {
     };
   }, [conversationId, open, qc]);
 
+  // Realtime na própria conversa — funciona com o widget aberto OU fechado,
+  // é o que acende o badge quando o admin responde e o usuário não está com o chat aberto.
+  useEffect(() => {
+    if (!conversationId) return;
+    const channel = supabase
+      .channel(`support-conv-${conversationId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "support_conversations", filter: `id=eq.${conversationId}` },
+        (payload) => {
+          const row = payload.new as { unread_by_client?: boolean };
+          if (typeof row.unread_by_client === "boolean") {
+            setHasUnread(row.unread_by_client);
+          }
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [conversationId]);
 
   useEffect(() => {
     if (open && listRef.current) {
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
   }, [msgsQuery.data, open]);
+
+  // Ao abrir o chat, listMyMessages já marca unread_by_client=false no servidor —
+  // aqui só espelhamos isso localmente pra sumir o badge na hora, sem esperar o Realtime.
+  useEffect(() => {
+    if (open) setHasUnread(false);
+  }, [open]);
 
   const sendMut = useMutation({
     mutationFn: (content: string) =>
@@ -93,6 +128,9 @@ export function SupportWidget() {
           className="fixed bottom-20 right-4 z-40 md:bottom-6 md:right-6 h-14 w-14 rounded-full bg-gradient-to-br from-primary to-accent shadow-lg shadow-primary/40 hover:scale-105 transition-transform flex items-center justify-center"
         >
           <MessageCircle className="h-6 w-6 text-primary-foreground" />
+          {hasUnread && (
+            <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive border-2 border-background animate-pulse" />
+          )}
         </button>
       )}
 
