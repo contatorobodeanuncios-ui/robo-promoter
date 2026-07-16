@@ -464,6 +464,7 @@ export type Database = {
           admin_notes: string | null
           asaas_customer_id: string | null
           balance: number
+          cpf_cnpj: string | null
           created_at: string
           display_name: string | null
           email: string | null
@@ -479,6 +480,7 @@ export type Database = {
           admin_notes?: string | null
           asaas_customer_id?: string | null
           balance?: number
+          cpf_cnpj?: string | null
           created_at?: string
           display_name?: string | null
           email?: string | null
@@ -494,6 +496,7 @@ export type Database = {
           admin_notes?: string | null
           asaas_customer_id?: string | null
           balance?: number
+          cpf_cnpj?: string | null
           created_at?: string
           display_name?: string | null
           email?: string | null

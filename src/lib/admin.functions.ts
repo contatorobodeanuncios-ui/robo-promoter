@@ -175,14 +175,13 @@ export interface MetaAdAccountCampaign {
   name: string;
   status: string;
   effective_status: string;
-  already_linked_to: string | null; // nome da campanha do app que já usa esse ID, se houver
+  account_id: string;
+  account_name: string;
+  already_linked_to: string | null;
 }
 
-// Busca as campanhas que existem de verdade na conta de anúncios do Meta
-// (usa META_AD_ACCOUNT_ID + META_ACCESS_TOKEN, os mesmos já configurados
-// para a sincronização). Serve para o admin escolher e vincular sem
-// precisar copiar/colar o ID manualmente — e sem depender de nome bater
-// exatamente, já que quem escolhe é uma pessoa olhando a lista.
+// Busca as campanhas que existem de verdade nas contas de anúncios do Meta.
+// Retorna também o nome de cada conta para o admin distinguir facilmente.
 export const adminListMetaAdAccountCampaigns = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<MetaAdAccountCampaign[]> => {
@@ -192,30 +191,47 @@ export const adminListMetaAdAccountCampaigns = createServerFn({ method: "GET" })
     if (!token) throw new Error("META_ACCESS_TOKEN não configurado no servidor");
     if (!adAccountId) throw new Error("META_AD_ACCOUNT_ID não configurado no servidor");
 
-    // META_AD_ACCOUNT_ID pode conter várias contas separadas por vírgula
-    // (ex.: "act_123,act_456"). Tratamos como lista e agregamos as campanhas
-    // de todas as contas — a Graph API não aceita múltiplos IDs em uma única
-    // requisição /act_.../campaigns.
     const accountIds = adAccountId
       .split(",")
       .map((s) => s.trim().replace(/^act_/, ""))
       .filter((s) => s.length > 0);
     if (accountIds.length === 0) throw new Error("META_AD_ACCOUNT_ID vazio");
 
-    const all: Array<{ id: string; name: string; status: string; effective_status: string; account_id: string }> = [];
+    const all: Array<MetaAdAccountCampaign> = [];
     const errors: string[] = [];
     for (const acc of accountIds) {
+      let accountName = `act_${acc}`;
+      try {
+        const nameRes = await fetch(
+          `https://graph.facebook.com/v20.0/act_${acc}?fields=name&access_token=${encodeURIComponent(token)}`,
+        );
+        if (nameRes.ok) {
+          const nj = (await nameRes.json()) as { name?: string };
+          if (nj.name) accountName = nj.name;
+        }
+      } catch { /* mantém fallback */ }
+
       const url = `https://graph.facebook.com/v20.0/act_${acc}/campaigns?fields=id,name,status,effective_status&limit=100&access_token=${encodeURIComponent(token)}`;
       const res = await fetch(url);
       if (!res.ok) {
         const txt = await res.text();
-        errors.push(`act_${acc}: ${res.status} ${txt.slice(0, 200)}`);
+        errors.push(`${accountName} (act_${acc}): ${res.status} ${txt.slice(0, 200)}`);
         continue;
       }
       const json = (await res.json()) as {
         data?: Array<{ id: string; name: string; status: string; effective_status: string }>;
       };
-      for (const c of json.data ?? []) all.push({ ...c, account_id: acc });
+      for (const c of json.data ?? []) {
+        all.push({
+          id: c.id,
+          name: c.name,
+          status: c.status,
+          effective_status: c.effective_status,
+          account_id: acc,
+          account_name: accountName,
+          already_linked_to: null,
+        });
+      }
     }
     if (all.length === 0 && errors.length > 0) {
       throw new Error(`Meta API falhou em todas as contas: ${errors.join(" | ")}`);
@@ -227,15 +243,8 @@ export const adminListMetaAdAccountCampaigns = createServerFn({ method: "GET" })
       .select("name, meta_campaign_id")
       .not("meta_campaign_id", "is", null);
     const linkedMap = new Map((already ?? []).map((c) => [c.meta_campaign_id as string, c.name]));
-
-    return all.map((c) => ({
-      id: c.id,
-      name: `[${c.account_id}] ${c.name}`,
-      status: c.status,
-      effective_status: c.effective_status,
-      already_linked_to: linkedMap.get(c.id) ?? null,
-    }));
-
+    for (const c of all) c.already_linked_to = linkedMap.get(c.id) ?? null;
+    return all;
   });
 
 // Vincula manualmente o ID da campanha no Meta a uma campanha do sistema.
@@ -267,7 +276,75 @@ export const adminSetMetaCampaignId = createServerFn({ method: "POST" })
       target_id: data.id,
       details: { meta_campaign_id: value },
     });
-    return { ok: true, meta_campaign_id: value };
+
+    // Sincronização IMEDIATA das métricas da campanha recém-vinculada,
+    // sem esperar o próximo tick do cron. Se falhar, salvamos o erro na
+    // própria campanha e seguimos — o cron tenta de novo depois.
+    let synced = false;
+    let syncError: string | null = null;
+    if (value) {
+      const token = process.env.META_ACCESS_TOKEN;
+      if (!token) {
+        syncError = "META_ACCESS_TOKEN não configurado — métricas entrarão no próximo sync";
+      } else {
+        try {
+          const nowIso = new Date().toISOString();
+          const insUrl = `https://graph.facebook.com/v20.0/${value}/insights?fields=spend,clicks,impressions,ctr,cpc&date_preset=maximum&access_token=${encodeURIComponent(token)}`;
+          const stUrl = `https://graph.facebook.com/v20.0/${value}?fields=effective_status&access_token=${encodeURIComponent(token)}`;
+          const [insRes, stRes] = await Promise.all([fetch(insUrl), fetch(stUrl)]);
+          if (!insRes.ok) throw new Error(`Insights ${insRes.status}: ${(await insRes.text()).slice(0, 200)}`);
+          const insJson = (await insRes.json()) as { data?: Array<Record<string, string>> };
+          const stJson = (await stRes.json()) as { effective_status?: string };
+          const row = insJson.data?.[0];
+          const effective = stJson.effective_status ?? null;
+          const mapStatus = (eff: string | null): string | null => {
+            switch ((eff ?? "").toUpperCase()) {
+              case "ACTIVE": return "rodando";
+              case "PAUSED":
+              case "CAMPAIGN_PAUSED": return "paused";
+              case "ARCHIVED":
+              case "DELETED": return "encerrada_saldo_consumido";
+              case "PENDING_REVIEW":
+              case "IN_PROCESS":
+              case "WITH_ISSUES": return "em_revisao";
+              default: return null;
+            }
+          };
+          const spend = Number(row?.spend ?? 0);
+          const clicks = Number(row?.clicks ?? 0);
+          const impressions = Number(row?.impressions ?? 0);
+          const update: Record<string, unknown> = {
+            metrics_last_synced_at: nowIso,
+            metrics_last_error: null,
+            meta_effective_status: effective,
+            updated_at: nowIso,
+          };
+          if (row) {
+            update.spent = spend;
+            update.clicks = clicks;
+            update.impressions = impressions;
+            update.ctr = Number(row.ctr ?? 0);
+            update.cpc = Number(row.cpc ?? 0);
+          }
+          if (spend > 0 || clicks > 0 || impressions > 0) {
+            update.started_at = nowIso;
+            update.started_running_at = nowIso;
+          }
+          const mapped = mapStatus(effective);
+          if (mapped) update.status = mapped;
+          await supabaseAdmin.from("campaigns").update(update as never).eq("id", data.id);
+          synced = true;
+        } catch (e) {
+          syncError = e instanceof Error ? e.message : String(e);
+          await supabaseAdmin
+            .from("campaigns")
+            .update({ metrics_last_error: syncError, metrics_last_synced_at: new Date().toISOString() } as never)
+            .eq("id", data.id);
+        }
+      }
+    }
+
+    return { ok: true, meta_campaign_id: value, synced, syncError };
   });
 
 // Submits campaign through Meta Marketing API (skeleton).
