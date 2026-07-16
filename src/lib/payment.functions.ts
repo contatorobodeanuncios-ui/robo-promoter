@@ -145,21 +145,41 @@ async function logPixAttempt(row: {
   }
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// O Asaas às vezes ainda não terminou de gerar o QR Code no instante seguinte
+// à criação da cobrança (é assíncrono do lado deles). Sem retry, a primeira
+// tentativa pode falhar mesmo com a cobrança criada com sucesso, fazendo a
+// tela de pagamento mostrar erro para um pagamento que na verdade existe.
+// Tenta algumas vezes, com espera crescente, antes de desistir de verdade.
 async function fetchAsaasPixCode(
   paymentId: string,
   apiKey: string,
 ): Promise<{ payload: string | null; error: string | null; status: number }> {
-  try {
-    const resp = await fetch(`https://api.asaas.com/v3/payments/${paymentId}/pixQrCode`, {
-      method: "GET",
-      headers: asaasHeaders(apiKey),
-    });
-    const json = (await resp.json()) as AsaasPixQrCode;
-    if (json.payload) return { payload: json.payload, error: null, status: resp.status };
-    return { payload: null, error: extractAsaasError(json, resp.status), status: resp.status };
-  } catch (e) {
-    return { payload: null, error: String(e), status: 0 };
+  const maxAttempts = 4;
+  let lastError: string | null = null;
+  let lastStatus = 0;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const resp = await fetch(`https://api.asaas.com/v3/payments/${paymentId}/pixQrCode`, {
+        method: "GET",
+        headers: asaasHeaders(apiKey),
+      });
+      const json = (await resp.json()) as AsaasPixQrCode;
+      if (json.payload) return { payload: json.payload, error: null, status: resp.status };
+      lastError = extractAsaasError(json, resp.status);
+      lastStatus = resp.status;
+    } catch (e) {
+      lastError = String(e);
+      lastStatus = 0;
+    }
+    if (attempt < maxAttempts - 1) {
+      await sleep(1200 + attempt * 800); // 1.2s, 2.0s, 2.8s
+    }
   }
+  return { payload: null, error: lastError, status: lastStatus };
 }
 
 async function getOrCreateAsaasCustomer(params: {
