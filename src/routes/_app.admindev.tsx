@@ -34,8 +34,10 @@ import {
   adminAdjustBalance,
   adminUpdateProfile,
   adminUpdateCampaignMetrics,
+  adminListPixAttempts,
   type AdminCampaignRow,
   type AdminClientRow,
+  type PixAttemptRow,
 } from "@/lib/admin.functions";
 
 import {
@@ -374,6 +376,7 @@ function AdminDevPage() {
         {/* ============ Aba: Configurações Internas ============ */}
         <TabsContent value="settings" className="space-y-6 mt-6">
           <MetaHealthCard />
+          <PixAttemptsSection />
           <ExportCsvButton />
 
           {/* Mode toggle */}
@@ -1327,5 +1330,96 @@ function EditMetricsDialog({ campaign, onClose }: { campaign: AdminCampaignRow; 
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PixAttemptsSection() {
+  const fn = useServerFn(adminListPixAttempts);
+  const q = useQuery({
+    queryKey: ["admin-pix-attempts"],
+    queryFn: () => fn(),
+    refetchInterval: 30_000,
+  });
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const attempts = q.data ?? [];
+  const failedCount = attempts.filter((a) => !a.ok).length;
+
+  return (
+    <section className={`glass-strong rounded-2xl overflow-hidden border ${failedCount > 0 ? "border-destructive/40" : "border-white/5"}`}>
+      <div className="p-5 border-b border-white/5 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <AlertTriangle className={`h-5 w-5 ${failedCount > 0 ? "text-destructive" : "text-muted-foreground"}`} />
+          <h2 className="font-semibold">Falhas de integração Asaas</h2>
+        </div>
+        <span className={`text-xs px-2 py-1 rounded-full ${failedCount > 0 ? "bg-destructive/20 text-destructive" : "bg-success/20 text-success"}`}>
+          {failedCount > 0 ? `${failedCount} falha(s) recente(s)` : "Sem falhas recentes"}
+        </span>
+      </div>
+      {q.isLoading ? (
+        <div className="p-8 text-center text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin mx-auto" /></div>
+      ) : !attempts.length ? (
+        <div className="p-8 text-center text-sm text-muted-foreground">Nenhuma tentativa registrada ainda.</div>
+      ) : (
+        <div className="divide-y divide-white/5 max-h-[420px] overflow-y-auto">
+          {attempts.map((a) => (
+            <PixAttemptRowItem
+              key={a.id}
+              attempt={a}
+              expanded={expanded === a.id}
+              onToggle={() => setExpanded((cur) => (cur === a.id ? null : a.id))}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PixAttemptRowItem({
+  attempt,
+  expanded,
+  onToggle,
+}: {
+  attempt: PixAttemptRow;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="p-4">
+      <button type="button" onClick={onToggle} className="w-full flex flex-wrap items-center justify-between gap-3 text-left">
+        <div className="min-w-0">
+          <p className="text-xs text-muted-foreground">
+            {new Date(attempt.created_at).toLocaleString("pt-BR")} · {attempt.user_id.slice(0, 8)}
+            {attempt.campaign_id ? ` · campanha ${attempt.campaign_id.slice(0, 8)}` : " · saldo do app"}
+          </p>
+          <p className="text-sm font-medium mt-0.5">
+            {attempt.amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+            {attempt.http_status ? ` · HTTP ${attempt.http_status}` : ""}
+          </p>
+          {!attempt.ok && attempt.error_message && (
+            <p className="text-xs text-destructive mt-1 truncate max-w-md">{attempt.error_message}</p>
+          )}
+        </div>
+        <span className={`text-[11px] px-2 py-1 rounded-full border shrink-0 ${
+          attempt.ok ? "border-success/40 text-success bg-success/10" : "border-destructive/40 text-destructive bg-destructive/10"
+        }`}>
+          {attempt.ok ? "Sucesso" : "Falha"}
+        </span>
+      </button>
+      {expanded && (
+        <pre className="mt-3 text-[10px] bg-background/60 rounded-lg p-3 overflow-x-auto border border-white/5">
+          {JSON.stringify(
+            {
+              asaas_customer_id: attempt.asaas_customer_id,
+              asaas_payment_id: attempt.asaas_payment_id,
+              raw_payload: attempt.raw_payload,
+            },
+            null,
+            2,
+          )}
+        </pre>
+      )}
+    </div>
   );
 }
