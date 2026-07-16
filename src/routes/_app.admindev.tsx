@@ -49,6 +49,7 @@ import {
   adminApprovePayment,
   adminRejectPayment,
 } from "@/lib/payment.functions";
+import { adminListConversations } from "@/lib/support.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { Shield, Zap, Hand, Eye, X, Rocket, Loader2, Link2, Check, Ban, CreditCard, AlertTriangle, Trash2, PowerOff, UserPlus, Copy, Settings, Users, Megaphone, Wallet, Pencil, UserCheck } from "lucide-react";
 
@@ -263,7 +264,10 @@ function AdminDevPage() {
         </div>
         <nav className="flex flex-wrap gap-2">
           <Link to="/admin-exec" className="text-xs px-3 py-2 rounded-lg glass hover:bg-white/5">📊 Dashboard Executivo</Link>
-          <Link to="/admin-support" className="text-xs px-3 py-2 rounded-lg glass hover:bg-white/5">💬 Suporte</Link>
+          <Link to="/admin-support" className="text-xs px-3 py-2 rounded-lg glass hover:bg-white/5 relative">
+            💬 Suporte
+            <SupportUnreadBadge />
+          </Link>
           <Link to="/admin-audit" className="text-xs px-3 py-2 rounded-lg glass hover:bg-white/5">📜 Auditoria</Link>
         </nav>
       </header>
@@ -1470,5 +1474,38 @@ function SyncIndicator({ campaign }: { campaign: AdminCampaignRow }) {
         )}
       </div>
     </div>
+  );
+}
+
+function SupportUnreadBadge() {
+  const qc = useQueryClient();
+  const fn = useServerFn(adminListConversations);
+  const q = useQuery({
+    queryKey: ["admin-support-unread-count"],
+    queryFn: () => fn(),
+    refetchInterval: 20_000,
+  });
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("admindev-support-badge")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "support_conversations" },
+        () => qc.invalidateQueries({ queryKey: ["admin-support-unread-count"] }),
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [qc]);
+
+  const count = (q.data ?? []).filter((c) => c.unread_by_admin).length;
+  if (!count) return null;
+
+  return (
+    <span className="absolute -top-1.5 -right-1.5 h-4 min-w-4 px-1 rounded-full bg-destructive text-[9px] font-bold text-white flex items-center justify-center">
+      {count > 9 ? "9+" : count}
+    </span>
   );
 }
