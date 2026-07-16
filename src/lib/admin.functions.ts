@@ -847,7 +847,7 @@ export const adminUpdateProfile = createServerFn({ method: "POST" })
       Object.entries(rest).filter(([, v]) => v !== undefined),
     );
     if (Object.keys(update).length === 0) return { ok: true };
-    const { error } = await admin.from("profiles").update(update).eq("id", user_id);
+    const { error } = await admin.from("profiles").update(update as never).eq("id", user_id);
     if (error) throw new Error(error.message);
     await admin.from("admin_audit_log").insert({
       admin_email: (context.claims as { email?: string })?.email ?? "",
