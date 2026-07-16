@@ -47,14 +47,14 @@ export const getOrCreateMyConversation = createServerFn({ method: "POST" })
       .order("last_message_at", { ascending: false, nullsFirst: false })
       .limit(1)
       .maybeSingle();
-    if (existing) return { id: existing.id };
+    if (existing) return { id: existing.id, unread_by_client: existing.unread_by_client };
     const { data, error } = await sb
       .from("support_conversations")
       .insert({ user_id: context.userId, status: "open" })
-      .select("id")
+      .select("id, unread_by_client")
       .single();
     if (error) throw new Error(error.message);
-    return { id: data.id };
+    return { id: data.id, unread_by_client: data.unread_by_client };
   });
 
 export const listMyMessages = createServerFn({ method: "GET" })
@@ -326,4 +326,3 @@ export const getExecDashboard = createServerFn({ method: "POST" })
       period_to: toIso,
     };
   });
-
