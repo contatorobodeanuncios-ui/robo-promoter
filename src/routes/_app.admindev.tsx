@@ -1542,6 +1542,7 @@ function MetaCampaignPickerDialog({
 }) {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
+  const [accountFilter, setAccountFilter] = useState<string>("all");
   const listFn = useServerFn(adminListMetaAdAccountCampaigns);
   const linkFn = useServerFn(adminSetMetaCampaignId);
 
@@ -1554,17 +1555,32 @@ function MetaCampaignPickerDialog({
   const linkMut = useMutation({
     mutationFn: (metaCampaignId: string) =>
       linkFn({ data: { id: campaignId, meta_campaign_id: metaCampaignId } }),
-    onSuccess: () => {
+    onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["admin-campaigns"] });
-      toast.success("Campanha vinculada — entra no próximo sync");
+      if (r?.synced) toast.success("Vinculada e métricas sincronizadas agora");
+      else if (r?.syncError) toast.warning("Vinculada. Sync inicial falhou: " + r.syncError);
+      else toast.success("Campanha vinculada");
       onClose();
     },
     onError: (e) => toast.error("Falha ao vincular", { description: String(e) }),
   });
 
-  const filtered = (q.data ?? []).filter((c) =>
-    c.name.toLowerCase().includes(search.trim().toLowerCase()),
+  const accounts = Array.from(
+    new Map(
+      (q.data ?? []).map((c) => [c.account_id, c.account_name]),
+    ).entries(),
   );
+
+  const term = search.trim().toLowerCase();
+  const filtered = (q.data ?? []).filter((c) => {
+    if (accountFilter !== "all" && c.account_id !== accountFilter) return false;
+    if (!term) return true;
+    return (
+      c.name.toLowerCase().includes(term) ||
+      c.account_name.toLowerCase().includes(term) ||
+      c.id.includes(term)
+    );
+  });
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -1572,13 +1588,49 @@ function MetaCampaignPickerDialog({
         <DialogHeader>
           <DialogTitle>Buscar campanha no Meta — {campaignName}</DialogTitle>
           <DialogDescription>
-            Lista as campanhas reais da sua conta de anúncios conectada. Escolha a que corresponde
-            a este anúncio do app para vincular automaticamente.
+            Escolha primeiro a conta de anúncios e depois a campanha real dela.
+            A sincronização das métricas roda imediatamente após vincular.
           </DialogDescription>
         </DialogHeader>
 
+        {accounts.length > 0 && (
+          <div className="space-y-1.5">
+            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+              Conta de anúncios ({accounts.length})
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => setAccountFilter("all")}
+                className={`px-2.5 py-1 rounded-md text-[11px] border transition ${
+                  accountFilter === "all"
+                    ? "border-primary/60 bg-primary/10 text-primary"
+                    : "border-white/10 bg-background/30 text-muted-foreground hover:border-white/20"
+                }`}
+              >
+                Todas
+              </button>
+              {accounts.map(([id, name]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setAccountFilter(id)}
+                  className={`px-2.5 py-1 rounded-md text-[11px] border transition ${
+                    accountFilter === id
+                      ? "border-primary/60 bg-primary/10 text-primary"
+                      : "border-white/10 bg-background/30 text-muted-foreground hover:border-white/20"
+                  }`}
+                  title={`act_${id}`}
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <Input
-          placeholder="Filtrar pelo nome..."
+          placeholder="Filtrar por nome da campanha, conta ou ID..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -1594,7 +1646,7 @@ function MetaCampaignPickerDialog({
             </div>
           ) : filtered.length === 0 ? (
             <div className="p-4 text-xs text-muted-foreground text-center">
-              Nenhuma campanha encontrada{search ? " para esse filtro" : " nessa conta de anúncios"}.
+              Nenhuma campanha encontrada{search || accountFilter !== "all" ? " para esse filtro" : ""}.
             </div>
           ) : (
             filtered.map((c: MetaAdAccountCampaign) => (
@@ -1606,6 +1658,9 @@ function MetaCampaignPickerDialog({
                 className="w-full text-left p-2.5 rounded-lg border border-white/10 hover:border-primary/40 hover:bg-white/5 transition flex items-center justify-between gap-2"
               >
                 <div className="min-w-0">
+                  <p className="text-[10px] text-primary/80 font-medium truncate">
+                    {c.account_name}
+                  </p>
                   <p className="text-sm font-medium truncate">{c.name}</p>
                   <p className="text-[10px] text-muted-foreground font-mono">{c.id} · {c.effective_status}</p>
                   {c.already_linked_to && (
