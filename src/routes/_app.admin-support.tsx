@@ -126,6 +126,7 @@ function SupportAdminPage() {
   });
 
   const filteredClients = (clients.data ?? []).filter((c) => {
+    if (c.status === "banned") return false;
     const q = clientFilter.trim().toLowerCase();
     if (!q) return true;
     return (
