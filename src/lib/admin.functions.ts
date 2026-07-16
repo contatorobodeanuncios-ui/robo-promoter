@@ -175,14 +175,13 @@ export interface MetaAdAccountCampaign {
   name: string;
   status: string;
   effective_status: string;
-  already_linked_to: string | null; // nome da campanha do app que já usa esse ID, se houver
+  account_id: string;
+  account_name: string;
+  already_linked_to: string | null;
 }
 
-// Busca as campanhas que existem de verdade na conta de anúncios do Meta
-// (usa META_AD_ACCOUNT_ID + META_ACCESS_TOKEN, os mesmos já configurados
-// para a sincronização). Serve para o admin escolher e vincular sem
-// precisar copiar/colar o ID manualmente — e sem depender de nome bater
-// exatamente, já que quem escolhe é uma pessoa olhando a lista.
+// Busca as campanhas que existem de verdade nas contas de anúncios do Meta.
+// Retorna também o nome de cada conta para o admin distinguir facilmente.
 export const adminListMetaAdAccountCampaigns = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<MetaAdAccountCampaign[]> => {
@@ -192,30 +191,47 @@ export const adminListMetaAdAccountCampaigns = createServerFn({ method: "GET" })
     if (!token) throw new Error("META_ACCESS_TOKEN não configurado no servidor");
     if (!adAccountId) throw new Error("META_AD_ACCOUNT_ID não configurado no servidor");
 
-    // META_AD_ACCOUNT_ID pode conter várias contas separadas por vírgula
-    // (ex.: "act_123,act_456"). Tratamos como lista e agregamos as campanhas
-    // de todas as contas — a Graph API não aceita múltiplos IDs em uma única
-    // requisição /act_.../campaigns.
     const accountIds = adAccountId
       .split(",")
       .map((s) => s.trim().replace(/^act_/, ""))
       .filter((s) => s.length > 0);
     if (accountIds.length === 0) throw new Error("META_AD_ACCOUNT_ID vazio");
 
-    const all: Array<{ id: string; name: string; status: string; effective_status: string; account_id: string }> = [];
+    const all: Array<MetaAdAccountCampaign> = [];
     const errors: string[] = [];
     for (const acc of accountIds) {
+      let accountName = `act_${acc}`;
+      try {
+        const nameRes = await fetch(
+          `https://graph.facebook.com/v20.0/act_${acc}?fields=name&access_token=${encodeURIComponent(token)}`,
+        );
+        if (nameRes.ok) {
+          const nj = (await nameRes.json()) as { name?: string };
+          if (nj.name) accountName = nj.name;
+        }
+      } catch { /* mantém fallback */ }
+
       const url = `https://graph.facebook.com/v20.0/act_${acc}/campaigns?fields=id,name,status,effective_status&limit=100&access_token=${encodeURIComponent(token)}`;
       const res = await fetch(url);
       if (!res.ok) {
         const txt = await res.text();
-        errors.push(`act_${acc}: ${res.status} ${txt.slice(0, 200)}`);
+        errors.push(`${accountName} (act_${acc}): ${res.status} ${txt.slice(0, 200)}`);
         continue;
       }
       const json = (await res.json()) as {
         data?: Array<{ id: string; name: string; status: string; effective_status: string }>;
       };
-      for (const c of json.data ?? []) all.push({ ...c, account_id: acc });
+      for (const c of json.data ?? []) {
+        all.push({
+          id: c.id,
+          name: c.name,
+          status: c.status,
+          effective_status: c.effective_status,
+          account_id: acc,
+          account_name: accountName,
+          already_linked_to: null,
+        });
+      }
     }
     if (all.length === 0 && errors.length > 0) {
       throw new Error(`Meta API falhou em todas as contas: ${errors.join(" | ")}`);
@@ -227,15 +243,8 @@ export const adminListMetaAdAccountCampaigns = createServerFn({ method: "GET" })
       .select("name, meta_campaign_id")
       .not("meta_campaign_id", "is", null);
     const linkedMap = new Map((already ?? []).map((c) => [c.meta_campaign_id as string, c.name]));
-
-    return all.map((c) => ({
-      id: c.id,
-      name: `[${c.account_id}] ${c.name}`,
-      status: c.status,
-      effective_status: c.effective_status,
-      already_linked_to: linkedMap.get(c.id) ?? null,
-    }));
-
+    for (const c of all) c.already_linked_to = linkedMap.get(c.id) ?? null;
+    return all;
   });
 
 // Vincula manualmente o ID da campanha no Meta a uma campanha do sistema.
