@@ -170,6 +170,55 @@ export const adminSetCampaignStatus = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export interface MetaAdAccountCampaign {
+  id: string;
+  name: string;
+  status: string;
+  effective_status: string;
+  already_linked_to: string | null; // nome da campanha do app que já usa esse ID, se houver
+}
+
+// Busca as campanhas que existem de verdade na conta de anúncios do Meta
+// (usa META_AD_ACCOUNT_ID + META_ACCESS_TOKEN, os mesmos já configurados
+// para a sincronização). Serve para o admin escolher e vincular sem
+// precisar copiar/colar o ID manualmente — e sem depender de nome bater
+// exatamente, já que quem escolhe é uma pessoa olhando a lista.
+export const adminListMetaAdAccountCampaigns = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<MetaAdAccountCampaign[]> => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const token = process.env.META_ACCESS_TOKEN;
+    const adAccountId = process.env.META_AD_ACCOUNT_ID;
+    if (!token) throw new Error("META_ACCESS_TOKEN não configurado no servidor");
+    if (!adAccountId) throw new Error("META_AD_ACCOUNT_ID não configurado no servidor");
+
+    const cleanAccountId = adAccountId.replace(/^act_/, "");
+    const url = `https://graph.facebook.com/v20.0/act_${cleanAccountId}/campaigns?fields=id,name,status,effective_status&limit=100&access_token=${encodeURIComponent(token)}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`Meta API ${res.status}: ${txt.slice(0, 300)}`);
+    }
+    const json = (await res.json()) as {
+      data?: Array<{ id: string; name: string; status: string; effective_status: string }>;
+    };
+
+    const admin = await getSupabaseAdmin();
+    const { data: already } = await admin
+      .from("campaigns")
+      .select("name, meta_campaign_id")
+      .not("meta_campaign_id", "is", null);
+    const linkedMap = new Map((already ?? []).map((c) => [c.meta_campaign_id as string, c.name]));
+
+    return (json.data ?? []).map((c) => ({
+      id: c.id,
+      name: c.name,
+      status: c.status,
+      effective_status: c.effective_status,
+      already_linked_to: linkedMap.get(c.id) ?? null,
+    }));
+  });
+
 // Vincula manualmente o ID da campanha no Meta a uma campanha do sistema.
 // Após salvo, o cron meta-metrics-sync passa a sincronizar as métricas reais.
 export const adminSetMetaCampaignId = createServerFn({ method: "POST" })
