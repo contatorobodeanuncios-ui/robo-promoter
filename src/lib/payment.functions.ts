@@ -303,6 +303,76 @@ async function createAsaasCharge(params: {
   }
 }
 
+function digits(s: string | null | undefined): string {
+  return (s ?? "").replace(/\D/g, "");
+}
+
+function isValidCpfCnpj(v: string): boolean {
+  const d = digits(v);
+  return d.length === 11 || d.length === 14;
+}
+
+interface BillingProfile {
+  cpf_cnpj: string | null;
+  display_name: string | null;
+  email: string | null;
+  phone: string | null;
+  postal_code: string | null;
+  address_number: string | null;
+}
+
+export const getBillingProfile = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<BillingProfile> => {
+    const admin = await getAdmin();
+    const { data } = await admin
+      .from("profiles")
+      .select("cpf_cnpj, display_name, email, phone")
+      .eq("id", context.userId)
+      .maybeSingle();
+    return {
+      cpf_cnpj: (data as { cpf_cnpj?: string | null } | null)?.cpf_cnpj ?? null,
+      display_name: data?.display_name ?? null,
+      email:
+        data?.email ??
+        (context.claims as { email?: string } | undefined)?.email ??
+        null,
+      phone: data?.phone ?? null,
+      postal_code: null,
+      address_number: null,
+    };
+  });
+
+export const setBillingCpfCnpj = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      cpf_cnpj: z.string().trim().min(11).max(20),
+      display_name: z.string().trim().min(2).max(120).optional(),
+      phone: z.string().trim().max(30).optional(),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    if (!isValidCpfCnpj(data.cpf_cnpj)) throw new Error("CPF/CNPJ inválido — informe apenas números (11 para CPF, 14 para CNPJ).");
+    const admin = await getAdmin();
+    const patch: Record<string, unknown> = { cpf_cnpj: digits(data.cpf_cnpj) };
+    if (data.display_name) patch.display_name = data.display_name;
+    if (data.phone) patch.phone = digits(data.phone);
+    const { error } = await admin.from("profiles").update(patch as never).eq("id", context.userId);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+const cardInputSchema = z.object({
+  holderName: z.string().trim().min(2).max(120),
+  number: z.string().trim().min(12).max(25),
+  expiryMonth: z.string().trim().regex(/^\d{2}$/),
+  expiryYear: z.string().trim().regex(/^\d{2,4}$/),
+  ccv: z.string().trim().regex(/^\d{3,4}$/),
+  postalCode: z.string().trim().min(8).max(9),
+  addressNumber: z.string().trim().min(1).max(20),
+});
+
 export const createPaymentRequest = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
@@ -310,29 +380,74 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
       amount: z.number().int().min(20).max(100000),
       campaignId: z.string().uuid().optional(),
       billingType: z.enum(["PIX", "CREDIT_CARD"]).default("PIX"),
+      card: cardInputSchema.optional(),
     }).parse(d),
   )
   .handler(async ({ data, context }) => {
     const admin = await getAdmin();
+
+    // 1) Perfil de cobrança — CPF/CNPJ é obrigatório para o Asaas.
+    const { data: prof } = await admin
+      .from("profiles")
+      .select("cpf_cnpj, display_name, email, phone")
+      .eq("id", context.userId)
+      .maybeSingle();
+    const cpfCnpj = digits((prof as { cpf_cnpj?: string | null } | null)?.cpf_cnpj ?? "");
+    if (!cpfCnpj) {
+      return {
+        id: null,
+        amount: data.amount,
+        needsCpf: true as const,
+        pixCode: null,
+        invoiceUrl: null,
+        fallbackPix: null,
+        configured: false,
+        via: "none" as const,
+        billingType: data.billingType,
+        errorMessage: "Informe seu CPF ou CNPJ antes de gerar a cobrança.",
+      };
+    }
+    const email =
+      prof?.email ??
+      (context.claims as { email?: string } | undefined)?.email ??
+      `user-${context.userId}@robolucro.app`;
+    const name = prof?.display_name ?? email.split("@")[0] ?? "Cliente";
+    const phone = prof?.phone ?? null;
+
+    // Se cartão foi escolhido, exige os dados do cartão inline (no app).
+    if (data.billingType === "CREDIT_CARD" && !data.card) {
+      return {
+        id: null,
+        amount: data.amount,
+        needsCard: true as const,
+        needsCpf: false as const,
+        pixCode: null,
+        invoiceUrl: null,
+        fallbackPix: null,
+        configured: false,
+        via: "none" as const,
+        billingType: data.billingType,
+        errorMessage: null,
+      };
+    }
+
     const { data: settingsRows } = await admin
       .from("app_settings")
       .select("key, value")
       .in("key", ["manual_pix_config"]);
     const settingsMap = new Map((settingsRows ?? []).map((r) => [r.key as string, r.value as unknown]));
     const manualPix = (settingsMap.get("manual_pix_config") as ManualPixConfig | undefined) ?? {
-      key: "",
-      beneficiary: "",
-      enabled: false,
+      key: "", beneficiary: "", enabled: false,
     };
 
     const paymentType: "campaign_budget" | "balance_topup" = data.campaignId
       ? "campaign_budget"
       : "balance_topup";
 
-    // Reutiliza uma solicitação pendente com o mesmo valor + campanha se existir.
+    // Reutiliza uma solicitação pendente com o mesmo valor + campanha se existir (apenas PIX).
     let prId: string | null = null;
     let existingPaymentId: string | null = null;
-    if (data.campaignId) {
+    if (data.campaignId && data.billingType === "PIX") {
       const { data: reuse } = await admin
         .from("payment_requests")
         .select("id, asaas_payment_id, amount")
@@ -377,12 +492,12 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
     let apiError: string | null = null;
     let httpStatus: number | null = null;
     let via: "api" | "fallback" | "none" = "none";
+    let cardCharged = false;
 
     const apiKey = process.env.ASAAS_API_KEY;
     if (!apiKey) {
       apiError = "ASAAS_API_KEY não configurada no servidor";
     } else {
-      // Se já temos payment_id salvo e é PIX, tenta só buscar o QR de novo.
       if (existingPaymentId && data.billingType === "PIX") {
         const qr = await fetchAsaasPixCode(existingPaymentId, apiKey);
         pixCode = qr.payload;
@@ -390,21 +505,92 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
         httpStatus = qr.status;
         asaasPaymentId = existingPaymentId;
       }
-      if (!pixCode && !invoiceUrl) {
-        const email =
-          (context.claims as { email?: string } | undefined)?.email ??
-          `user-${context.userId}@robolucro.app`;
-        const name = email.split("@")[0] || "Cliente";
+      if (!pixCode && !invoiceUrl && !cardCharged) {
         const cust = await getOrCreateAsaasCustomer({
           apiKey,
           userId: context.userId,
           email,
           name,
+          cpfCnpj,
+          phone,
+          postalCode: data.card?.postalCode ?? null,
+          addressNumber: data.card?.addressNumber ?? null,
         });
         asaasCustomerId = cust.id;
         if (!cust.id) {
           apiError = cust.error ?? "Falha ao criar cliente Asaas";
+        } else if (data.billingType === "CREDIT_CARD" && data.card) {
+          // Cobrança de cartão diretamente no app — sem redirecionar para o site do Asaas.
+          try {
+            const due = new Date(Date.now() + 3 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+            const body = {
+              customer: cust.id,
+              billingType: "CREDIT_CARD",
+              value: data.amount,
+              dueDate: due,
+              externalReference,
+              description: data.campaignId
+                ? `Campanha PIX dedicado — ${data.campaignId}`
+                : `Recarga de saldo — Robô de Lucro`,
+              creditCard: {
+                holderName: data.card.holderName,
+                number: digits(data.card.number),
+                expiryMonth: data.card.expiryMonth,
+                expiryYear: data.card.expiryYear.length === 2 ? `20${data.card.expiryYear}` : data.card.expiryYear,
+                ccv: data.card.ccv,
+              },
+              creditCardHolderInfo: {
+                name,
+                email,
+                cpfCnpj,
+                postalCode: digits(data.card.postalCode),
+                addressNumber: data.card.addressNumber,
+                phone: phone ? digits(phone) : undefined,
+              },
+              remoteIp: "127.0.0.1",
+            };
+            const resp = await fetch("https://api.asaas.com/v3/payments", {
+              method: "POST",
+              headers: asaasHeaders(apiKey, true),
+              body: JSON.stringify(body),
+            });
+            const json = (await resp.json()) as { id?: string; status?: string };
+            httpStatus = resp.status;
+            if (!json.id) {
+              apiError = extractAsaasError(json, resp.status);
+            } else {
+              asaasPaymentId = json.id;
+              cardCharged = true;
+              const approved =
+                json.status === "CONFIRMED" ||
+                json.status === "RECEIVED" ||
+                json.status === "RECEIVED_IN_CASH";
+              if (approved) {
+                // Marca como pago já e credita saldo se for topup.
+                await admin
+                  .from("payment_requests")
+                  .update({
+                    status: "paid",
+                    approved_at: new Date().toISOString(),
+                    asaas_payment_id: json.id,
+                  } as never)
+                  .eq("id", prId);
+                if (!data.campaignId) {
+                  const { data: p } = await admin
+                    .from("profiles")
+                    .select("balance")
+                    .eq("id", context.userId)
+                    .maybeSingle();
+                  const next = Number((Number(p?.balance ?? 0) + data.amount).toFixed(2));
+                  await admin.from("profiles").update({ balance: next } as never).eq("id", context.userId);
+                }
+              }
+            }
+          } catch (e) {
+            apiError = String(e);
+          }
         } else {
+          // PIX
           const charge = await createAsaasCharge({
             apiKey,
             customerId: cust.id,
@@ -413,7 +599,7 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
             description: data.campaignId
               ? `Campanha PIX dedicado — ${data.campaignId}`
               : `Recarga de saldo — Robô de Lucro`,
-            billingType: data.billingType,
+            billingType: "PIX",
           });
           asaasPaymentId = charge.id;
           invoiceUrl = charge.invoiceUrl;
@@ -422,7 +608,7 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
           httpStatus = charge.status;
         }
       }
-      if (pixCode || invoiceUrl) {
+      if (pixCode || invoiceUrl || cardCharged) {
         via = "api";
         apiError = null;
         await admin
@@ -441,7 +627,6 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
       }
     }
 
-    // Registra a tentativa (sucesso ou falha) para auditoria.
     await logPixAttempt({
       payment_request_id: prId,
       user_id: context.userId,
@@ -450,14 +635,13 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
       asaas_customer_id: asaasCustomerId,
       asaas_payment_id: asaasPaymentId,
       http_status: httpStatus,
-      ok: !!(pixCode || invoiceUrl),
-      error_message: pixCode || invoiceUrl ? null : apiError,
-      raw_payload: { billingType: data.billingType, via, type: paymentType },
+      ok: !!(pixCode || invoiceUrl || cardCharged),
+      error_message: pixCode || invoiceUrl || cardCharged ? null : apiError,
+      raw_payload: { billingType: data.billingType, via, type: paymentType, cardCharged },
     });
 
-    // Fallback: chave PIX manual configurada pelo admin.
     let fallbackPix: { key: string; beneficiary: string } | null = null;
-    if (!pixCode && !invoiceUrl && manualPix.enabled && manualPix.key.trim()) {
+    if (!pixCode && !invoiceUrl && !cardCharged && manualPix.enabled && manualPix.key.trim()) {
       fallbackPix = { key: manualPix.key.trim(), beneficiary: manualPix.beneficiary.trim() };
       via = "fallback";
     }
@@ -465,13 +649,16 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
     return {
       id: prId,
       amount: data.amount,
+      needsCpf: false as const,
+      needsCard: false as const,
       pixCode,
-      invoiceUrl,
+      invoiceUrl: cardCharged ? null : invoiceUrl,
+      cardCharged,
       fallbackPix,
-      configured: !!(pixCode || invoiceUrl || fallbackPix),
+      configured: !!(pixCode || invoiceUrl || fallbackPix || cardCharged),
       via,
       billingType: data.billingType,
-      errorMessage: pixCode || invoiceUrl ? null : apiError,
+      errorMessage: pixCode || invoiceUrl || cardCharged ? null : apiError,
     };
   });
 
