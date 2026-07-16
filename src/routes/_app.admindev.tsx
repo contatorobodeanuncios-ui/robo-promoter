@@ -35,9 +35,11 @@ import {
   adminUpdateProfile,
   adminUpdateCampaignMetrics,
   adminListPixAttempts,
+  adminListMetaAdAccountCampaigns,
   type AdminCampaignRow,
   type AdminClientRow,
   type PixAttemptRow,
+  type MetaAdAccountCampaign,
 } from "@/lib/admin.functions";
 
 import {
@@ -714,8 +716,9 @@ function AdminDevPage() {
                             <div>Pausada: <span className="text-foreground">{fmtDate(c.paused_at)}</span></div>
                             <div>Encerrada: <span className="text-foreground">{fmtDate(c.ended_at)}</span></div>
                           </td>
-                          <td className="px-4 py-3 min-w-[200px]">
+                          <td className="px-4 py-3 min-w-[240px] space-y-1">
                             <MetaCampaignIdCell id={c.id} value={c.meta_campaign_id} />
+                            <MetaCampaignPickerButton campaignId={c.id} campaignName={c.name} />
                           </td>
                           <td className="px-4 py-3 min-w-[150px]">
                             <SyncIndicator campaign={c} />
@@ -1507,5 +1510,124 @@ function SupportUnreadBadge() {
     <span className="absolute -top-1.5 -right-1.5 h-4 min-w-4 px-1 rounded-full bg-destructive text-[9px] font-bold text-white flex items-center justify-center">
       {count > 9 ? "9+" : count}
     </span>
+  );
+}
+
+function MetaCampaignPickerButton({ campaignId, campaignName }: { campaignId: string; campaignName: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button variant="glass" size="sm" className="h-7 text-[11px] w-full" onClick={() => setOpen(true)}>
+        Buscar no Meta
+      </Button>
+      {open && (
+        <MetaCampaignPickerDialog
+          campaignId={campaignId}
+          campaignName={campaignName}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
+function MetaCampaignPickerDialog({
+  campaignId,
+  campaignName,
+  onClose,
+}: {
+  campaignId: string;
+  campaignName: string;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const [search, setSearch] = useState("");
+  const listFn = useServerFn(adminListMetaAdAccountCampaigns);
+  const linkFn = useServerFn(adminSetMetaCampaignId);
+
+  const q = useQuery({
+    queryKey: ["meta-ad-account-campaigns"],
+    queryFn: () => listFn(),
+    retry: false,
+  });
+
+  const linkMut = useMutation({
+    mutationFn: (metaCampaignId: string) =>
+      linkFn({ data: { id: campaignId, meta_campaign_id: metaCampaignId } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-campaigns"] });
+      toast.success("Campanha vinculada — entra no próximo sync");
+      onClose();
+    },
+    onError: (e) => toast.error("Falha ao vincular", { description: String(e) }),
+  });
+
+  const filtered = (q.data ?? []).filter((c) =>
+    c.name.toLowerCase().includes(search.trim().toLowerCase()),
+  );
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Buscar campanha no Meta — {campaignName}</DialogTitle>
+          <DialogDescription>
+            Lista as campanhas reais da sua conta de anúncios conectada. Escolha a que corresponde
+            a este anúncio do app para vincular automaticamente.
+          </DialogDescription>
+        </DialogHeader>
+
+        <Input
+          placeholder="Filtrar pelo nome..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+
+        <div className="max-h-[360px] overflow-y-auto space-y-1.5">
+          {q.isLoading ? (
+            <div className="p-6 text-center text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin mx-auto" />
+            </div>
+          ) : q.isError ? (
+            <div className="p-4 text-xs text-destructive">
+              Não foi possível buscar a lista: {q.error instanceof Error ? q.error.message : String(q.error)}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="p-4 text-xs text-muted-foreground text-center">
+              Nenhuma campanha encontrada{search ? " para esse filtro" : " nessa conta de anúncios"}.
+            </div>
+          ) : (
+            filtered.map((c: MetaAdAccountCampaign) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => linkMut.mutate(c.id)}
+                disabled={linkMut.isPending}
+                className="w-full text-left p-2.5 rounded-lg border border-white/10 hover:border-primary/40 hover:bg-white/5 transition flex items-center justify-between gap-2"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{c.name}</p>
+                  <p className="text-[10px] text-muted-foreground font-mono">{c.id} · {c.effective_status}</p>
+                  {c.already_linked_to && (
+                    <p className="text-[10px] text-warning mt-0.5">
+                      ⚠ já vinculada a "{c.already_linked_to}" — escolher aqui troca o vínculo
+                    </p>
+                  )}
+                </div>
+                {linkMut.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                ) : (
+                  <Check className="h-4 w-4 shrink-0 text-muted-foreground" />
+                )}
+              </button>
+            ))
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="glass" size="sm" onClick={onClose}>Cancelar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
