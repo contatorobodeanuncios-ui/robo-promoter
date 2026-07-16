@@ -85,6 +85,9 @@ export interface AdminCampaignRow {
   paused_at: string | null;
   ended_at: string | null;
   meta_campaign_id: string | null;
+  meta_effective_status: string | null;
+  metrics_last_error: string | null;
+  metrics_last_synced_at: string | null;
 
 }
 
@@ -137,6 +140,9 @@ export const adminListCampaigns = createServerFn({ method: "GET" })
         paused_at: c.paused_at ?? null,
         ended_at: c.ended_at ?? null,
         meta_campaign_id: c.meta_campaign_id ?? null,
+        meta_effective_status: c.meta_effective_status ?? null,
+        metrics_last_error: c.metrics_last_error ?? null,
+        metrics_last_synced_at: c.metrics_last_synced_at ?? null,
       };
     });
   });
