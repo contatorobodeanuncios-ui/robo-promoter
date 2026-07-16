@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 // Cron job: sincroniza métricas do Meta Ads (Insights API) para todas as campanhas
 // com meta_campaign_id definido. Registra a execução em meta_metrics_runs.
-// Chamado pelo pg_cron. Autenticação via apikey header (anon key).
+// Chamado pelo pg_cron (ver AGENDAMENTO-meta-sync.sql). Autenticação via apikey header (anon key).
 
 export const Route = createFileRoute("/api/public/hooks/meta-metrics-sync")({
   server: {
@@ -35,11 +35,16 @@ export const Route = createFileRoute("/api/public/hooks/meta-metrics-sync")({
           const token = process.env.META_ACCESS_TOKEN;
           if (!token) throw new Error("META_ACCESS_TOKEN não configurado");
 
+          // Antes: filtrava por status (running/rodando/analyzing/em_revisao/paused),
+          // o que deixava de fora campanhas ainda em "aguardando_vinculo_meta" mesmo
+          // já tendo um meta_campaign_id válido colado pelo admin. Agora sincroniza
+          // qualquer campanha com ID vinculado, deixando o próprio Meta (effective_status)
+          // dizer se está ativa, pausada etc. Só pula as já encerradas de vez.
           const { data: campaigns, error: cErr } = await supabaseAdmin
             .from("campaigns")
             .select("id, meta_campaign_id, started_at, status")
             .not("meta_campaign_id", "is", null)
-            .in("status", ["running", "rodando", "analyzing", "em_revisao", "paused"]);
+            .neq("status", "encerrada_saldo_consumido");
           if (cErr) throw new Error(cErr.message);
 
           const mapEffectiveStatus = (
