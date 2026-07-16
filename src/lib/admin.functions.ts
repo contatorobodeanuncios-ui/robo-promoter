@@ -192,16 +192,34 @@ export const adminListMetaAdAccountCampaigns = createServerFn({ method: "GET" })
     if (!token) throw new Error("META_ACCESS_TOKEN não configurado no servidor");
     if (!adAccountId) throw new Error("META_AD_ACCOUNT_ID não configurado no servidor");
 
-    const cleanAccountId = adAccountId.replace(/^act_/, "");
-    const url = `https://graph.facebook.com/v20.0/act_${cleanAccountId}/campaigns?fields=id,name,status,effective_status&limit=100&access_token=${encodeURIComponent(token)}`;
-    const res = await fetch(url);
-    if (!res.ok) {
-      const txt = await res.text();
-      throw new Error(`Meta API ${res.status}: ${txt.slice(0, 300)}`);
+    // META_AD_ACCOUNT_ID pode conter várias contas separadas por vírgula
+    // (ex.: "act_123,act_456"). Tratamos como lista e agregamos as campanhas
+    // de todas as contas — a Graph API não aceita múltiplos IDs em uma única
+    // requisição /act_.../campaigns.
+    const accountIds = adAccountId
+      .split(",")
+      .map((s) => s.trim().replace(/^act_/, ""))
+      .filter((s) => s.length > 0);
+    if (accountIds.length === 0) throw new Error("META_AD_ACCOUNT_ID vazio");
+
+    const all: Array<{ id: string; name: string; status: string; effective_status: string; account_id: string }> = [];
+    const errors: string[] = [];
+    for (const acc of accountIds) {
+      const url = `https://graph.facebook.com/v20.0/act_${acc}/campaigns?fields=id,name,status,effective_status&limit=100&access_token=${encodeURIComponent(token)}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        const txt = await res.text();
+        errors.push(`act_${acc}: ${res.status} ${txt.slice(0, 200)}`);
+        continue;
+      }
+      const json = (await res.json()) as {
+        data?: Array<{ id: string; name: string; status: string; effective_status: string }>;
+      };
+      for (const c of json.data ?? []) all.push({ ...c, account_id: acc });
     }
-    const json = (await res.json()) as {
-      data?: Array<{ id: string; name: string; status: string; effective_status: string }>;
-    };
+    if (all.length === 0 && errors.length > 0) {
+      throw new Error(`Meta API falhou em todas as contas: ${errors.join(" | ")}`);
+    }
 
     const admin = await getSupabaseAdmin();
     const { data: already } = await admin
@@ -210,13 +228,14 @@ export const adminListMetaAdAccountCampaigns = createServerFn({ method: "GET" })
       .not("meta_campaign_id", "is", null);
     const linkedMap = new Map((already ?? []).map((c) => [c.meta_campaign_id as string, c.name]));
 
-    return (json.data ?? []).map((c) => ({
+    return all.map((c) => ({
       id: c.id,
-      name: c.name,
+      name: `[${c.account_id}] ${c.name}`,
       status: c.status,
       effective_status: c.effective_status,
       already_linked_to: linkedMap.get(c.id) ?? null,
     }));
+
   });
 
 // Vincula manualmente o ID da campanha no Meta a uma campanha do sistema.
