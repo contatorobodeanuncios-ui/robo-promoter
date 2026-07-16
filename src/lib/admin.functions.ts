@@ -276,7 +276,75 @@ export const adminSetMetaCampaignId = createServerFn({ method: "POST" })
       target_id: data.id,
       details: { meta_campaign_id: value },
     });
-    return { ok: true, meta_campaign_id: value };
+
+    // Sincronização IMEDIATA das métricas da campanha recém-vinculada,
+    // sem esperar o próximo tick do cron. Se falhar, salvamos o erro na
+    // própria campanha e seguimos — o cron tenta de novo depois.
+    let synced = false;
+    let syncError: string | null = null;
+    if (value) {
+      const token = process.env.META_ACCESS_TOKEN;
+      if (!token) {
+        syncError = "META_ACCESS_TOKEN não configurado — métricas entrarão no próximo sync";
+      } else {
+        try {
+          const nowIso = new Date().toISOString();
+          const insUrl = `https://graph.facebook.com/v20.0/${value}/insights?fields=spend,clicks,impressions,ctr,cpc&date_preset=maximum&access_token=${encodeURIComponent(token)}`;
+          const stUrl = `https://graph.facebook.com/v20.0/${value}?fields=effective_status&access_token=${encodeURIComponent(token)}`;
+          const [insRes, stRes] = await Promise.all([fetch(insUrl), fetch(stUrl)]);
+          if (!insRes.ok) throw new Error(`Insights ${insRes.status}: ${(await insRes.text()).slice(0, 200)}`);
+          const insJson = (await insRes.json()) as { data?: Array<Record<string, string>> };
+          const stJson = (await stRes.json()) as { effective_status?: string };
+          const row = insJson.data?.[0];
+          const effective = stJson.effective_status ?? null;
+          const mapStatus = (eff: string | null): string | null => {
+            switch ((eff ?? "").toUpperCase()) {
+              case "ACTIVE": return "rodando";
+              case "PAUSED":
+              case "CAMPAIGN_PAUSED": return "paused";
+              case "ARCHIVED":
+              case "DELETED": return "encerrada_saldo_consumido";
+              case "PENDING_REVIEW":
+              case "IN_PROCESS":
+              case "WITH_ISSUES": return "em_revisao";
+              default: return null;
+            }
+          };
+          const spend = Number(row?.spend ?? 0);
+          const clicks = Number(row?.clicks ?? 0);
+          const impressions = Number(row?.impressions ?? 0);
+          const update: Record<string, unknown> = {
+            metrics_last_synced_at: nowIso,
+            metrics_last_error: null,
+            meta_effective_status: effective,
+            updated_at: nowIso,
+          };
+          if (row) {
+            update.spent = spend;
+            update.clicks = clicks;
+            update.impressions = impressions;
+            update.ctr = Number(row.ctr ?? 0);
+            update.cpc = Number(row.cpc ?? 0);
+          }
+          if (spend > 0 || clicks > 0 || impressions > 0) {
+            update.started_at = nowIso;
+            update.started_running_at = nowIso;
+          }
+          const mapped = mapStatus(effective);
+          if (mapped) update.status = mapped;
+          await supabaseAdmin.from("campaigns").update(update as never).eq("id", data.id);
+          synced = true;
+        } catch (e) {
+          syncError = e instanceof Error ? e.message : String(e);
+          await supabaseAdmin
+            .from("campaigns")
+            .update({ metrics_last_error: syncError, metrics_last_synced_at: new Date().toISOString() } as never)
+            .eq("id", data.id);
+        }
+      }
+    }
+
+    return { ok: true, meta_campaign_id: value, synced, syncError };
   });
 
 // Submits campaign through Meta Marketing API (skeleton).
