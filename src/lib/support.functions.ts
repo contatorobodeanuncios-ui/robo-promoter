@@ -46,6 +46,26 @@ export interface SupportConversationRow {
 
 // ============ Cliente ============
 
+function mapMsg(m: {
+  id: string; conversation_id: string; sender: string; content: string;
+  created_at: string; attachments: unknown;
+}): SupportMessageRow {
+  const rawAtt = Array.isArray(m.attachments) ? m.attachments : [];
+  const attachments = rawAtt.filter((a): a is SupportAttachment =>
+    !!a && typeof a === "object" && "path" in a && "mime" in a,
+  );
+  return {
+    id: m.id,
+    conversation_id: m.conversation_id,
+    sender: m.sender as SupportMessageRow["sender"],
+    content: m.content,
+    created_at: m.created_at,
+    attachments,
+  };
+}
+
+
+
 export const getOrCreateMyConversation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
