@@ -90,8 +90,9 @@ export const listMyMessages = createServerFn({ method: "GET" })
       .eq("conversation_id", data.conversation_id)
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
-    return (msgs ?? []) as SupportMessageRow[];
+    return (msgs ?? []).map(mapMsg);
   });
+
 
 export const sendMyMessage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
