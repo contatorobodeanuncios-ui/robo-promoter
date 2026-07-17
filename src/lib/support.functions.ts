@@ -13,13 +13,23 @@ function isAdminEmail(claims: { email?: string } | undefined) {
   return (claims?.email ?? "").toLowerCase() === ADMIN_EMAIL;
 }
 
+export interface SupportAttachment {
+  path: string;
+  mime: string;
+  size: number;
+  name: string;
+  kind: "image" | "audio" | "file";
+}
+
 export interface SupportMessageRow {
   id: string;
   conversation_id: string;
   sender: "client" | "user" | "admin";
   content: string;
   created_at: string;
+  attachments: SupportAttachment[];
 }
+
 
 export interface SupportConversationRow {
   id: string;
