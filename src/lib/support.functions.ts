@@ -206,7 +206,7 @@ export const adminListMessages = createServerFn({ method: "GET" })
       .eq("conversation_id", data.conversation_id)
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
-    return (msgs ?? []) as SupportMessageRow[];
+    return (msgs ?? []).map(mapMsg);
   });
 
 export const adminSendMessage = createServerFn({ method: "POST" })
