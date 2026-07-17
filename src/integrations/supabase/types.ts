@@ -83,6 +83,30 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_magic_link_events: {
+        Row: {
+          admin_email: string
+          created_at: string
+          id: string
+          target_email: string | null
+          target_user_id: string
+        }
+        Insert: {
+          admin_email: string
+          created_at?: string
+          id?: string
+          target_email?: string | null
+          target_user_id: string
+        }
+        Update: {
+          admin_email?: string
+          created_at?: string
+          id?: string
+          target_email?: string | null
+          target_user_id?: string
+        }
+        Relationships: []
+      }
       admin_notes: {
         Row: {
           note: string
@@ -154,6 +178,91 @@ export type Database = {
           raw_payload?: Json
         }
         Relationships: []
+      }
+      campaign_ai_reviews: {
+        Row: {
+          campaign_id: string
+          created_at: string
+          id: string
+          metrics_snapshot: Json
+          model: string | null
+          recommendations: Json
+          summary: string
+          verdict: Database["public"]["Enums"]["campaign_ai_verdict"]
+        }
+        Insert: {
+          campaign_id: string
+          created_at?: string
+          id?: string
+          metrics_snapshot?: Json
+          model?: string | null
+          recommendations?: Json
+          summary?: string
+          verdict?: Database["public"]["Enums"]["campaign_ai_verdict"]
+        }
+        Update: {
+          campaign_id?: string
+          created_at?: string
+          id?: string
+          metrics_snapshot?: Json
+          model?: string | null
+          recommendations?: Json
+          summary?: string
+          verdict?: Database["public"]["Enums"]["campaign_ai_verdict"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_ai_reviews_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaign_meta_link_audit: {
+        Row: {
+          campaign_id: string
+          changed_by: string | null
+          changed_by_email: string | null
+          created_at: string
+          id: string
+          new_meta_ad_account_id: string | null
+          new_meta_campaign_id: string | null
+          old_meta_ad_account_id: string | null
+          old_meta_campaign_id: string | null
+        }
+        Insert: {
+          campaign_id: string
+          changed_by?: string | null
+          changed_by_email?: string | null
+          created_at?: string
+          id?: string
+          new_meta_ad_account_id?: string | null
+          new_meta_campaign_id?: string | null
+          old_meta_ad_account_id?: string | null
+          old_meta_campaign_id?: string | null
+        }
+        Update: {
+          campaign_id?: string
+          changed_by?: string | null
+          changed_by_email?: string | null
+          created_at?: string
+          id?: string
+          new_meta_ad_account_id?: string | null
+          new_meta_campaign_id?: string | null
+          old_meta_ad_account_id?: string | null
+          old_meta_campaign_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_meta_link_audit_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       campaigns: {
         Row: {
@@ -578,6 +687,7 @@ export type Database = {
       }
       support_messages: {
         Row: {
+          attachments: Json
           content: string
           conversation_id: string
           created_at: string
@@ -585,6 +695,7 @@ export type Database = {
           sender: string
         }
         Insert: {
+          attachments?: Json
           content: string
           conversation_id: string
           created_at?: string
@@ -592,6 +703,7 @@ export type Database = {
           sender: string
         }
         Update: {
+          attachments?: Json
           content?: string
           conversation_id?: string
           created_at?: string
@@ -678,6 +790,7 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "user"
+      campaign_ai_verdict: "good" | "warn" | "bad" | "no_data"
       campaign_status:
         | "running"
         | "analyzing"
@@ -816,6 +929,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user"],
+      campaign_ai_verdict: ["good", "warn", "bad", "no_data"],
       campaign_status: [
         "running",
         "analyzing",
