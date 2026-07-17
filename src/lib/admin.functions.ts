@@ -971,3 +971,132 @@ export const adminUpdateCampaignMetrics = createServerFn({ method: "POST" })
     });
     return { ok: true };
   });
+
+// ============ Magic link (entrada direta) — item 7/8 ============
+export const adminGenerateAccessLink = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ user_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }): Promise<{ url: string; email: string | null }> => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const { data: u } = await admin.auth.admin.getUserById(data.user_id);
+    const email = u?.user?.email;
+    if (!email) throw new Error("Usuário sem e-mail — impossível gerar link de acesso");
+
+    const siteUrl = process.env.SITE_URL
+      || process.env.PUBLIC_SITE_URL
+      || "https://robo-promoter.lovable.app";
+    const { data: link, error } = await admin.auth.admin.generateLink({
+      type: "magiclink",
+      email,
+      options: { redirectTo: `${siteUrl}/dashboard` },
+    });
+    if (error) throw new Error(error.message);
+    const url = link.properties?.action_link ?? "";
+    if (!url) throw new Error("Supabase não retornou um link válido");
+
+    await admin.from("admin_magic_link_events").insert({
+      admin_email: (context.claims as { email?: string })?.email ?? "",
+      target_user_id: data.user_id,
+      target_email: email,
+    });
+    await admin.from("admin_audit_log").insert({
+      admin_email: (context.claims as { email?: string })?.email ?? "",
+      action: "magic_link_generate",
+      target_type: "user",
+      target_id: data.user_id,
+      details: { target_email: email },
+    });
+    return { url, email };
+  });
+
+// ============ Auditoria Meta (item 14) ============
+export interface MetaLinkAuditRow {
+  id: string;
+  campaign_id: string;
+  campaign_name: string | null;
+  changed_by_email: string | null;
+  old_meta_campaign_id: string | null;
+  new_meta_campaign_id: string | null;
+  old_meta_ad_account_id: string | null;
+  new_meta_ad_account_id: string | null;
+  created_at: string;
+}
+
+export const adminListMetaLinkAudit = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<MetaLinkAuditRow[]> => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const { data, error } = await admin
+      .from("campaign_meta_link_audit")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(300);
+    if (error) throw new Error(error.message);
+    const rows = (data ?? []) as unknown as Array<{
+      id: string; campaign_id: string; changed_by_email: string | null;
+      old_meta_campaign_id: string | null; new_meta_campaign_id: string | null;
+      old_meta_ad_account_id: string | null; new_meta_ad_account_id: string | null;
+      created_at: string;
+    }>;
+    const campIds = Array.from(new Set(rows.map((r) => r.campaign_id)));
+    const { data: camps } = await admin
+      .from("campaigns")
+      .select("id, name")
+      .in("id", campIds.length ? campIds : ["00000000-0000-0000-0000-000000000000"]);
+    const nameMap = new Map((camps ?? []).map((c) => [c.id, c.name]));
+    return rows.map((r) => ({
+      ...r,
+      campaign_name: nameMap.get(r.campaign_id) ?? null,
+    }));
+  });
+
+// ============ IA de métricas — leitura (item 6) ============
+export interface AIReviewRow {
+  id: string;
+  campaign_id: string;
+  campaign_name: string | null;
+  verdict: "good" | "warn" | "bad" | "no_data";
+  summary: string;
+  recommendations: string[];
+  created_at: string;
+}
+
+export const adminListAIReviews = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<AIReviewRow[]> => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    // Traz a review mais recente por campanha.
+    const { data, error } = await admin
+      .from("campaign_ai_reviews")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) throw new Error(error.message);
+    const seen = new Set<string>();
+    const rows = (data ?? []).filter((r) => {
+      if (seen.has(r.campaign_id)) return false;
+      seen.add(r.campaign_id);
+      return true;
+    });
+    const campIds = rows.map((r) => r.campaign_id);
+    const { data: camps } = await admin
+      .from("campaigns")
+      .select("id, name")
+      .in("id", campIds.length ? campIds : ["00000000-0000-0000-0000-000000000000"]);
+    const nameMap = new Map((camps ?? []).map((c) => [c.id, c.name]));
+    return rows.map((r) => ({
+      id: r.id,
+      campaign_id: r.campaign_id,
+      campaign_name: nameMap.get(r.campaign_id) ?? null,
+      verdict: r.verdict,
+      summary: r.summary,
+      recommendations: Array.isArray(r.recommendations)
+        ? (r.recommendations as unknown as string[])
+        : [],
+      created_at: r.created_at,
+    }));
+  });
+
