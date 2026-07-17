@@ -13,13 +13,23 @@ function isAdminEmail(claims: { email?: string } | undefined) {
   return (claims?.email ?? "").toLowerCase() === ADMIN_EMAIL;
 }
 
+export interface SupportAttachment {
+  path: string;
+  mime: string;
+  size: number;
+  name: string;
+  kind: "image" | "audio" | "file";
+}
+
 export interface SupportMessageRow {
   id: string;
   conversation_id: string;
   sender: "client" | "user" | "admin";
   content: string;
   created_at: string;
+  attachments: SupportAttachment[];
 }
+
 
 export interface SupportConversationRow {
   id: string;
@@ -35,6 +45,26 @@ export interface SupportConversationRow {
 }
 
 // ============ Cliente ============
+
+function mapMsg(m: {
+  id: string; conversation_id: string; sender: string; content: string;
+  created_at: string; attachments: unknown;
+}): SupportMessageRow {
+  const rawAtt = Array.isArray(m.attachments) ? m.attachments : [];
+  const attachments = rawAtt.filter((a): a is SupportAttachment =>
+    !!a && typeof a === "object" && "path" in a && "mime" in a,
+  );
+  return {
+    id: m.id,
+    conversation_id: m.conversation_id,
+    sender: m.sender as SupportMessageRow["sender"],
+    content: m.content,
+    created_at: m.created_at,
+    attachments,
+  };
+}
+
+
 
 export const getOrCreateMyConversation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -80,8 +110,9 @@ export const listMyMessages = createServerFn({ method: "GET" })
       .eq("conversation_id", data.conversation_id)
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
-    return (msgs ?? []) as SupportMessageRow[];
+    return (msgs ?? []).map(mapMsg);
   });
+
 
 export const sendMyMessage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -175,7 +206,7 @@ export const adminListMessages = createServerFn({ method: "GET" })
       .eq("conversation_id", data.conversation_id)
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
-    return (msgs ?? []) as SupportMessageRow[];
+    return (msgs ?? []).map(mapMsg);
   });
 
 export const adminSendMessage = createServerFn({ method: "POST" })

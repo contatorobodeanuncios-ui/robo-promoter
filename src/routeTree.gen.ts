@@ -29,6 +29,7 @@ import { Route as ApiPublicAsaasWebhookRouteImport } from './routes/api/public/a
 import { Route as AppCampaignIdRouteImport } from './routes/_app.campaign.$id'
 import { Route as ApiPublicHooksSendPushDailyRouteImport } from './routes/api/public/hooks/send-push-daily'
 import { Route as ApiPublicHooksMetaMetricsSyncRouteImport } from './routes/api/public/hooks/meta-metrics-sync'
+import { Route as ApiPublicHooksAiReviewCronRouteImport } from './routes/api/public/hooks/ai-review-cron'
 
 const TermosRoute = TermosRouteImport.update({
   id: '/termos',
@@ -131,6 +132,12 @@ const ApiPublicHooksMetaMetricsSyncRoute =
     path: '/api/public/hooks/meta-metrics-sync',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksAiReviewCronRoute =
+  ApiPublicHooksAiReviewCronRouteImport.update({
+    id: '/api/public/hooks/ai-review-cron',
+    path: '/api/public/hooks/ai-review-cron',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -150,6 +157,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AppSettingsRoute
   '/campaign/$id': typeof AppCampaignIdRoute
   '/api/public/asaas-webhook': typeof ApiPublicAsaasWebhookRoute
+  '/api/public/hooks/ai-review-cron': typeof ApiPublicHooksAiReviewCronRoute
   '/api/public/hooks/meta-metrics-sync': typeof ApiPublicHooksMetaMetricsSyncRoute
   '/api/public/hooks/send-push-daily': typeof ApiPublicHooksSendPushDailyRoute
 }
@@ -171,6 +179,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AppSettingsRoute
   '/campaign/$id': typeof AppCampaignIdRoute
   '/api/public/asaas-webhook': typeof ApiPublicAsaasWebhookRoute
+  '/api/public/hooks/ai-review-cron': typeof ApiPublicHooksAiReviewCronRoute
   '/api/public/hooks/meta-metrics-sync': typeof ApiPublicHooksMetaMetricsSyncRoute
   '/api/public/hooks/send-push-daily': typeof ApiPublicHooksSendPushDailyRoute
 }
@@ -194,6 +203,7 @@ export interface FileRoutesById {
   '/_app/settings': typeof AppSettingsRoute
   '/_app/campaign/$id': typeof AppCampaignIdRoute
   '/api/public/asaas-webhook': typeof ApiPublicAsaasWebhookRoute
+  '/api/public/hooks/ai-review-cron': typeof ApiPublicHooksAiReviewCronRoute
   '/api/public/hooks/meta-metrics-sync': typeof ApiPublicHooksMetaMetricsSyncRoute
   '/api/public/hooks/send-push-daily': typeof ApiPublicHooksSendPushDailyRoute
 }
@@ -217,6 +227,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/campaign/$id'
     | '/api/public/asaas-webhook'
+    | '/api/public/hooks/ai-review-cron'
     | '/api/public/hooks/meta-metrics-sync'
     | '/api/public/hooks/send-push-daily'
   fileRoutesByTo: FileRoutesByTo
@@ -238,6 +249,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/campaign/$id'
     | '/api/public/asaas-webhook'
+    | '/api/public/hooks/ai-review-cron'
     | '/api/public/hooks/meta-metrics-sync'
     | '/api/public/hooks/send-push-daily'
   id:
@@ -260,6 +272,7 @@ export interface FileRouteTypes {
     | '/_app/settings'
     | '/_app/campaign/$id'
     | '/api/public/asaas-webhook'
+    | '/api/public/hooks/ai-review-cron'
     | '/api/public/hooks/meta-metrics-sync'
     | '/api/public/hooks/send-push-daily'
   fileRoutesById: FileRoutesById
@@ -273,6 +286,7 @@ export interface RootRouteChildren {
   PrivacidadeRoute: typeof PrivacidadeRoute
   TermosRoute: typeof TermosRoute
   ApiPublicAsaasWebhookRoute: typeof ApiPublicAsaasWebhookRoute
+  ApiPublicHooksAiReviewCronRoute: typeof ApiPublicHooksAiReviewCronRoute
   ApiPublicHooksMetaMetricsSyncRoute: typeof ApiPublicHooksMetaMetricsSyncRoute
   ApiPublicHooksSendPushDailyRoute: typeof ApiPublicHooksSendPushDailyRoute
 }
@@ -419,6 +433,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksMetaMetricsSyncRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/ai-review-cron': {
+      id: '/api/public/hooks/ai-review-cron'
+      path: '/api/public/hooks/ai-review-cron'
+      fullPath: '/api/public/hooks/ai-review-cron'
+      preLoaderRoute: typeof ApiPublicHooksAiReviewCronRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -459,19 +480,10 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacidadeRoute: PrivacidadeRoute,
   TermosRoute: TermosRoute,
   ApiPublicAsaasWebhookRoute: ApiPublicAsaasWebhookRoute,
+  ApiPublicHooksAiReviewCronRoute: ApiPublicHooksAiReviewCronRoute,
   ApiPublicHooksMetaMetricsSyncRoute: ApiPublicHooksMetaMetricsSyncRoute,
   ApiPublicHooksSendPushDailyRoute: ApiPublicHooksSendPushDailyRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
