@@ -30,6 +30,7 @@ import { Route as AppCampaignIdRouteImport } from './routes/_app.campaign.$id'
 import { Route as ApiPublicHooksSendPushDailyRouteImport } from './routes/api/public/hooks/send-push-daily'
 import { Route as ApiPublicHooksMetaMetricsSyncRouteImport } from './routes/api/public/hooks/meta-metrics-sync'
 import { Route as ApiPublicHooksAiReviewCronRouteImport } from './routes/api/public/hooks/ai-review-cron'
+import { Route as ApiPublicESlugRouteImport } from './routes/api/public/e.$slug'
 
 const TermosRoute = TermosRouteImport.update({
   id: '/termos',
@@ -138,6 +139,11 @@ const ApiPublicHooksAiReviewCronRoute =
     path: '/api/public/hooks/ai-review-cron',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicESlugRoute = ApiPublicESlugRouteImport.update({
+  id: '/api/public/e/$slug',
+  path: '/api/public/e/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -157,6 +163,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AppSettingsRoute
   '/campaign/$id': typeof AppCampaignIdRoute
   '/api/public/asaas-webhook': typeof ApiPublicAsaasWebhookRoute
+  '/api/public/e/$slug': typeof ApiPublicESlugRoute
   '/api/public/hooks/ai-review-cron': typeof ApiPublicHooksAiReviewCronRoute
   '/api/public/hooks/meta-metrics-sync': typeof ApiPublicHooksMetaMetricsSyncRoute
   '/api/public/hooks/send-push-daily': typeof ApiPublicHooksSendPushDailyRoute
@@ -179,6 +186,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AppSettingsRoute
   '/campaign/$id': typeof AppCampaignIdRoute
   '/api/public/asaas-webhook': typeof ApiPublicAsaasWebhookRoute
+  '/api/public/e/$slug': typeof ApiPublicESlugRoute
   '/api/public/hooks/ai-review-cron': typeof ApiPublicHooksAiReviewCronRoute
   '/api/public/hooks/meta-metrics-sync': typeof ApiPublicHooksMetaMetricsSyncRoute
   '/api/public/hooks/send-push-daily': typeof ApiPublicHooksSendPushDailyRoute
@@ -203,6 +211,7 @@ export interface FileRoutesById {
   '/_app/settings': typeof AppSettingsRoute
   '/_app/campaign/$id': typeof AppCampaignIdRoute
   '/api/public/asaas-webhook': typeof ApiPublicAsaasWebhookRoute
+  '/api/public/e/$slug': typeof ApiPublicESlugRoute
   '/api/public/hooks/ai-review-cron': typeof ApiPublicHooksAiReviewCronRoute
   '/api/public/hooks/meta-metrics-sync': typeof ApiPublicHooksMetaMetricsSyncRoute
   '/api/public/hooks/send-push-daily': typeof ApiPublicHooksSendPushDailyRoute
@@ -227,6 +236,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/campaign/$id'
     | '/api/public/asaas-webhook'
+    | '/api/public/e/$slug'
     | '/api/public/hooks/ai-review-cron'
     | '/api/public/hooks/meta-metrics-sync'
     | '/api/public/hooks/send-push-daily'
@@ -249,6 +259,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/campaign/$id'
     | '/api/public/asaas-webhook'
+    | '/api/public/e/$slug'
     | '/api/public/hooks/ai-review-cron'
     | '/api/public/hooks/meta-metrics-sync'
     | '/api/public/hooks/send-push-daily'
@@ -272,6 +283,7 @@ export interface FileRouteTypes {
     | '/_app/settings'
     | '/_app/campaign/$id'
     | '/api/public/asaas-webhook'
+    | '/api/public/e/$slug'
     | '/api/public/hooks/ai-review-cron'
     | '/api/public/hooks/meta-metrics-sync'
     | '/api/public/hooks/send-push-daily'
@@ -286,6 +298,7 @@ export interface RootRouteChildren {
   PrivacidadeRoute: typeof PrivacidadeRoute
   TermosRoute: typeof TermosRoute
   ApiPublicAsaasWebhookRoute: typeof ApiPublicAsaasWebhookRoute
+  ApiPublicESlugRoute: typeof ApiPublicESlugRoute
   ApiPublicHooksAiReviewCronRoute: typeof ApiPublicHooksAiReviewCronRoute
   ApiPublicHooksMetaMetricsSyncRoute: typeof ApiPublicHooksMetaMetricsSyncRoute
   ApiPublicHooksSendPushDailyRoute: typeof ApiPublicHooksSendPushDailyRoute
@@ -440,6 +453,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksAiReviewCronRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/e/$slug': {
+      id: '/api/public/e/$slug'
+      path: '/api/public/e/$slug'
+      fullPath: '/api/public/e/$slug'
+      preLoaderRoute: typeof ApiPublicESlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -480,6 +500,7 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacidadeRoute: PrivacidadeRoute,
   TermosRoute: TermosRoute,
   ApiPublicAsaasWebhookRoute: ApiPublicAsaasWebhookRoute,
+  ApiPublicESlugRoute: ApiPublicESlugRoute,
   ApiPublicHooksAiReviewCronRoute: ApiPublicHooksAiReviewCronRoute,
   ApiPublicHooksMetaMetricsSyncRoute: ApiPublicHooksMetaMetricsSyncRoute,
   ApiPublicHooksSendPushDailyRoute: ApiPublicHooksSendPushDailyRoute,
