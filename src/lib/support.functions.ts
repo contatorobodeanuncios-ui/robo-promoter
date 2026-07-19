@@ -116,8 +116,6 @@ export const listMyMessages = createServerFn({ method: "GET" })
     return (msgs ?? []).map(mapMsg);
   });
 
-// Aceita anexos (item 1): imagem, áudio ou arquivo. Ao menos um dos dois
-// (texto ou anexo) precisa existir — mensagem totalmente vazia é rejeitada.
 export const sendMyMessage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
@@ -145,16 +143,15 @@ export const sendMyMessage = createServerFn({ method: "POST" })
       attachments: data.attachments as unknown as never,
     });
     if (error) throw new Error(error.message);
+    // Ao cliente enviar, o status também deveria refletir "aberto" de novo
+    // (caso estivesse "fechado" por engano) — mantém a conversa visível.
     await sb
       .from("support_conversations")
-      .update({ last_message_at: now, unread_by_admin: true, updated_at: now })
+      .update({ last_message_at: now, unread_by_admin: true, updated_at: now, status: "aberto" })
       .eq("id", data.conversation_id);
     return { ok: true };
   });
 
-// Gera um caminho de upload (não é signed URL — o upload é feito direto pelo
-// navegador com a sessão do usuário, que já tem permissão via RLS na própria
-// pasta support/{user_id}/...). Só centraliza a convenção do nome de arquivo.
 export const getSupportUploadPath = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ filename: z.string().min(1).max(200) }).parse(d))
@@ -164,13 +161,11 @@ export const getSupportUploadPath = createServerFn({ method: "POST" })
     return { path };
   });
 
-// Gera uma signed URL de leitura pra um anexo (bucket é privado).
 export const getSupportAttachmentUrl = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ path: z.string().min(1) }).parse(d))
   .handler(async ({ data, context }) => {
     const sb = await admin();
-    // valida que o usuário é dono da pasta OU é admin, antes de gerar a URL.
     const isOwner = data.path.startsWith(`support/${context.userId}/`);
     if (!isOwner && !isAdminEmail(context.claims as { email?: string })) {
       throw new Error("Forbidden");
@@ -246,9 +241,6 @@ export const adminListMessages = createServerFn({ method: "GET" })
     return (msgs ?? []).map(mapMsg);
   });
 
-// Admin também pode anexar (imagem/áudio/arquivo) — sobe pra pasta do CLIENTE
-// (support/{client_user_id}/...) pra que a policy de leitura do cliente
-// (que só lê a própria pasta) enxergue o anexo enviado pelo admin.
 export const adminSendMessage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
@@ -271,9 +263,11 @@ export const adminSendMessage = createServerFn({ method: "POST" })
       attachments: data.attachments as unknown as never,
     });
     if (error) throw new Error(error.message);
+    // Corrigido: quando o admin responde, marca como "respondido" (valor
+    // válido na constraint) em vez de deixar como estava.
     await sb
       .from("support_conversations")
-      .update({ last_message_at: now, unread_by_client: true, updated_at: now })
+      .update({ last_message_at: now, unread_by_client: true, updated_at: now, status: "respondido" })
       .eq("id", data.conversation_id);
     await sb.from("admin_audit_log").insert({
       admin_email: (context.claims as { email?: string })?.email ?? "",
@@ -285,8 +279,6 @@ export const adminSendMessage = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// Gera o caminho de upload que o admin deve usar para anexar num atendimento
-// específico — sempre na pasta do CLIENTE dono da conversa, não do admin.
 export const getAdminSupportUploadPath = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
@@ -306,6 +298,9 @@ export const getAdminSupportUploadPath = createServerFn({ method: "POST" })
     return { path };
   });
 
+// Corrigido (bug real encontrado): usava status: "closed", que não existe na
+// constraint do banco (support_conversations_status_check só aceita 'aberto',
+// 'respondido', 'fechado') — encerrar uma conversa sempre falhava com erro.
 export const adminCloseConversation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ conversation_id: z.string().uuid() }).parse(d))
@@ -314,7 +309,7 @@ export const adminCloseConversation = createServerFn({ method: "POST" })
     const sb = await admin();
     const { error } = await sb
       .from("support_conversations")
-      .update({ status: "closed" })
+      .update({ status: "fechado" })
       .eq("id", data.conversation_id);
     if (error) throw new Error(error.message);
     return { ok: true };
