@@ -3,7 +3,7 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ShieldCheck, Sparkles, Loader2, Copy, Check, AlertTriangle, RefreshCw, CreditCard, QrCode } from "lucide-react";
+import { ShieldCheck, Sparkles, Loader2, Copy, Check, AlertTriangle, RefreshCw, CreditCard, QrCode, Pencil } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
@@ -56,6 +56,13 @@ function formatCpfCnpj(v: string): string {
     .replace(/(\d{4})(\d)/, "$1-$2");
 }
 
+function maskCpfCnpj(digitsOnly: string): string {
+  if (!digitsOnly) return "";
+  if (digitsOnly.length === 11) return `${digitsOnly.slice(0, 3)}.•••.•••-${digitsOnly.slice(-2)}`;
+  if (digitsOnly.length === 14) return `${digitsOnly.slice(0, 2)}.•••.•••/••••-${digitsOnly.slice(-2)}`;
+  return "••••••";
+}
+
 function PaymentPage() {
   const { topup, budget, days, name, campaignId } = useSearch({ from: "/_app/payment" });
   const nav = useNavigate();
@@ -80,6 +87,7 @@ function PaymentPage() {
   const [requestId, setRequestId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [cpfRetry, setCpfRetry] = useState(false);
   const runIdRef = useRef(0);
 
   const runCharge = useCallback(async (bt: BillingType, card?: {
@@ -114,7 +122,6 @@ function PaymentPage() {
     }
   }, [amount, campaignId, createFn, nav]);
 
-  // Primeira execução — só quando o perfil tiver carregado.
   const startedRef = useRef(false);
   useEffect(() => {
     if (startedRef.current) return;
@@ -124,7 +131,6 @@ function PaymentPage() {
     void runCharge("PIX");
   }, [profileQ.isLoading, profileQ.data, runCharge]);
 
-  // Polling status (PIX)
   useEffect(() => {
     if (!requestId || stage === "paid" || stage === "error") return;
     const t = setInterval(async () => {
@@ -158,6 +164,11 @@ function PaymentPage() {
     else void runCharge("PIX");
   };
 
+  const openCpfEdit = (retry: boolean) => {
+    setCpfRetry(retry);
+    setStage("needsCpf");
+  };
+
   if (!amount) {
     return (
       <div className="p-10 text-center text-sm">
@@ -165,6 +176,8 @@ function PaymentPage() {
       </div>
     );
   }
+
+  const cpfDigits = (profileQ.data?.cpf_cnpj ?? "").replace(/\D/g, "");
 
   return (
     <div className="p-6 lg:p-10 max-w-xl mx-auto space-y-6">
@@ -184,6 +197,17 @@ function PaymentPage() {
           <p className="text-4xl font-bold text-gradient tabular-nums">{fmtBRL(amount)}</p>
         </div>
 
+        {cpfDigits && stage !== "needsCpf" && (
+          <button
+            type="button"
+            onClick={() => openCpfEdit(true)}
+            className="w-full flex items-center justify-between text-xs text-muted-foreground rounded-lg border border-white/10 px-3 py-2 hover:border-white/20 transition"
+          >
+            <span>CPF/CNPJ cadastrado: <span className="font-mono">{maskCpfCnpj(cpfDigits)}</span></span>
+            <span className="flex items-center gap-1 text-primary"><Pencil className="h-3 w-3" /> Trocar</span>
+          </button>
+        )}
+
         <div className="grid grid-cols-2 gap-2">
           <button type="button" onClick={() => switchTo("PIX")}
             className={`rounded-xl border px-3 py-3 text-sm font-medium flex items-center justify-center gap-2 transition ${
@@ -202,11 +226,14 @@ function PaymentPage() {
             initial={profileQ.data?.cpf_cnpj ?? ""}
             initialName={profileQ.data?.display_name ?? ""}
             initialPhone={profileQ.data?.phone ?? ""}
+            isRetry={cpfRetry}
+            onCancel={cpfRetry ? () => setStage(errorMsg ? "error" : "ready") : undefined}
             onSubmit={async (v) => {
               try {
-                await saveCpfFn({ data: v });
+                await saveCpfFn({ data: { ...v, reset_asaas_customer: cpfRetry } });
                 await profileQ.refetch();
-                toast.success("Dados salvos");
+                toast.success(cpfRetry ? "CPF/CNPJ atualizado" : "Dados salvos");
+                setCpfRetry(false);
                 void runCharge(billing);
               } catch (e) {
                 toast.error("Falha ao salvar", { description: e instanceof Error ? e.message : String(e) });
@@ -285,6 +312,9 @@ function PaymentPage() {
               <RefreshCw className="h-4 w-4" />
               {billing === "PIX" ? "Gerar PIX novamente" : "Tentar novamente"}
             </Button>
+            <Button variant="glass" className="w-full" onClick={() => openCpfEdit(true)}>
+              <Pencil className="h-4 w-4" /> Trocar CPF/CNPJ e tentar de novo
+            </Button>
             <Button variant="glass" className="w-full" onClick={() => nav({ to: "/dashboard" })}>
               Voltar ao dashboard
             </Button>
@@ -309,14 +339,16 @@ function PaymentPage() {
 }
 
 function CpfForm({
-  initial, initialName, initialPhone, onSubmit,
+  initial, initialName, initialPhone, isRetry, onCancel, onSubmit,
 }: {
   initial: string;
   initialName: string;
   initialPhone: string;
+  isRetry?: boolean;
+  onCancel?: () => void;
   onSubmit: (v: { cpf_cnpj: string; display_name?: string; phone?: string }) => Promise<void>;
 }) {
-  const [cpf, setCpf] = useState(initial ? formatCpfCnpj(initial) : "");
+  const [cpf, setCpf] = useState(initial && !isRetry ? formatCpfCnpj(initial) : "");
   const [name, setName] = useState(initialName ?? "");
   const [phone, setPhone] = useState(initialPhone ?? "");
   const [saving, setSaving] = useState(false);
@@ -337,8 +369,9 @@ function CpfForm({
     <div className="space-y-3">
       <div className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs text-warning">
         <AlertTriangle className="h-3.5 w-3.5 inline mr-1" />
-        O Asaas exige CPF ou CNPJ do pagador para emitir a cobrança.
-        Preencha uma vez — usamos nas próximas cobranças automaticamente.
+        {isRetry
+          ? "Corrija o CPF/CNPJ abaixo — vamos tentar gerar o pagamento de novo com o documento certo."
+          : "O Asaas exige CPF ou CNPJ do pagador para emitir a cobrança. Preencha uma vez — usamos nas próximas cobranças automaticamente."}
       </div>
       <div>
         <Label className="text-xs">Nome completo</Label>
@@ -355,6 +388,11 @@ function CpfForm({
       <Button variant="neon" className="w-full" disabled={!valid || saving} onClick={submit}>
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar e continuar"}
       </Button>
+      {onCancel && (
+        <Button variant="glass" className="w-full" onClick={onCancel} disabled={saving}>
+          Cancelar
+        </Button>
+      )}
     </div>
   );
 }
@@ -369,7 +407,7 @@ function CardForm({
 }) {
   const [holderName, setHolderName] = useState("");
   const [number, setNumber] = useState("");
-  const [exp, setExp] = useState(""); // MM/AA
+  const [exp, setExp] = useState("");
   const [ccv, setCcv] = useState("");
   const [cep, setCep] = useState("");
   const [addressNumber, setAddressNumber] = useState("");
