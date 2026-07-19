@@ -16,6 +16,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AguardandoRouteImport } from './routes/aguardando'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ESlugRouteImport } from './routes/e.$slug'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppPaymentRouteImport } from './routes/_app.payment'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
@@ -30,6 +31,7 @@ import { Route as AppCampaignIdRouteImport } from './routes/_app.campaign.$id'
 import { Route as ApiPublicHooksSendPushDailyRouteImport } from './routes/api/public/hooks/send-push-daily'
 import { Route as ApiPublicHooksMetaMetricsSyncRouteImport } from './routes/api/public/hooks/meta-metrics-sync'
 import { Route as ApiPublicHooksAiReviewCronRouteImport } from './routes/api/public/hooks/ai-review-cron'
+import { Route as ApiPublicESlugRouteImport } from './routes/api/public/e.$slug'
 
 const TermosRoute = TermosRouteImport.update({
   id: '/termos',
@@ -63,6 +65,11 @@ const AppRoute = AppRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ESlugRoute = ESlugRouteImport.update({
+  id: '/e/$slug',
+  path: '/e/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
@@ -138,6 +145,11 @@ const ApiPublicHooksAiReviewCronRoute =
     path: '/api/public/hooks/ai-review-cron',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicESlugRoute = ApiPublicESlugRouteImport.update({
+  id: '/api/public/e/$slug',
+  path: '/api/public/e/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -155,8 +167,10 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AppDashboardRoute
   '/payment': typeof AppPaymentRoute
   '/settings': typeof AppSettingsRoute
+  '/e/$slug': typeof ESlugRoute
   '/campaign/$id': typeof AppCampaignIdRoute
   '/api/public/asaas-webhook': typeof ApiPublicAsaasWebhookRoute
+  '/api/public/e/$slug': typeof ApiPublicESlugRoute
   '/api/public/hooks/ai-review-cron': typeof ApiPublicHooksAiReviewCronRoute
   '/api/public/hooks/meta-metrics-sync': typeof ApiPublicHooksMetaMetricsSyncRoute
   '/api/public/hooks/send-push-daily': typeof ApiPublicHooksSendPushDailyRoute
@@ -177,8 +191,10 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AppDashboardRoute
   '/payment': typeof AppPaymentRoute
   '/settings': typeof AppSettingsRoute
+  '/e/$slug': typeof ESlugRoute
   '/campaign/$id': typeof AppCampaignIdRoute
   '/api/public/asaas-webhook': typeof ApiPublicAsaasWebhookRoute
+  '/api/public/e/$slug': typeof ApiPublicESlugRoute
   '/api/public/hooks/ai-review-cron': typeof ApiPublicHooksAiReviewCronRoute
   '/api/public/hooks/meta-metrics-sync': typeof ApiPublicHooksMetaMetricsSyncRoute
   '/api/public/hooks/send-push-daily': typeof ApiPublicHooksSendPushDailyRoute
@@ -201,8 +217,10 @@ export interface FileRoutesById {
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/payment': typeof AppPaymentRoute
   '/_app/settings': typeof AppSettingsRoute
+  '/e/$slug': typeof ESlugRoute
   '/_app/campaign/$id': typeof AppCampaignIdRoute
   '/api/public/asaas-webhook': typeof ApiPublicAsaasWebhookRoute
+  '/api/public/e/$slug': typeof ApiPublicESlugRoute
   '/api/public/hooks/ai-review-cron': typeof ApiPublicHooksAiReviewCronRoute
   '/api/public/hooks/meta-metrics-sync': typeof ApiPublicHooksMetaMetricsSyncRoute
   '/api/public/hooks/send-push-daily': typeof ApiPublicHooksSendPushDailyRoute
@@ -225,8 +243,10 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/payment'
     | '/settings'
+    | '/e/$slug'
     | '/campaign/$id'
     | '/api/public/asaas-webhook'
+    | '/api/public/e/$slug'
     | '/api/public/hooks/ai-review-cron'
     | '/api/public/hooks/meta-metrics-sync'
     | '/api/public/hooks/send-push-daily'
@@ -247,8 +267,10 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/payment'
     | '/settings'
+    | '/e/$slug'
     | '/campaign/$id'
     | '/api/public/asaas-webhook'
+    | '/api/public/e/$slug'
     | '/api/public/hooks/ai-review-cron'
     | '/api/public/hooks/meta-metrics-sync'
     | '/api/public/hooks/send-push-daily'
@@ -270,8 +292,10 @@ export interface FileRouteTypes {
     | '/_app/dashboard'
     | '/_app/payment'
     | '/_app/settings'
+    | '/e/$slug'
     | '/_app/campaign/$id'
     | '/api/public/asaas-webhook'
+    | '/api/public/e/$slug'
     | '/api/public/hooks/ai-review-cron'
     | '/api/public/hooks/meta-metrics-sync'
     | '/api/public/hooks/send-push-daily'
@@ -285,7 +309,9 @@ export interface RootRouteChildren {
   PowerOnRoute: typeof PowerOnRoute
   PrivacidadeRoute: typeof PrivacidadeRoute
   TermosRoute: typeof TermosRoute
+  ESlugRoute: typeof ESlugRoute
   ApiPublicAsaasWebhookRoute: typeof ApiPublicAsaasWebhookRoute
+  ApiPublicESlugRoute: typeof ApiPublicESlugRoute
   ApiPublicHooksAiReviewCronRoute: typeof ApiPublicHooksAiReviewCronRoute
   ApiPublicHooksMetaMetricsSyncRoute: typeof ApiPublicHooksMetaMetricsSyncRoute
   ApiPublicHooksSendPushDailyRoute: typeof ApiPublicHooksSendPushDailyRoute
@@ -340,6 +366,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/e/$slug': {
+      id: '/e/$slug'
+      path: '/e/$slug'
+      fullPath: '/e/$slug'
+      preLoaderRoute: typeof ESlugRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/settings': {
@@ -440,6 +473,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksAiReviewCronRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/e/$slug': {
+      id: '/api/public/e/$slug'
+      path: '/api/public/e/$slug'
+      fullPath: '/api/public/e/$slug'
+      preLoaderRoute: typeof ApiPublicESlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -479,7 +519,9 @@ const rootRouteChildren: RootRouteChildren = {
   PowerOnRoute: PowerOnRoute,
   PrivacidadeRoute: PrivacidadeRoute,
   TermosRoute: TermosRoute,
+  ESlugRoute: ESlugRoute,
   ApiPublicAsaasWebhookRoute: ApiPublicAsaasWebhookRoute,
+  ApiPublicESlugRoute: ApiPublicESlugRoute,
   ApiPublicHooksAiReviewCronRoute: ApiPublicHooksAiReviewCronRoute,
   ApiPublicHooksMetaMetricsSyncRoute: ApiPublicHooksMetaMetricsSyncRoute,
   ApiPublicHooksSendPushDailyRoute: ApiPublicHooksSendPushDailyRoute,
@@ -487,13 +529,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

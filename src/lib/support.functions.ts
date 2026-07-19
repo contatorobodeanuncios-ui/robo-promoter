@@ -85,7 +85,7 @@ export const getOrCreateMyConversation = createServerFn({ method: "POST" })
     if (existing) return { id: existing.id, unread_by_client: existing.unread_by_client };
     const { data, error } = await sb
       .from("support_conversations")
-      .insert({ user_id: context.userId, status: "open" })
+      .insert({ user_id: context.userId, status: "aberto" })
       .select("id, unread_by_client")
       .single();
     if (error) throw new Error(error.message);
