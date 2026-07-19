@@ -36,11 +36,17 @@ import {
   adminUpdateCampaignMetrics,
   adminListPixAttempts,
   adminListMetaAdAccountCampaigns,
+  adminGenerateAccessLink,
+  adminListMetaLinkAudit,
+  adminListAIReviews,
   type AdminCampaignRow,
   type AdminClientRow,
   type PixAttemptRow,
   type MetaAdAccountCampaign,
+  type MetaLinkAuditRow,
+  type AIReviewRow,
 } from "@/lib/admin.functions";
+import { aiReviewCampaign } from "@/lib/ai-metrics.functions";
 
 import {
   getPaymentSettings,
@@ -53,7 +59,7 @@ import {
 } from "@/lib/payment.functions";
 import { adminListConversations } from "@/lib/support.functions";
 import { supabase } from "@/integrations/supabase/client";
-import { Shield, Zap, Hand, Eye, X, Rocket, Loader2, Link2, Check, Ban, CreditCard, AlertTriangle, Trash2, PowerOff, UserPlus, Copy, Settings, Users, Megaphone, Wallet, Pencil, UserCheck } from "lucide-react";
+import { Shield, Zap, Hand, Eye, X, Rocket, Loader2, Link2, Check, Ban, CreditCard, AlertTriangle, Trash2, PowerOff, UserPlus, Copy, Settings, Users, Megaphone, Wallet, Pencil, UserCheck, KeyRound, Sparkles, History, ThumbsUp, ThumbsDown, HelpCircle, RefreshCw } from "lucide-react";
 
 export const Route = createFileRoute("/_app/admindev")({
   ssr: false,
@@ -68,6 +74,80 @@ export const Route = createFileRoute("/_app/admindev")({
 
 const fmtBRL = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+// ============ Item 13: mensagens de erro mais didáticas ============
+// Mapeia trechos comuns de erro do Meta/Asaas para uma causa provável e uma
+// ação recomendada, em vez de só mostrar a string crua da API.
+function explainError(msg: string | null | undefined): { cause: string; action: string } | null {
+  if (!msg) return null;
+  const m = msg.toLowerCase();
+  if (m.includes("190") || m.includes("invalid oauth") || m.includes("access token")) {
+    return {
+      cause: "O token de acesso do Meta expirou ou foi revogado.",
+      action: "Gere um novo token de sistema no Business Manager e atualize o secret META_ACCESS_TOKEN.",
+    };
+  }
+  if (m.includes("meta_ad_account_id") || m.includes("ad_account_id")) {
+    return {
+      cause: "A conta de anúncios não está configurada corretamente no servidor.",
+      action: "Confira o secret META_AD_ACCOUNT_ID (só números, separado por vírgula se houver mais de uma conta).",
+    };
+  }
+  if (m.includes("permiss") || m.includes("(#200)") || m.includes("(#10)")) {
+    return {
+      cause: "O token do Meta não tem permissão suficiente para essa ação (ex: falta ads_read ou ads_management).",
+      action: "No Business Manager, gere o token de sistema novamente marcando as permissões corretas.",
+    };
+  }
+  if (m.includes("cpfcnpj") || m.includes("cpf") || m.includes("cnpj")) {
+    return {
+      cause: "O CPF/CNPJ do cliente foi rejeitado pelo Asaas (inválido ou não corresponde ao titular).",
+      action: "Peça para o cliente usar o botão \"Trocar CPF/CNPJ\" na tela de pagamento e reenviar.",
+    };
+  }
+  if (m.includes("user_agent") || m.includes("user-agent")) {
+    return {
+      cause: "A chamada para o Asaas não enviou o cabeçalho User-Agent exigido por eles.",
+      action: "Isso já deveria estar corrigido no código — se voltar a acontecer, avise que o header sumiu de novo.",
+    };
+  }
+  if (m.includes("asaas_api_key") || m.includes("api_key não configurada")) {
+    return {
+      cause: "A chave da API do Asaas não está configurada no servidor.",
+      action: "Cadastre o secret ASAAS_API_KEY no Lovable Cloud → Secrets.",
+    };
+  }
+  if (m.includes("customer") && (m.includes("obrigat") || m.includes("required"))) {
+    return {
+      cause: "Faltou algum dado obrigatório do cliente (nome, e-mail ou CPF/CNPJ) ao criar o cadastro no Asaas.",
+      action: "Confirme se o perfil do cliente tem nome, e-mail e CPF/CNPJ preenchidos.",
+    };
+  }
+  if (m.includes("id do meta inválido") || m.includes("meta inválido")) {
+    return {
+      cause: "O ID de campanha colado não tem o formato esperado (só números).",
+      action: "Use o botão \"Buscar no Meta\" em vez de colar o ID manualmente, para evitar erro de digitação.",
+    };
+  }
+  if (m.includes("insights") && m.includes("400")) {
+    return {
+      cause: "O ID da campanha vinculado não existe (mais) na conta de anúncios, ou foi digitado errado.",
+      action: "Revise o vínculo dessa campanha usando o botão \"Buscar no Meta\".",
+    };
+  }
+  return null;
+}
+
+function ErrorHint({ message }: { message: string | null | undefined }) {
+  const hint = explainError(message);
+  if (!hint) return null;
+  return (
+    <div className="mt-1.5 rounded-md bg-background/50 border border-white/10 p-2 text-[10px] space-y-1">
+      <p><span className="text-muted-foreground">Causa provável:</span> {hint.cause}</p>
+      <p><span className="text-muted-foreground">Ação recomendada:</span> {hint.action}</p>
+    </div>
+  );
+}
 
 function AdminDevPage() {
   const qc = useQueryClient();
@@ -213,7 +293,7 @@ function AdminDevPage() {
     mutationFn: (id: string) => approvePayFn({ data: { id } }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-payments"] });
-      toast.success("Pagamento aprovado e saldo creditado");
+      toast.success("Pagamento aprovado e saldo/orçamento creditado");
     },
     onError: (e) => toast.error("Falha", { description: String(e) }),
   });
@@ -290,6 +370,12 @@ function AdminDevPage() {
           </TabsTrigger>
           <TabsTrigger value="clients" className="gap-1.5">
             <Users className="h-3.5 w-3.5" /> Todos os Clientes
+          </TabsTrigger>
+          <TabsTrigger value="ai" className="gap-1.5">
+            <Sparkles className="h-3.5 w-3.5" /> IA de Métricas
+          </TabsTrigger>
+          <TabsTrigger value="metaaudit" className="gap-1.5">
+            <History className="h-3.5 w-3.5" /> Auditoria Meta
           </TabsTrigger>
         </TabsList>
 
@@ -720,7 +806,7 @@ function AdminDevPage() {
                             <MetaCampaignIdCell id={c.id} value={c.meta_campaign_id} />
                             <MetaCampaignPickerButton campaignId={c.id} campaignName={c.name} />
                           </td>
-                          <td className="px-4 py-3 min-w-[150px]">
+                          <td className="px-4 py-3 min-w-[170px]">
                             <SyncIndicator campaign={c} />
                           </td>
                           <td className="px-4 py-3">
@@ -791,6 +877,16 @@ function AdminDevPage() {
         <TabsContent value="clients" className="space-y-6 mt-6">
           <AllClientsSection clientsQuery={clientsQuery} />
         </TabsContent>
+
+        {/* ============ Aba: IA de Métricas (item 6) ============ */}
+        <TabsContent value="ai" className="space-y-6 mt-6">
+          <AIReviewsSection />
+        </TabsContent>
+
+        {/* ============ Aba: Auditoria Meta (item 14) ============ */}
+        <TabsContent value="metaaudit" className="space-y-6 mt-6">
+          <MetaAuditSection />
+        </TabsContent>
       </Tabs>
 
       {preview && <FbPreview campaign={preview} onClose={() => setPreview(null)} />}
@@ -817,7 +913,9 @@ function MetaCampaignIdCell({ id, value }: { id: string; value: string | null })
     mutationFn: (v: string) => saveFn({ data: { id, meta_campaign_id: v.trim() || null } }),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["admin-campaigns"] });
-      toast.success(r.meta_campaign_id ? "Vinculado ao Meta — entrará no próximo sync" : "Vínculo removido");
+      if (r.synced) toast.success("Vinculado — métricas sincronizadas agora mesmo");
+      else if (r.syncError) toast.warning("Vinculado, mas o sync inicial falhou: " + r.syncError);
+      else toast.success(r.meta_campaign_id ? "Vinculado ao Meta" : "Vínculo removido");
     },
     onError: (e) => toast.error("Falha ao salvar", { description: String(e) }),
   });
@@ -952,6 +1050,63 @@ function safeHostname(link: string | null | undefined): string {
   }
 }
 
+// ============ Item 7/8: link de acesso direto (magic link) ============
+function AccessLinkButton({ userId, label }: { userId: string; label?: string }) {
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState<string | null>(null);
+  const fn = useServerFn(adminGenerateAccessLink);
+  const mut = useMutation({
+    mutationFn: () => fn({ data: { user_id: userId } }),
+    onSuccess: (r) => {
+      setUrl(r.url);
+      setOpen(true);
+    },
+    onError: (e) => toast.error("Falha ao gerar link", { description: String(e) }),
+  });
+  return (
+    <>
+      <Button
+        variant="glass"
+        size="sm"
+        disabled={mut.isPending}
+        onClick={() => mut.mutate()}
+        title="Gerar link de acesso direto (sem senha)"
+      >
+        {mut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <KeyRound className="h-3.5 w-3.5" />}
+        {label ?? "Link de acesso"}
+      </Button>
+      {open && url && (
+        <Dialog open onOpenChange={(o) => !o && setOpen(false)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Link de acesso direto</DialogTitle>
+              <DialogDescription>
+                Válido por aproximadamente 1 hora e de uso único. Envie por um canal privado (WhatsApp,
+                e-mail) — quem tiver esse link entra direto na conta do cliente, sem senha.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="rounded-lg border border-primary/30 bg-background/50 p-3 text-xs font-mono break-all select-all">
+              {url}
+            </div>
+            <DialogFooter>
+              <Button
+                variant="neon"
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(url).then(() => toast.success("Link copiado"));
+                }}
+              >
+                <Copy className="h-3.5 w-3.5" /> Copiar link
+              </Button>
+              <Button variant="glass" size="sm" onClick={() => setOpen(false)}>Fechar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </>
+  );
+}
+
 function AccessRequestsSection() {
   const qc = useQueryClient();
   const listFn = useServerFn(adminListAccessRequests);
@@ -1021,6 +1176,9 @@ function AccessRequestsSection() {
                     </Button>
                   </>
                 )}
+                {/* Item 7/8: o link fica disponível independente do status — inclusive
+                    depois de aprovado, pra reenvio rápido se a pessoa perder o acesso. */}
+                <AccessLinkButton userId={r.user_id} />
               </div>
             </div>
           ))}
@@ -1106,13 +1264,15 @@ function AllClientsSection({
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex justify-end gap-2">
+                    <div className="flex justify-end gap-2 flex-wrap">
                       <Button variant="glass" size="sm" onClick={() => setBalanceTarget(c)} title="Editar saldo">
                         <Wallet className="h-3.5 w-3.5" />
                       </Button>
                       <Button variant="glass" size="sm" onClick={() => setProfileTarget(c)} title="Editar perfil">
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
+                      {/* Item 7/8: disponível mesmo pra cliente já aprovado, pra reenvio de acesso rápido */}
+                      <AccessLinkButton userId={c.id} label="" />
                       {c.status === "banned" ? (
                         <Button
                           variant="neon"
@@ -1411,6 +1571,7 @@ function PixAttemptRowItem({
           {!attempt.ok && attempt.error_message && (
             <p className="text-xs text-destructive mt-1 truncate max-w-md">{attempt.error_message}</p>
           )}
+          {!attempt.ok && <ErrorHint message={attempt.error_message} />}
         </div>
         <span className={`text-[11px] px-2 py-1 rounded-full border shrink-0 ${
           attempt.ok ? "border-success/40 text-success bg-success/10" : "border-destructive/40 text-destructive bg-destructive/10"
@@ -1454,27 +1615,39 @@ function computeSyncState(c: AdminCampaignRow): { state: SyncState; label: strin
   return { state: "yellow", label: "Sincronizado, mas ainda sem dados de entrega" };
 }
 
+// Item 12: mostra "agora mesmo" quando a sincronização aconteceu há menos de
+// 60 segundos, em vez do timestamp completo — reforça visualmente que acabou
+// de vincular e os dados já chegaram, sem precisar fazer conta de cabeça.
+function formatSyncTime(iso: string): string {
+  const diffSec = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (diffSec < 60) return "agora mesmo";
+  if (diffSec < 3600) return `há ${Math.floor(diffSec / 60)} min`;
+  return new Date(iso).toLocaleString("pt-BR");
+}
+
 function SyncIndicator({ campaign }: { campaign: AdminCampaignRow }) {
   const { state, label } = computeSyncState(campaign);
   const dotClass =
     state === "green" ? "bg-success" : state === "yellow" ? "bg-warning" : "bg-destructive";
   const textClass =
     state === "green" ? "text-success" : state === "yellow" ? "text-warning" : "text-destructive";
+  const justSynced = !!campaign.metrics_last_synced_at &&
+    (Date.now() - new Date(campaign.metrics_last_synced_at).getTime()) / 1000 < 60;
   return (
     <div className="flex items-start gap-1.5" title={label}>
-      <span className={`mt-1 h-2 w-2 rounded-full shrink-0 ${dotClass}`} />
+      <span className={`mt-1 h-2 w-2 rounded-full shrink-0 ${dotClass} ${justSynced ? "animate-pulse" : ""}`} />
       <div className="text-[10px] leading-tight">
         <p className={`font-medium ${textClass}`}>
           {state === "green" ? "Sincronizado" : state === "yellow" ? "Aguardando dados" : "Sem sincronizar"}
+          {justSynced && " ✨"}
         </p>
         {campaign.metrics_last_synced_at && (
-          <p className="text-muted-foreground">
-            {new Date(campaign.metrics_last_synced_at).toLocaleString("pt-BR")}
-          </p>
+          <p className="text-muted-foreground">{formatSyncTime(campaign.metrics_last_synced_at)}</p>
         )}
         {campaign.meta_effective_status && (
           <p className="text-muted-foreground">Meta: {campaign.meta_effective_status}</p>
         )}
+        {campaign.metrics_last_error && <ErrorHint message={campaign.metrics_last_error} />}
       </div>
     </div>
   );
@@ -1641,8 +1814,9 @@ function MetaCampaignPickerDialog({
               <Loader2 className="h-5 w-5 animate-spin mx-auto" />
             </div>
           ) : q.isError ? (
-            <div className="p-4 text-xs text-destructive">
-              Não foi possível buscar a lista: {q.error instanceof Error ? q.error.message : String(q.error)}
+            <div className="p-4 text-xs text-destructive space-y-1.5">
+              <p>Não foi possível buscar a lista: {q.error instanceof Error ? q.error.message : String(q.error)}</p>
+              <ErrorHint message={q.error instanceof Error ? q.error.message : String(q.error)} />
             </div>
           ) : filtered.length === 0 ? (
             <div className="p-4 text-xs text-muted-foreground text-center">
@@ -1684,5 +1858,200 @@ function MetaCampaignPickerDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ============ Item 6 UI: IA de Métricas ============
+const verdictMeta: Record<AIReviewRow["verdict"], { label: string; cls: string; icon: typeof ThumbsUp }> = {
+  good: { label: "Bom desempenho", cls: "text-success bg-success/10 border-success/30", icon: ThumbsUp },
+  warn: { label: "Precisa de atenção", cls: "text-warning bg-warning/10 border-warning/30", icon: AlertTriangle },
+  bad: { label: "Desempenho ruim", cls: "text-destructive bg-destructive/10 border-destructive/30", icon: ThumbsDown },
+  no_data: { label: "Sem dados suficientes", cls: "text-muted-foreground bg-white/5 border-white/10", icon: HelpCircle },
+};
+
+function AIReviewsSection() {
+  const qc = useQueryClient();
+  const listFn = useServerFn(adminListAIReviews);
+  const campsFn = useServerFn(adminListCampaigns);
+  const reviewFn = useServerFn(aiReviewCampaign);
+
+  const reviewsQ = useQuery({
+    queryKey: ["admin-ai-reviews"],
+    queryFn: () => listFn(),
+    refetchInterval: 60_000,
+  });
+  // Precisa da lista de campanhas pra oferecer "reavaliar" nas que ainda não têm review nenhuma.
+  const campsQ = useQuery({
+    queryKey: ["admin-campaigns"],
+    queryFn: () => campsFn(),
+  });
+
+  const reviewMut = useMutation({
+    mutationFn: (campaignId: string) => reviewFn({ data: { campaign_id: campaignId } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-ai-reviews"] });
+      toast.success("Análise concluída");
+    },
+    onError: (e) => toast.error("Falha na análise", { description: String(e) }),
+  });
+
+  const reviewedIds = new Set((reviewsQ.data ?? []).map((r) => r.campaign_id));
+  const linkedCampaigns = (campsQ.data ?? []).filter((c) => c.meta_campaign_id);
+  const neverReviewed = linkedCampaigns.filter((c) => !reviewedIds.has(c.id));
+
+  const counts = {
+    good: (reviewsQ.data ?? []).filter((r) => r.verdict === "good").length,
+    warn: (reviewsQ.data ?? []).filter((r) => r.verdict === "warn").length,
+    bad: (reviewsQ.data ?? []).filter((r) => r.verdict === "bad").length,
+  };
+
+  return (
+    <div className="space-y-6">
+      <section className="glass-strong rounded-2xl p-5 flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-5 w-5 text-primary" />
+          <div>
+            <p className="font-semibold">IA de Métricas</p>
+            <p className="text-xs text-muted-foreground">
+              Analisa cada campanha automaticamente a cada 3h e aponta o que está bom ou precisa de ajuste.
+            </p>
+          </div>
+        </div>
+        <div className="ml-auto flex gap-2 text-xs">
+          <span className="px-2.5 py-1 rounded-full bg-success/10 text-success border border-success/30">{counts.good} bem</span>
+          <span className="px-2.5 py-1 rounded-full bg-warning/10 text-warning border border-warning/30">{counts.warn} atenção</span>
+          <span className="px-2.5 py-1 rounded-full bg-destructive/10 text-destructive border border-destructive/30">{counts.bad} ruim</span>
+        </div>
+      </section>
+
+      {neverReviewed.length > 0 && (
+        <section className="glass rounded-xl p-4">
+          <p className="text-xs text-muted-foreground mb-2">
+            {neverReviewed.length} campanha(s) vinculada(s) ao Meta ainda sem nenhuma análise:
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {neverReviewed.map((c) => (
+              <Button
+                key={c.id}
+                variant="glass"
+                size="sm"
+                disabled={reviewMut.isPending}
+                onClick={() => reviewMut.mutate(c.id)}
+              >
+                {reviewMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                Analisar "{c.name}"
+              </Button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="glass-strong rounded-2xl overflow-hidden">
+        <div className="p-5 border-b border-white/5">
+          <h2 className="font-semibold">Últimas análises</h2>
+        </div>
+        {reviewsQ.isLoading ? (
+          <div className="p-8 text-center text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin mx-auto" /></div>
+        ) : !(reviewsQ.data ?? []).length ? (
+          <div className="p-8 text-center text-sm text-muted-foreground">
+            Nenhuma análise ainda. Vincule campanhas ao Meta e aguarde o próximo ciclo, ou analise manualmente acima.
+          </div>
+        ) : (
+          <div className="divide-y divide-white/5">
+            {(reviewsQ.data ?? []).map((r) => {
+              const meta = verdictMeta[r.verdict];
+              const Icon = meta.icon;
+              return (
+                <div key={r.id} className="p-4 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className={`inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-full border shrink-0 ${meta.cls}`}>
+                        <Icon className="h-3.5 w-3.5" /> {meta.label}
+                      </span>
+                      <p className="font-medium truncate">{r.campaign_name ?? r.campaign_id.slice(0, 8)}</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[10px] text-muted-foreground">
+                        {new Date(r.created_at).toLocaleString("pt-BR")}
+                      </span>
+                      <Button
+                        variant="glass"
+                        size="sm"
+                        className="h-7 text-[11px]"
+                        disabled={reviewMut.isPending}
+                        onClick={() => reviewMut.mutate(r.campaign_id)}
+                      >
+                        <RefreshCw className="h-3 w-3" /> Reavaliar
+                      </Button>
+                    </div>
+                  </div>
+                  <p className="text-sm">{r.summary}</p>
+                  {r.recommendations.length > 0 && (
+                    <ul className="text-xs text-muted-foreground space-y-1 pl-4 list-disc">
+                      {r.recommendations.map((rec, i) => <li key={i}>{rec}</li>)}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+// ============ Item 14 UI: Auditoria de vínculos Meta ============
+function MetaAuditSection() {
+  const fn = useServerFn(adminListMetaLinkAudit);
+  const q = useQuery({
+    queryKey: ["admin-meta-audit"],
+    queryFn: () => fn(),
+    refetchInterval: 60_000,
+  });
+
+  return (
+    <section className="glass-strong rounded-2xl overflow-hidden">
+      <div className="p-5 border-b border-white/5 flex items-center gap-2">
+        <History className="h-5 w-5 text-primary" />
+        <div>
+          <h2 className="font-semibold">Auditoria de vínculos Meta</h2>
+          <p className="text-xs text-muted-foreground">Todo vínculo/troca de ID de campanha ou conta de anúncios fica registrado aqui.</p>
+        </div>
+      </div>
+      {q.isLoading ? (
+        <div className="p-8 text-center text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin mx-auto" /></div>
+      ) : !(q.data ?? []).length ? (
+        <div className="p-8 text-center text-sm text-muted-foreground">Nenhuma alteração registrada ainda.</div>
+      ) : (
+        <div className="divide-y divide-white/5 max-h-[500px] overflow-y-auto">
+          {(q.data ?? []).map((r: MetaLinkAuditRow) => (
+            <div key={r.id} className="p-4 text-sm space-y-1">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-medium">{r.campaign_name ?? r.campaign_id.slice(0, 8)}</p>
+                <span className="text-[10px] text-muted-foreground">{new Date(r.created_at).toLocaleString("pt-BR")}</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Alterado por <span className="text-foreground">{r.changed_by_email ?? "sistema"}</span>
+              </p>
+              {(r.old_meta_campaign_id || r.new_meta_campaign_id) && (
+                <p className="text-xs font-mono">
+                  Campanha: <span className="text-muted-foreground">{r.old_meta_campaign_id ?? "—"}</span>
+                  {" → "}
+                  <span className="text-primary">{r.new_meta_campaign_id ?? "—"}</span>
+                </p>
+              )}
+              {(r.old_meta_ad_account_id || r.new_meta_ad_account_id) && (
+                <p className="text-xs font-mono">
+                  Conta: <span className="text-muted-foreground">{r.old_meta_ad_account_id ?? "—"}</span>
+                  {" → "}
+                  <span className="text-primary">{r.new_meta_ad_account_id ?? "—"}</span>
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
