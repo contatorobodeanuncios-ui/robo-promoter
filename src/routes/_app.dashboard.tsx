@@ -1,7 +1,7 @@
 import { reachRange, fmtRange } from "@/lib/mock-data";
 import { Button } from "@/components/ui/button";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Bot, MousePointerClick, DollarSign, TrendingDown, Plus, Sparkles, MapPin, CalendarDays, Users, Copy, ExternalLink } from "lucide-react";
+import { Bot, MousePointerClick, DollarSign, TrendingDown, Plus, Sparkles, MapPin, CalendarDays, Users, Copy, ExternalLink, AlertTriangle } from "lucide-react";
 import { EnergyOrb } from "@/components/app/EnergyOrb";
 import { RobotMascot } from "@/components/app/RobotMascot";
 import { SafeImage } from "@/components/app/SafeImage";
@@ -28,7 +28,7 @@ const statusMeta: Record<string, { label: string; cls: string; dot: string }> = 
   running: { label: "Rodando", cls: "text-success bg-success/10 border-success/30", dot: "bg-success" },
   rodando: { label: "Rodando", cls: "text-success bg-success/10 border-success/30", dot: "bg-success" },
   analyzing: { label: "IA analisando", cls: "text-primary bg-primary/10 border-primary/30", dot: "bg-primary animate-pulse" },
-  aguardando_vinculo_meta: { label: "Aguardando Pagamento", cls: "text-warning bg-warning/10 border-warning/30", dot: "bg-warning animate-pulse" },
+  aguardando_vinculo_meta: { label: "Aguardando Pagamento", cls: "text-destructive bg-destructive/10 border-destructive/30", dot: "bg-destructive animate-pulse" },
   paused: { label: "Pausado", cls: "text-muted-foreground bg-white/5 border-white/10", dot: "bg-muted-foreground" },
   encerrada_saldo_consumido: { label: "Encerrada — saldo consumido", cls: "text-muted-foreground bg-destructive/10 border-destructive/30", dot: "bg-destructive" },
 };
@@ -132,10 +132,12 @@ function Dashboard() {
             const s = statusMeta[c.status] ?? { label: c.status, cls: "text-muted-foreground bg-white/5 border-white/10", dot: "bg-muted-foreground" };
             const range = reachRange(c.budget, c.days);
             const isRunning = c.status === "running" || c.status === "rodando";
-            const isAwaitingPay =
-              c.status === "aguardando_vinculo_meta" &&
-              c.funding_type === "pix_dedicated" &&
-              !!c.invoice_url;
+            // Item 2: mostra o aviso vermelho de pagamento pendente sempre que a
+            // campanha estiver aguardando pagamento — antes só aparecia quando já
+            // existia um link de PIX gerado, deixando campanhas sem link ainda
+            // (ex: CPF pendente) sem nenhum aviso visível.
+            const isAwaitingPay = c.status === "aguardando_vinculo_meta";
+            const hasPixLink = isAwaitingPay && c.funding_type === "pix_dedicated" && !!c.invoice_url;
             const M = ({ label, value, dim }: { label: string; value: string; dim?: boolean }) => (
               <div className="glass rounded-md p-1.5 min-w-0">
                 <p className="text-[10px] text-muted-foreground truncate">{label}</p>
@@ -195,27 +197,30 @@ function Dashboard() {
                 </Link>
 
                 {isAwaitingPay && (
-                  <div className="mt-3 rounded-xl border border-warning/40 bg-warning/10 p-3 flex flex-wrap items-center gap-2">
-                    <span className="text-xs text-warning font-medium">
-                      Pague este PIX para o robô iniciar a campanha.
+                  <div className="mt-3 rounded-xl border-2 border-destructive/60 bg-destructive/10 p-3 flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-destructive font-semibold flex items-center gap-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                      Pagamento pendente. Aguardando finalização para concluir com o anúncio.
                     </span>
-                    <div className="ml-auto flex gap-2">
-                      <Button
-                        variant="glass"
-                        size="sm"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          navigator.clipboard.writeText(c.invoice_url ?? "").then(() => toast.success("Link copiado"));
-                        }}
-                      >
-                        <Copy className="h-3.5 w-3.5" /> Copiar link
-                      </Button>
-                      <a href={c.invoice_url ?? "#"} target="_blank" rel="noreferrer">
-                        <Button variant="neon" size="sm">
-                          <ExternalLink className="h-3.5 w-3.5" /> Pagar agora
+                    {hasPixLink && (
+                      <div className="ml-auto flex gap-2">
+                        <Button
+                          variant="glass"
+                          size="sm"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            navigator.clipboard.writeText(c.invoice_url ?? "").then(() => toast.success("Link copiado"));
+                          }}
+                        >
+                          <Copy className="h-3.5 w-3.5" /> Copiar link
                         </Button>
-                      </a>
-                    </div>
+                        <a href={c.invoice_url ?? "#"} target="_blank" rel="noreferrer">
+                          <Button variant="neon" size="sm">
+                            <ExternalLink className="h-3.5 w-3.5" /> Pagar agora
+                          </Button>
+                        </a>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
