@@ -8,8 +8,10 @@ import { toast } from "sonner";
 import {
   AlertTriangle,
   Bell,
+  BellRing,
   CreditCard,
   Globe,
+  Loader2,
   Plus,
   Save,
   Sparkles,
@@ -18,6 +20,9 @@ import {
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { supabase } from "@/integrations/supabase/client";
+import { useServerFn } from "@tanstack/react-start";
+import { getVapidPublicKey, subscribePush, sendTestPush } from "@/lib/push.functions";
+import { subscribeToPush } from "@/lib/pwa-register";
 
 export const Route = createFileRoute("/_app/settings")({
   head: () => ({
@@ -57,6 +62,68 @@ function SettingsPage() {
   const [notif, setNotif] = useState<NotifPrefs>(() => loadNotif());
   const [confirmText, setConfirmText] = useState("");
   const [customAmount, setCustomAmount] = useState("");
+
+  // Item 4: status real da inscrição de push (não é só uma preferência local —
+  // reflete se existe mesmo uma PushSubscription ativa neste navegador).
+  const [pushStatus, setPushStatus] = useState<"checking" | "subscribed" | "not_subscribed" | "unsupported">("checking");
+  const [pushBusy, setPushBusy] = useState(false);
+  const getKeyFn = useServerFn(getVapidPublicKey);
+  const subscribeFn = useServerFn(subscribePush);
+  const testFn = useServerFn(sendTestPush);
+
+  useEffect(() => {
+    (async () => {
+      if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+        setPushStatus("unsupported");
+        return;
+      }
+      try {
+        const reg = await navigator.serviceWorker.getRegistration();
+        const sub = await reg?.pushManager.getSubscription();
+        setPushStatus(sub ? "subscribed" : "not_subscribed");
+      } catch {
+        setPushStatus("not_subscribed");
+      }
+    })();
+  }, []);
+
+  const activateOrTestPush = async () => {
+    setPushBusy(true);
+    try {
+      const { publicKey } = await getKeyFn();
+      if (!publicKey) {
+        toast.error("Push indisponível", { description: "Chave VAPID não configurada no servidor." });
+        return;
+      }
+      const sub = await subscribeToPush(publicKey);
+      if (!sub) {
+        toast.info("Permissão de notificação não concedida");
+        return;
+      }
+      const json = sub.toJSON() as { keys?: { p256dh?: string; auth?: string } };
+      if (json.keys?.p256dh && json.keys?.auth) {
+        await subscribeFn({
+          data: {
+            endpoint: sub.endpoint,
+            p256dh: json.keys.p256dh,
+            auth: json.keys.auth,
+            userAgent: navigator.userAgent,
+          },
+        });
+      }
+      setPushStatus("subscribed");
+      const result = await testFn();
+      if (result.sent > 0) {
+        toast.success("Push de teste enviado — se apareceu no seu dispositivo, está tudo certo.");
+      } else {
+        toast.warning("Inscrito, mas o teste não confirmou entrega ainda.");
+      }
+    } catch (e) {
+      toast.error("Falha ao testar notificações", { description: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setPushBusy(false);
+    }
+  };
 
   // Puxa nome/email reais da sessão do Google/Supabase
   useEffect(() => {
@@ -190,6 +257,29 @@ function SettingsPage() {
         <h2 className="font-semibold flex items-center gap-2">
           <Bell className="h-4 w-4 text-primary" /> Notificações
         </h2>
+
+        {/* Item 4: status real + teste de ponta a ponta do push */}
+        <div className="flex items-center justify-between gap-3 py-2 border-b border-white/5 flex-wrap">
+          <div className="flex items-center gap-2">
+            <BellRing className={`h-4 w-4 ${pushStatus === "subscribed" ? "text-success" : "text-muted-foreground"}`} />
+            <div>
+              <p className="text-sm">Notificações push neste dispositivo</p>
+              <p className="text-xs text-muted-foreground">
+                {pushStatus === "checking" && "Verificando..."}
+                {pushStatus === "subscribed" && "Inscrito e pronto para receber alertas reais."}
+                {pushStatus === "not_subscribed" && "Ainda não inscrito neste navegador."}
+                {pushStatus === "unsupported" && "Este navegador não suporta notificações push."}
+              </p>
+            </div>
+          </div>
+          {pushStatus !== "unsupported" && (
+            <Button variant={pushStatus === "subscribed" ? "glass" : "neon"} size="sm" onClick={activateOrTestPush} disabled={pushBusy}>
+              {pushBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BellRing className="h-3.5 w-3.5" />}
+              {pushStatus === "subscribed" ? "Testar agora" : "Ativar e testar"}
+            </Button>
+          )}
+        </div>
+
         <div className="flex items-center justify-between py-2 border-b border-white/5">
           <div>
             <p className="text-sm">Resumo diário do robô</p>
