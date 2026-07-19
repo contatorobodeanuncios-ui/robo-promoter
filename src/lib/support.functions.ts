@@ -30,7 +30,6 @@ export interface SupportMessageRow {
   attachments: SupportAttachment[];
 }
 
-
 export interface SupportConversationRow {
   id: string;
   user_id: string;
@@ -44,7 +43,13 @@ export interface SupportConversationRow {
   last_message?: string | null;
 }
 
-// ============ Cliente ============
+const attachmentSchema = z.object({
+  path: z.string().min(1),
+  mime: z.string().min(1),
+  size: z.number().nonnegative(),
+  name: z.string().min(1),
+  kind: z.enum(["image", "audio", "file"]),
+});
 
 function mapMsg(m: {
   id: string; conversation_id: string; sender: string; content: string;
@@ -64,7 +69,7 @@ function mapMsg(m: {
   };
 }
 
-
+// ============ Cliente ============
 
 export const getOrCreateMyConversation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -92,14 +97,12 @@ export const listMyMessages = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ conversation_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }): Promise<SupportMessageRow[]> => {
     const sb = await admin();
-    // valida ownership
     const { data: conv } = await sb
       .from("support_conversations")
       .select("user_id")
       .eq("id", data.conversation_id)
       .maybeSingle();
     if (!conv || conv.user_id !== context.userId) throw new Error("Forbidden");
-    // marca lido pelo cliente
     await sb
       .from("support_conversations")
       .update({ unread_by_client: false })
@@ -113,13 +116,17 @@ export const listMyMessages = createServerFn({ method: "GET" })
     return (msgs ?? []).map(mapMsg);
   });
 
-
+// Aceita anexos (item 1): imagem, áudio ou arquivo. Ao menos um dos dois
+// (texto ou anexo) precisa existir — mensagem totalmente vazia é rejeitada.
 export const sendMyMessage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
     z.object({
       conversation_id: z.string().uuid(),
-      content: z.string().min(1).max(2000),
+      content: z.string().max(2000).default(""),
+      attachments: z.array(attachmentSchema).max(5).default([]),
+    }).refine((v) => v.content.trim().length > 0 || v.attachments.length > 0, {
+      message: "Mensagem vazia",
     }).parse(d),
   )
   .handler(async ({ data, context }) => {
@@ -135,6 +142,7 @@ export const sendMyMessage = createServerFn({ method: "POST" })
       conversation_id: data.conversation_id,
       sender: "client",
       content: data.content,
+      attachments: data.attachments as unknown as never,
     });
     if (error) throw new Error(error.message);
     await sb
@@ -142,6 +150,36 @@ export const sendMyMessage = createServerFn({ method: "POST" })
       .update({ last_message_at: now, unread_by_admin: true, updated_at: now })
       .eq("id", data.conversation_id);
     return { ok: true };
+  });
+
+// Gera um caminho de upload (não é signed URL — o upload é feito direto pelo
+// navegador com a sessão do usuário, que já tem permissão via RLS na própria
+// pasta support/{user_id}/...). Só centraliza a convenção do nome de arquivo.
+export const getSupportUploadPath = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ filename: z.string().min(1).max(200) }).parse(d))
+  .handler(async ({ data, context }) => {
+    const safe = data.filename.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-100);
+    const path = `support/${context.userId}/${Date.now()}-${safe}`;
+    return { path };
+  });
+
+// Gera uma signed URL de leitura pra um anexo (bucket é privado).
+export const getSupportAttachmentUrl = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ path: z.string().min(1) }).parse(d))
+  .handler(async ({ data, context }) => {
+    const sb = await admin();
+    // valida que o usuário é dono da pasta OU é admin, antes de gerar a URL.
+    const isOwner = data.path.startsWith(`support/${context.userId}/`);
+    if (!isOwner && !isAdminEmail(context.claims as { email?: string })) {
+      throw new Error("Forbidden");
+    }
+    const { data: signed, error } = await sb.storage
+      .from("support-attachments")
+      .createSignedUrl(data.path, 3600);
+    if (error) throw new Error(error.message);
+    return { url: signed.signedUrl };
   });
 
 // ============ Admin ============
@@ -164,7 +202,6 @@ export const adminListConversations = createServerFn({ method: "GET" })
       .in("id", userIds.length ? userIds : ["00000000-0000-0000-0000-000000000000"]);
     const nameMap = new Map((profs ?? []).map((p) => [p.id, p]));
 
-    // pega última mensagem por conversa
     const convIds = (convs ?? []).map((c) => c.id);
     const { data: lastMsgs } = await sb
       .from("support_messages")
@@ -209,12 +246,18 @@ export const adminListMessages = createServerFn({ method: "GET" })
     return (msgs ?? []).map(mapMsg);
   });
 
+// Admin também pode anexar (imagem/áudio/arquivo) — sobe pra pasta do CLIENTE
+// (support/{client_user_id}/...) pra que a policy de leitura do cliente
+// (que só lê a própria pasta) enxergue o anexo enviado pelo admin.
 export const adminSendMessage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
     z.object({
       conversation_id: z.string().uuid(),
-      content: z.string().min(1).max(2000),
+      content: z.string().max(2000).default(""),
+      attachments: z.array(attachmentSchema).max(5).default([]),
+    }).refine((v) => v.content.trim().length > 0 || v.attachments.length > 0, {
+      message: "Mensagem vazia",
     }).parse(d),
   )
   .handler(async ({ data, context }) => {
@@ -225,21 +268,42 @@ export const adminSendMessage = createServerFn({ method: "POST" })
       conversation_id: data.conversation_id,
       sender: "admin",
       content: data.content,
+      attachments: data.attachments as unknown as never,
     });
     if (error) throw new Error(error.message);
     await sb
       .from("support_conversations")
       .update({ last_message_at: now, unread_by_client: true, updated_at: now })
       .eq("id", data.conversation_id);
-    // audit
     await sb.from("admin_audit_log").insert({
       admin_email: (context.claims as { email?: string })?.email ?? "",
       action: "support_reply",
       target_type: "conversation",
       target_id: data.conversation_id,
-      details: { length: data.content.length },
+      details: { length: data.content.length, attachments: data.attachments.length },
     });
     return { ok: true };
+  });
+
+// Gera o caminho de upload que o admin deve usar para anexar num atendimento
+// específico — sempre na pasta do CLIENTE dono da conversa, não do admin.
+export const getAdminSupportUploadPath = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ conversation_id: z.string().uuid(), filename: z.string().min(1).max(200) }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    if (!isAdminEmail(context.claims as { email?: string })) throw new Error("Forbidden");
+    const sb = await admin();
+    const { data: conv } = await sb
+      .from("support_conversations")
+      .select("user_id")
+      .eq("id", data.conversation_id)
+      .maybeSingle();
+    if (!conv) throw new Error("Conversa não encontrada");
+    const safe = data.filename.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-100);
+    const path = `support/${conv.user_id}/${Date.now()}-${safe}`;
+    return { path };
   });
 
 export const adminCloseConversation = createServerFn({ method: "POST" })
