@@ -5,14 +5,17 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Loader2, Send, X, MessageSquarePlus, Users } from "lucide-react";
+import { ArrowLeft, Loader2, Send, X, MessageSquarePlus, Users, Paperclip, Mic, Square, File as FileIcon, Play, Pause } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   adminListConversations,
   adminListMessages,
   adminSendMessage,
   adminCloseConversation,
+  getAdminSupportUploadPath,
+  getSupportAttachmentUrl,
   type SupportConversationRow,
+  type SupportAttachment,
 } from "@/lib/support.functions";
 import { adminListAllClients, adminStartConversationWith, adminGetClientContext } from "@/lib/admin.functions";
 
@@ -28,6 +31,13 @@ export const Route = createFileRoute("/_app/admin-support")({
 });
 
 type Tab = "conversations" | "clients";
+const MAX_FILE_MB = 15;
+
+function kindFromMime(mime: string): SupportAttachment["kind"] {
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("audio/")) return "audio";
+  return "file";
+}
 
 function SupportAdminPage() {
   const qc = useQueryClient();
@@ -38,12 +48,19 @@ function SupportAdminPage() {
   const clientsFn = useServerFn(adminListAllClients);
   const startFn = useServerFn(adminStartConversationWith);
   const ctxFn = useServerFn(adminGetClientContext);
+  const uploadPathFn = useServerFn(getAdminSupportUploadPath);
 
   const [tab, setTab] = useState<Tab>("conversations");
   const [selected, setSelected] = useState<string | null>(null);
   const [text, setText] = useState("");
   const [clientFilter, setClientFilter] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [pendingAttachment, setPendingAttachment] = useState<SupportAttachment | null>(null);
+  const [recording, setRecording] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   const convs = useQuery({
     queryKey: ["admin-support-list"],
@@ -67,7 +84,6 @@ function SupportAdminPage() {
     enabled: tab === "clients",
   });
 
-  // Realtime nas mensagens da conversa selecionada
   useEffect(() => {
     if (!selected) return;
     const ch = supabase
@@ -81,7 +97,6 @@ function SupportAdminPage() {
     return () => { supabase.removeChannel(ch); };
   }, [selected, qc]);
 
-  // Realtime na lista global de conversas
   useEffect(() => {
     const ch = supabase
       .channel("admin-support-list")
@@ -98,10 +113,16 @@ function SupportAdminPage() {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [msgs.data]);
 
+  useEffect(() => {
+    setPendingAttachment(null);
+  }, [selected]);
+
   const sendMut = useMutation({
-    mutationFn: (content: string) => sendFn({ data: { conversation_id: selected!, content } }),
+    mutationFn: (v: { content: string; attachments: SupportAttachment[] }) =>
+      sendFn({ data: { conversation_id: selected!, content: v.content, attachments: v.attachments } }),
     onSuccess: () => {
       setText("");
+      setPendingAttachment(null);
       qc.invalidateQueries({ queryKey: ["admin-support-msgs", selected] });
       qc.invalidateQueries({ queryKey: ["admin-support-list"] });
     },
@@ -124,6 +145,58 @@ function SupportAdminPage() {
     },
     onError: (e) => toast.error(String(e)),
   });
+
+  const uploadFile = async (file: File) => {
+    if (!selected) return;
+    if (file.size > MAX_FILE_MB * 1024 * 1024) {
+      toast.error(`Arquivo muito grande (máx. ${MAX_FILE_MB}MB)`);
+      return;
+    }
+    setUploading(true);
+    try {
+      const { path } = await uploadPathFn({ data: { conversation_id: selected, filename: file.name } });
+      const { error } = await supabase.storage
+        .from("support-attachments")
+        .upload(path, file, { contentType: file.type || "application/octet-stream" });
+      if (error) throw error;
+      setPendingAttachment({
+        path,
+        mime: file.type || "application/octet-stream",
+        size: file.size,
+        name: file.name,
+        kind: kindFromMime(file.type || ""),
+      });
+      toast.success("Anexo pronto — clique em enviar");
+    } catch (e) {
+      toast.error("Falha ao enviar anexo", { description: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const rec = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      rec.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      rec.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        const file = new File([blob], `audio-${Date.now()}.webm`, { type: "audio/webm" });
+        await uploadFile(file);
+      };
+      mediaRecorderRef.current = rec;
+      rec.start();
+      setRecording(true);
+    } catch {
+      toast.error("Não foi possível acessar o microfone");
+    }
+  };
+  const stopRecording = () => {
+    mediaRecorderRef.current?.stop();
+    setRecording(false);
+  };
 
   const filteredClients = (clients.data ?? []).filter((c) => {
     if (c.status === "banned") return false;
@@ -275,27 +348,59 @@ function SupportAdminPage() {
                   {(msgs.data ?? []).map((m) => (
                     <div
                       key={m.id}
-                      className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${
+                      className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm space-y-2 ${
                         m.sender === "admin"
                           ? "ml-auto bg-primary text-primary-foreground"
                           : "bg-white/5"
                       }`}
                     >
-                      {m.content}
+                      {m.content && <p>{m.content}</p>}
+                      {m.attachments.map((a, i) => (
+                        <AdminAttachmentView key={i} attachment={a} />
+                      ))}
                     </div>
                   ))}
                 </div>
+
+                {pendingAttachment && (
+                  <div className="px-3 py-2 border-t border-white/10 flex items-center justify-between gap-2 text-xs">
+                    <span className="truncate flex items-center gap-1.5">
+                      <FileIcon className="h-3.5 w-3.5 shrink-0" /> {pendingAttachment.name}
+                    </span>
+                    <button type="button" onClick={() => setPendingAttachment(null)} className="text-muted-foreground hover:text-foreground">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
                     const c = text.trim();
-                    if (!c || sendMut.isPending) return;
-                    sendMut.mutate(c);
+                    if ((!c && !pendingAttachment) || sendMut.isPending) return;
+                    sendMut.mutate({ content: c, attachments: pendingAttachment ? [pendingAttachment] : [] });
                   }}
-                  className="p-2 border-t border-white/10 flex gap-2"
+                  className="p-2 border-t border-white/10 flex items-center gap-1.5"
                 >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    accept="image/*,audio/*,.pdf,.doc,.docx,.txt"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) void uploadFile(f);
+                      e.target.value = "";
+                    }}
+                  />
+                  <Button type="button" variant="ghost" size="icon" disabled={uploading || recording} onClick={() => fileInputRef.current?.click()} title="Anexar imagem ou arquivo">
+                    {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+                  </Button>
+                  <Button type="button" variant={recording ? "destructive" : "ghost"} size="icon" disabled={uploading} onClick={recording ? stopRecording : startRecording} title={recording ? "Parar gravação" : "Gravar áudio"}>
+                    {recording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                  </Button>
                   <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Responder ao cliente..." />
-                  <Button type="submit" size="icon" disabled={!text.trim() || sendMut.isPending}>
+                  <Button type="submit" size="icon" disabled={(!text.trim() && !pendingAttachment) || sendMut.isPending}>
                     {sendMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                   </Button>
                 </form>
@@ -305,5 +410,53 @@ function SupportAdminPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function AdminAttachmentView({ attachment }: { attachment: SupportAttachment }) {
+  const fn = useServerFn(getSupportAttachmentUrl);
+  const q = useQuery({
+    queryKey: ["support-att-url", attachment.path],
+    queryFn: () => fn({ data: { path: attachment.path } }),
+    staleTime: 55 * 60 * 1000,
+  });
+  const [playing, setPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  if (q.isLoading) {
+    return <div className="text-xs opacity-70 flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> carregando anexo...</div>;
+  }
+  const url = q.data?.url;
+  if (!url) return <div className="text-xs opacity-70">Anexo indisponível</div>;
+
+  if (attachment.kind === "image") {
+    return (
+      <a href={url} target="_blank" rel="noreferrer">
+        <img src={url} alt={attachment.name} className="max-w-full max-h-48 rounded-lg border border-white/10" />
+      </a>
+    );
+  }
+  if (attachment.kind === "audio") {
+    return (
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            if (!audioRef.current) return;
+            if (playing) { audioRef.current.pause(); } else { void audioRef.current.play(); }
+          }}
+          className="h-7 w-7 rounded-full bg-white/10 flex items-center justify-center shrink-0"
+        >
+          {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+        </button>
+        <audio ref={audioRef} src={url} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} className="hidden" />
+        <span className="text-xs opacity-80">Mensagem de voz</span>
+      </div>
+    );
+  }
+  return (
+    <a href={url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs underline">
+      <FileIcon className="h-3.5 w-3.5 shrink-0" /> {attachment.name}
+    </a>
   );
 }
