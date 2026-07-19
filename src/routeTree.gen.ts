@@ -16,6 +16,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AguardandoRouteImport } from './routes/aguardando'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ESlugRouteImport } from './routes/e.$slug'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppPaymentRouteImport } from './routes/_app.payment'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
@@ -64,6 +65,11 @@ const AppRoute = AppRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ESlugRoute = ESlugRouteImport.update({
+  id: '/e/$slug',
+  path: '/e/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
@@ -161,6 +167,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AppDashboardRoute
   '/payment': typeof AppPaymentRoute
   '/settings': typeof AppSettingsRoute
+  '/e/$slug': typeof ESlugRoute
   '/campaign/$id': typeof AppCampaignIdRoute
   '/api/public/asaas-webhook': typeof ApiPublicAsaasWebhookRoute
   '/api/public/e/$slug': typeof ApiPublicESlugRoute
@@ -184,6 +191,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AppDashboardRoute
   '/payment': typeof AppPaymentRoute
   '/settings': typeof AppSettingsRoute
+  '/e/$slug': typeof ESlugRoute
   '/campaign/$id': typeof AppCampaignIdRoute
   '/api/public/asaas-webhook': typeof ApiPublicAsaasWebhookRoute
   '/api/public/e/$slug': typeof ApiPublicESlugRoute
@@ -209,6 +217,7 @@ export interface FileRoutesById {
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/payment': typeof AppPaymentRoute
   '/_app/settings': typeof AppSettingsRoute
+  '/e/$slug': typeof ESlugRoute
   '/_app/campaign/$id': typeof AppCampaignIdRoute
   '/api/public/asaas-webhook': typeof ApiPublicAsaasWebhookRoute
   '/api/public/e/$slug': typeof ApiPublicESlugRoute
@@ -234,6 +243,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/payment'
     | '/settings'
+    | '/e/$slug'
     | '/campaign/$id'
     | '/api/public/asaas-webhook'
     | '/api/public/e/$slug'
@@ -257,6 +267,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/payment'
     | '/settings'
+    | '/e/$slug'
     | '/campaign/$id'
     | '/api/public/asaas-webhook'
     | '/api/public/e/$slug'
@@ -281,6 +292,7 @@ export interface FileRouteTypes {
     | '/_app/dashboard'
     | '/_app/payment'
     | '/_app/settings'
+    | '/e/$slug'
     | '/_app/campaign/$id'
     | '/api/public/asaas-webhook'
     | '/api/public/e/$slug'
@@ -297,6 +309,7 @@ export interface RootRouteChildren {
   PowerOnRoute: typeof PowerOnRoute
   PrivacidadeRoute: typeof PrivacidadeRoute
   TermosRoute: typeof TermosRoute
+  ESlugRoute: typeof ESlugRoute
   ApiPublicAsaasWebhookRoute: typeof ApiPublicAsaasWebhookRoute
   ApiPublicESlugRoute: typeof ApiPublicESlugRoute
   ApiPublicHooksAiReviewCronRoute: typeof ApiPublicHooksAiReviewCronRoute
@@ -353,6 +366,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/e/$slug': {
+      id: '/e/$slug'
+      path: '/e/$slug'
+      fullPath: '/e/$slug'
+      preLoaderRoute: typeof ESlugRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/settings': {
@@ -499,6 +519,7 @@ const rootRouteChildren: RootRouteChildren = {
   PowerOnRoute: PowerOnRoute,
   PrivacidadeRoute: PrivacidadeRoute,
   TermosRoute: TermosRoute,
+  ESlugRoute: ESlugRoute,
   ApiPublicAsaasWebhookRoute: ApiPublicAsaasWebhookRoute,
   ApiPublicESlugRoute: ApiPublicESlugRoute,
   ApiPublicHooksAiReviewCronRoute: ApiPublicHooksAiReviewCronRoute,

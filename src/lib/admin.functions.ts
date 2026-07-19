@@ -976,7 +976,7 @@ export const adminUpdateCampaignMetrics = createServerFn({ method: "POST" })
 export const adminGenerateAccessLink = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ user_id: z.string().uuid() }).parse(d))
-  .handler(async ({ data, context }): Promise<{ url: string; email: string | null }> => {
+  .handler(async ({ data, context }): Promise<{ url: string; email: string | null; expires_at: string }> => {
     await assertAdmin(context.userId, context.claims as { email?: string });
     const admin = await getSupabaseAdmin();
     const { data: u } = await admin.auth.admin.getUserById(data.user_id);
@@ -992,22 +992,50 @@ export const adminGenerateAccessLink = createServerFn({ method: "POST" })
       options: { redirectTo: `${siteUrl}/dashboard` },
     });
     if (error) throw new Error(error.message);
-    const url = link.properties?.action_link ?? "";
-    if (!url) throw new Error("Supabase não retornou um link válido");
+    const targetUrl = link.properties?.action_link ?? "";
+    if (!targetUrl) throw new Error("Supabase não retornou um link válido");
+
+    // Gera slug curto único (8 chars alfanuméricos). Retenta em caso de colisão.
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789abcdefghijkmnpqrstuvwxyz";
+    const makeSlug = () => {
+      let s = "";
+      for (let i = 0; i < 8; i++) s += alphabet[Math.floor(Math.random() * alphabet.length)];
+      return s;
+    };
+    const adminEmail = (context.claims as { email?: string })?.email ?? "";
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    let slug = "";
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const candidate = makeSlug();
+      const { error: insErr } = await admin.from("access_link_slugs").insert({
+        slug: candidate,
+        target_url: targetUrl,
+        target_user_id: data.user_id,
+        created_by_email: adminEmail,
+        expires_at: expiresAt,
+      });
+      if (!insErr) { slug = candidate; break; }
+      if (!insErr || !String(insErr.message).includes("duplicate")) {
+        if (attempt === 4) throw new Error(insErr.message);
+      }
+    }
+    if (!slug) throw new Error("Não foi possível gerar slug único");
+
+    const shortUrl = `${siteUrl}/e/${slug}`;
 
     await admin.from("admin_magic_link_events").insert({
-      admin_email: (context.claims as { email?: string })?.email ?? "",
+      admin_email: adminEmail,
       target_user_id: data.user_id,
       target_email: email,
     });
     await admin.from("admin_audit_log").insert({
-      admin_email: (context.claims as { email?: string })?.email ?? "",
+      admin_email: adminEmail,
       action: "magic_link_generate",
       target_type: "user",
       target_id: data.user_id,
-      details: { target_email: email },
+      details: { target_email: email, slug },
     });
-    return { url, email };
+    return { url: shortUrl, email, expires_at: expiresAt };
   });
 
 // ============ Auditoria Meta (item 14) ============
