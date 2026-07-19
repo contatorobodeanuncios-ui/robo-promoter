@@ -180,11 +180,24 @@ export interface MetaAdAccountCampaign {
   already_linked_to: string | null;
 }
 
-// Busca as campanhas que existem de verdade nas contas de anúncios do Meta.
-// Retorna também o nome de cada conta para o admin distinguir facilmente.
+export interface MetaAdAccountInfo {
+  account_id: string;
+  account_name: string;
+  campaign_count: number;
+  error: string | null;
+}
+
+export interface MetaAdAccountListResult {
+  campaigns: MetaAdAccountCampaign[];
+  accounts: MetaAdAccountInfo[];
+}
+
+// Busca as campanhas reais em cada conta de anúncios do Meta.
+// Retorna também um diagnóstico por conta para o admin ver quando uma conta
+// não retornou campanhas (permissão do token, conta sem campanhas, etc.).
 export const adminListMetaAdAccountCampaigns = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }): Promise<MetaAdAccountCampaign[]> => {
+  .handler(async ({ context }): Promise<MetaAdAccountListResult> => {
     await assertAdmin(context.userId, context.claims as { email?: string });
     const token = process.env.META_ACCESS_TOKEN;
     const adAccountId = process.env.META_AD_ACCOUNT_ID;
@@ -197,44 +210,60 @@ export const adminListMetaAdAccountCampaigns = createServerFn({ method: "GET" })
       .filter((s) => s.length > 0);
     if (accountIds.length === 0) throw new Error("META_AD_ACCOUNT_ID vazio");
 
-    const all: Array<MetaAdAccountCampaign> = [];
-    const errors: string[] = [];
+    const campaigns: MetaAdAccountCampaign[] = [];
+    const accounts: MetaAdAccountInfo[] = [];
+
     for (const acc of accountIds) {
       let accountName = `act_${acc}`;
+      let accountError: string | null = null;
       try {
         const nameRes = await fetch(
-          `https://graph.facebook.com/v20.0/act_${acc}?fields=name&access_token=${encodeURIComponent(token)}`,
+          `https://graph.facebook.com/v20.0/act_${acc}?fields=name,account_status&access_token=${encodeURIComponent(token)}`,
         );
         if (nameRes.ok) {
-          const nj = (await nameRes.json()) as { name?: string };
+          const nj = (await nameRes.json()) as { name?: string; account_status?: number };
           if (nj.name) accountName = nj.name;
+          // account_status: 1=ACTIVE, 2=DISABLED, 3=UNSETTLED, 7=PENDING_RISK_REVIEW, 8=PENDING_SETTLEMENT, 9=IN_GRACE_PERIOD, 100=PENDING_CLOSURE, 101=CLOSED, 201=ANY_ACTIVE, 202=ANY_CLOSED
+          if (nj.account_status && nj.account_status !== 1) {
+            accountError = `Conta com status ${nj.account_status} no Meta (não ACTIVE)`;
+          }
+        } else {
+          const t = await nameRes.text();
+          accountError = `Não foi possível ler a conta (${nameRes.status}): ${t.slice(0, 160)}`;
         }
-      } catch { /* mantém fallback */ }
+      } catch (e) {
+        accountError = e instanceof Error ? e.message : String(e);
+      }
 
-      const url = `https://graph.facebook.com/v20.0/act_${acc}/campaigns?fields=id,name,status,effective_status&limit=100&access_token=${encodeURIComponent(token)}`;
-      const res = await fetch(url);
-      if (!res.ok) {
-        const txt = await res.text();
-        errors.push(`${accountName} (act_${acc}): ${res.status} ${txt.slice(0, 200)}`);
-        continue;
+      let campaignCount = 0;
+      try {
+        const url = `https://graph.facebook.com/v20.0/act_${acc}/campaigns?fields=id,name,status,effective_status&limit=100&access_token=${encodeURIComponent(token)}`;
+        const res = await fetch(url);
+        if (!res.ok) {
+          const txt = await res.text();
+          accountError = accountError ?? `Meta API ${res.status}: ${txt.slice(0, 200)}`;
+        } else {
+          const json = (await res.json()) as {
+            data?: Array<{ id: string; name: string; status: string; effective_status: string }>;
+          };
+          for (const c of json.data ?? []) {
+            campaigns.push({
+              id: c.id,
+              name: c.name,
+              status: c.status,
+              effective_status: c.effective_status,
+              account_id: acc,
+              account_name: accountName,
+              already_linked_to: null,
+            });
+            campaignCount++;
+          }
+        }
+      } catch (e) {
+        accountError = accountError ?? (e instanceof Error ? e.message : String(e));
       }
-      const json = (await res.json()) as {
-        data?: Array<{ id: string; name: string; status: string; effective_status: string }>;
-      };
-      for (const c of json.data ?? []) {
-        all.push({
-          id: c.id,
-          name: c.name,
-          status: c.status,
-          effective_status: c.effective_status,
-          account_id: acc,
-          account_name: accountName,
-          already_linked_to: null,
-        });
-      }
-    }
-    if (all.length === 0 && errors.length > 0) {
-      throw new Error(`Meta API falhou em todas as contas: ${errors.join(" | ")}`);
+
+      accounts.push({ account_id: acc, account_name: accountName, campaign_count: campaignCount, error: accountError });
     }
 
     const admin = await getSupabaseAdmin();
@@ -243,8 +272,9 @@ export const adminListMetaAdAccountCampaigns = createServerFn({ method: "GET" })
       .select("name, meta_campaign_id")
       .not("meta_campaign_id", "is", null);
     const linkedMap = new Map((already ?? []).map((c) => [c.meta_campaign_id as string, c.name]));
-    for (const c of all) c.already_linked_to = linkedMap.get(c.id) ?? null;
-    return all;
+    for (const c of campaigns) c.already_linked_to = linkedMap.get(c.id) ?? null;
+
+    return { campaigns, accounts };
   });
 
 // Vincula manualmente o ID da campanha no Meta a uma campanha do sistema.
