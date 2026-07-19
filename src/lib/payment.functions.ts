@@ -149,11 +149,6 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// O Asaas às vezes ainda não terminou de gerar o QR Code no instante seguinte
-// à criação da cobrança (é assíncrono do lado deles). Sem retry, a primeira
-// tentativa pode falhar mesmo com a cobrança criada com sucesso, fazendo a
-// tela de pagamento mostrar erro para um pagamento que na verdade existe.
-// Tenta algumas vezes, com espera crescente, antes de desistir de verdade.
 async function fetchAsaasPixCode(
   paymentId: string,
   apiKey: string,
@@ -176,7 +171,7 @@ async function fetchAsaasPixCode(
       lastStatus = 0;
     }
     if (attempt < maxAttempts - 1) {
-      await sleep(1200 + attempt * 800); // 1.2s, 2.0s, 2.8s
+      await sleep(1200 + attempt * 800);
     }
   }
   return { payload: null, error: lastError, status: lastStatus };
@@ -200,9 +195,6 @@ async function getOrCreateAsaasCustomer(params: {
     .maybeSingle();
   const existing = (prof as { asaas_customer_id?: string | null } | null)?.asaas_customer_id;
   if (existing) {
-    // Garante que o CPF/CNPJ está atualizado no cliente já criado — sem isso
-    // clientes antigos (criados antes do campo ser obrigatório) continuam
-    // rejeitando cobranças com "necessário preencher o CPF ou CNPJ".
     try {
       await fetch(`https://api.asaas.com/v3/customers/${existing}`, {
         method: "POST",
@@ -350,6 +342,7 @@ export const setBillingCpfCnpj = createServerFn({ method: "POST" })
       cpf_cnpj: z.string().trim().min(11).max(20),
       display_name: z.string().trim().min(2).max(120).optional(),
       phone: z.string().trim().max(30).optional(),
+      reset_asaas_customer: z.boolean().default(false),
     }).parse(d),
   )
   .handler(async ({ data, context }) => {
@@ -358,6 +351,7 @@ export const setBillingCpfCnpj = createServerFn({ method: "POST" })
     const patch: Record<string, unknown> = { cpf_cnpj: digits(data.cpf_cnpj) };
     if (data.display_name) patch.display_name = data.display_name;
     if (data.phone) patch.phone = digits(data.phone);
+    if (data.reset_asaas_customer) patch.asaas_customer_id = null;
     const { error } = await admin.from("profiles").update(patch as never).eq("id", context.userId);
     if (error) throw new Error(error.message);
     return { ok: true };
@@ -373,6 +367,46 @@ const cardInputSchema = z.object({
   addressNumber: z.string().trim().min(1).max(20),
 });
 
+async function creditApprovedPayment(params: {
+  amount: number;
+  userId: string;
+  campaignId: string | null;
+  type: "campaign_budget" | "balance_topup" | null | undefined;
+}): Promise<void> {
+  const admin = await getAdmin();
+  const isCampaign = params.type === "campaign_budget" && !!params.campaignId;
+  if (isCampaign && params.campaignId) {
+    const { data: camp } = await admin
+      .from("campaigns")
+      .select("id, pix_remaining_budget, pix_total_budget")
+      .eq("id", params.campaignId)
+      .maybeSingle();
+    const currentRemaining = Number(camp?.pix_remaining_budget ?? 0);
+    const currentTotal = Number(camp?.pix_total_budget ?? 0);
+    await admin
+      .from("campaigns")
+      .update({
+        pix_remaining_budget: currentRemaining + params.amount,
+        pix_total_budget: currentTotal > 0 ? currentTotal : params.amount,
+        total_paid: params.amount,
+        status: "rodando",
+      } as never)
+      .eq("id", params.campaignId);
+  } else {
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("balance")
+      .eq("id", params.userId)
+      .maybeSingle();
+    const next = Number((Number(profile?.balance ?? 0) + params.amount).toFixed(2));
+    if (!profile) {
+      await admin.from("profiles").insert({ id: params.userId, balance: next } as never);
+    } else {
+      await admin.from("profiles").update({ balance: next } as never).eq("id", params.userId);
+    }
+  }
+}
+
 export const createPaymentRequest = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
@@ -386,7 +420,6 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const admin = await getAdmin();
 
-    // 1) Perfil de cobrança — CPF/CNPJ é obrigatório para o Asaas.
     const { data: prof } = await admin
       .from("profiles")
       .select("cpf_cnpj, display_name, email, phone")
@@ -414,7 +447,6 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
     const name = prof?.display_name ?? email.split("@")[0] ?? "Cliente";
     const phone = prof?.phone ?? null;
 
-    // Se cartão foi escolhido, exige os dados do cartão inline (no app).
     if (data.billingType === "CREDIT_CARD" && !data.card) {
       return {
         id: null,
@@ -444,7 +476,6 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
       ? "campaign_budget"
       : "balance_topup";
 
-    // Reutiliza uma solicitação pendente com o mesmo valor + campanha se existir (apenas PIX).
     let prId: string | null = null;
     let existingPaymentId: string | null = null;
     if (data.campaignId && data.billingType === "PIX") {
@@ -520,7 +551,6 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
         if (!cust.id) {
           apiError = cust.error ?? "Falha ao criar cliente Asaas";
         } else if (data.billingType === "CREDIT_CARD" && data.card) {
-          // Cobrança de cartão diretamente no app — sem redirecionar para o site do Asaas.
           try {
             const due = new Date(Date.now() + 3 * 24 * 3600 * 1000).toISOString().slice(0, 10);
             const body = {
@@ -566,7 +596,6 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
                 json.status === "RECEIVED" ||
                 json.status === "RECEIVED_IN_CASH";
               if (approved) {
-                // Marca como pago já e credita saldo se for topup.
                 await admin
                   .from("payment_requests")
                   .update({
@@ -575,22 +604,18 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
                     asaas_payment_id: json.id,
                   } as never)
                   .eq("id", prId);
-                if (!data.campaignId) {
-                  const { data: p } = await admin
-                    .from("profiles")
-                    .select("balance")
-                    .eq("id", context.userId)
-                    .maybeSingle();
-                  const next = Number((Number(p?.balance ?? 0) + data.amount).toFixed(2));
-                  await admin.from("profiles").update({ balance: next } as never).eq("id", context.userId);
-                }
+                await creditApprovedPayment({
+                  amount: data.amount,
+                  userId: context.userId,
+                  campaignId: data.campaignId ?? null,
+                  type: paymentType,
+                });
               }
             }
           } catch (e) {
             apiError = String(e);
           }
         } else {
-          // PIX
           const charge = await createAsaasCharge({
             apiKey,
             customerId: cust.id,
@@ -730,24 +755,21 @@ export const adminApprovePayment = createServerFn({ method: "POST" })
     if (!pr) throw new Error("Solicitação de pagamento não encontrada.");
     if (pr.status === "paid" || pr.status === "approved") return { ok: true, already: true };
 
-    const { data: profile, error: pErr } = await admin
-      .from("profiles")
-      .select("balance")
-      .eq("id", pr.user_id)
-      .maybeSingle();
-    if (pErr) throw new Error(pErr.message);
-    const currentBalance = Number(profile?.balance ?? 0);
-    const next = Number((currentBalance + Number(pr.amount)).toFixed(2));
+    const prAny = pr as unknown as {
+      id: string;
+      user_id: string;
+      amount: number | string;
+      type?: "campaign_budget" | "balance_topup" | null;
+      campaign_id?: string | null;
+    };
 
-    if (!profile) {
-      await admin.from("profiles").insert({ id: pr.user_id, balance: next }).select().maybeSingle();
-    } else {
-      const { error: uErr } = await admin
-        .from("profiles")
-        .update({ balance: next })
-        .eq("id", pr.user_id);
-      if (uErr) throw new Error(uErr.message);
-    }
+    await creditApprovedPayment({
+      amount: Number(prAny.amount),
+      userId: prAny.user_id,
+      campaignId: prAny.campaign_id ?? null,
+      type: prAny.type,
+    });
+
     const { error: sErr } = await admin
       .from("payment_requests")
       .update({ status: "paid", approved_at: new Date().toISOString() })
