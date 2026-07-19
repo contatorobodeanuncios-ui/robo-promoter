@@ -1738,14 +1738,11 @@ function MetaCampaignPickerDialog({
     onError: (e) => toast.error("Falha ao vincular", { description: String(e) }),
   });
 
-  const accounts = Array.from(
-    new Map(
-      (q.data ?? []).map((c) => [c.account_id, c.account_name]),
-    ).entries(),
-  );
+  const campaigns = q.data?.campaigns ?? [];
+  const accounts = q.data?.accounts ?? [];
 
   const term = search.trim().toLowerCase();
-  const filtered = (q.data ?? []).filter((c) => {
+  const filtered = campaigns.filter((c) => {
     if (accountFilter !== "all" && c.account_id !== accountFilter) return false;
     if (!term) return true;
     return (
@@ -1783,22 +1780,30 @@ function MetaCampaignPickerDialog({
               >
                 Todas
               </button>
-              {accounts.map(([id, name]) => (
+              {accounts.map((a) => (
                 <button
-                  key={id}
+                  key={a.account_id}
                   type="button"
-                  onClick={() => setAccountFilter(id)}
-                  className={`px-2.5 py-1 rounded-md text-[11px] border transition ${
-                    accountFilter === id
+                  onClick={() => setAccountFilter(a.account_id)}
+                  className={`px-2.5 py-1 rounded-md text-[11px] border transition flex items-center gap-1 ${
+                    accountFilter === a.account_id
                       ? "border-primary/60 bg-primary/10 text-primary"
-                      : "border-white/10 bg-background/30 text-muted-foreground hover:border-white/20"
+                      : a.error
+                        ? "border-destructive/40 bg-destructive/10 text-destructive hover:border-destructive/60"
+                        : "border-white/10 bg-background/30 text-muted-foreground hover:border-white/20"
                   }`}
-                  title={`act_${id}`}
+                  title={a.error ? `act_${a.account_id} — ${a.error}` : `act_${a.account_id} · ${a.campaign_count} campanhas`}
                 >
-                  {name}
+                  {a.account_name}
+                  <span className="opacity-60">({a.campaign_count})</span>
                 </button>
               ))}
             </div>
+            {accounts.some((a) => a.error) && (
+              <p className="text-[10px] text-destructive/80">
+                Contas em vermelho não retornaram campanhas — passe o mouse para ver o motivo (permissão, conta desativada, etc.).
+              </p>
+            )}
           </div>
         )}
 
