@@ -9,8 +9,8 @@ export const Route = createFileRoute("/api/public/hooks/meta-metrics-sync")({
     handlers: {
       POST: async ({ request }) => {
         const apiKey = request.headers.get("apikey");
-        const expected = process.env.SUPABASE_PUBLISHABLE_KEY;
-        if (!apiKey || apiKey !== expected) {
+        const expected = process.env.CRON_SECRET;
+        if (!expected || !apiKey || apiKey !== expected) {
           return new Response("Unauthorized", { status: 401 });
         }
 
