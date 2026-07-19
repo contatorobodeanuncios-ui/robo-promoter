@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      access_link_slugs: {
+        Row: {
+          created_at: string
+          created_by_email: string | null
+          expires_at: string
+          slug: string
+          target_url: string
+          target_user_id: string | null
+          used_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by_email?: string | null
+          expires_at: string
+          slug: string
+          target_url: string
+          target_user_id?: string | null
+          used_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by_email?: string | null
+          expires_at?: string
+          slug?: string
+          target_url?: string
+          target_user_id?: string | null
+          used_at?: string | null
+        }
+        Relationships: []
+      }
       access_requests: {
         Row: {
           created_at: string
