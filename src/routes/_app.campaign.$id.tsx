@@ -44,8 +44,12 @@ function CampaignDetail() {
     );
   }
 
-  const isRunning = c.status === "running" || c.status === "rodando";
-  const hasRealMetrics = isRunning && (c.clicks > 0 || c.impressions > 0);
+  // Corrigido: antes exigia isRunning (status === running/rodando) além de ter
+  // cliques/impressões — então uma campanha pausada com dados reais (ex: você
+  // pausou no Facebook depois de já ter gasto e gerado resultado) escondia
+  // tudo atrás de "não disponível". O que importa é se o dado chegou de
+  // verdade do Facebook, não o status atual da campanha.
+  const hasRealMetrics = c.clicks > 0 || c.impressions > 0 || c.spent > 0;
   const na = "não disponível";
 
   const togglePause = () => {
@@ -130,7 +134,7 @@ function CampaignDetail() {
         <div>
           <p className="text-xs text-muted-foreground uppercase tracking-wider">Status</p>
           <p className="text-2xl font-bold tabular-nums capitalize">
-            {c.status === "running" ? "Ativa" : c.status === "analyzing" ? "Em análise" : "Pausada"}
+            {c.status === "running" || c.status === "rodando" ? "Ativa" : c.status === "analyzing" ? "Em análise" : c.status === "paused" ? "Pausada" : c.status === "aguardando_vinculo_meta" ? "Aguardando pagamento" : "Encerrada"}
           </p>
         </div>
       </section>
@@ -191,8 +195,8 @@ function CampaignDetail() {
                 <p className="font-semibold text-sm">Aguardando dados reais do Facebook & Pixel</p>
                 <p className="text-xs text-muted-foreground">
                   O Robô só exibe métricas validadas pelo Facebook Marketing API e pelo Pixel.
-                  Enquanto a campanha está {c.status === "analyzing" ? "em análise" : "pausada"} ou sem dados reais reportados,
-                  nenhuma estimativa ou número simulado é exibido aqui.
+                  Assim que a campanha tiver algum dado real reportado (mesmo que já tenha sido
+                  pausada depois), ele aparece aqui automaticamente.
                 </p>
               </div>
             </div>
