@@ -39,7 +39,9 @@ function Dashboard() {
   const balance = useAppStore((s) => s.balance);
   const displayName = useUserDisplayName();
   const summary = computeSummary(campaigns);
-  const running = campaigns.filter((c) => c.status === "running");
+  // Corrigido: faltava "rodando" aqui (o cron do Meta usa esse valor, não só
+  // "running") — campanhas realmente ativas ficavam de fora do resumo do topo.
+  const running = campaigns.filter((c) => c.status === "running" || c.status === "rodando");
   const hasRunning = running.length > 0;
   const cards = [
     { label: "Saldo no app", value: fmtBRL(balance), icon: DollarSign, hint: balance > 0 ? "creditado após pagamento" : "Aguardando pagamento Asaas" },
@@ -131,17 +133,16 @@ function Dashboard() {
           {campaigns.map((c) => {
             const s = statusMeta[c.status] ?? { label: c.status, cls: "text-muted-foreground bg-white/5 border-white/10", dot: "bg-muted-foreground" };
             const range = reachRange(c.budget, c.days);
-            const isRunning = c.status === "running" || c.status === "rodando";
-            // Item 2: mostra o aviso vermelho de pagamento pendente sempre que a
-            // campanha estiver aguardando pagamento — antes só aparecia quando já
-            // existia um link de PIX gerado, deixando campanhas sem link ainda
-            // (ex: CPF pendente) sem nenhum aviso visível.
+            // Corrigido: a métrica não pode depender de "está rodando agora" —
+            // uma campanha pausada ou encerrada ainda tem dados reais e
+            // legítimos pra mostrar. O que importa é se o valor já chegou do
+            // Facebook (maior que zero), não o status atual da campanha.
             const isAwaitingPay = c.status === "aguardando_vinculo_meta";
             const hasPixLink = isAwaitingPay && c.funding_type === "pix_dedicated" && !!c.invoice_url;
-            const M = ({ label, value, dim }: { label: string; value: string; dim?: boolean }) => (
+            const M = ({ label, value, has }: { label: string; value: string; has: boolean }) => (
               <div className="glass rounded-md p-1.5 min-w-0">
                 <p className="text-[10px] text-muted-foreground truncate">{label}</p>
-                <p className={`text-xs font-semibold tabular-nums truncate ${dim ? "text-muted-foreground italic" : ""}`}>{value}</p>
+                <p className={`text-xs font-semibold tabular-nums truncate ${!has ? "text-muted-foreground italic" : ""}`}>{value}</p>
               </div>
             );
             const na = "não disponível";
@@ -182,15 +183,15 @@ function Dashboard() {
                       </div>
 
                       <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 pt-1">
-                        <M label="Cliques" value={isRunning && c.clicks ? c.clicks.toLocaleString("pt-BR") : na} dim={!isRunning || !c.clicks} />
-                        <M label="Impr." value={isRunning && c.impressions ? c.impressions.toLocaleString("pt-BR") : na} dim={!isRunning || !c.impressions} />
-                        <M label="CTR" value={isRunning && c.ctr ? `${c.ctr.toFixed(2)}%` : na} dim={!isRunning || !c.ctr} />
-                        <M label="CPC" value={isRunning && c.cpc ? fmtBRL(c.cpc) : na} dim={!isRunning || !c.cpc} />
-                        <M label="Gasto" value={isRunning && c.spent ? fmtBRL(c.spent) : na} dim={!isRunning || !c.spent} />
-                        <M label="CPM" value={isRunning && c.cpm ? fmtBRL(c.cpm) : na} dim={!isRunning || !c.cpm} />
-                        <M label="Freq." value={isRunning && c.frequency ? c.frequency.toFixed(2) : na} dim={!isRunning || !c.frequency} />
-                        <M label="C/Result." value={isRunning && c.cost_per_result ? fmtBRL(c.cost_per_result) : na} dim={!isRunning || !c.cost_per_result} />
-                        <M label="ROI" value={isRunning && c.revenue && c.spent ? `${(((c.revenue - c.spent) / c.spent) * 100).toFixed(1)}%` : na} dim={!isRunning || !c.revenue} />
+                        <M label="Cliques" value={c.clicks ? c.clicks.toLocaleString("pt-BR") : na} has={!!c.clicks} />
+                        <M label="Impr." value={c.impressions ? c.impressions.toLocaleString("pt-BR") : na} has={!!c.impressions} />
+                        <M label="CTR" value={c.ctr ? `${c.ctr.toFixed(2)}%` : na} has={!!c.ctr} />
+                        <M label="CPC" value={c.cpc ? fmtBRL(c.cpc) : na} has={!!c.cpc} />
+                        <M label="Gasto" value={c.spent ? fmtBRL(c.spent) : na} has={!!c.spent} />
+                        <M label="CPM" value={c.cpm ? fmtBRL(c.cpm) : na} has={!!c.cpm} />
+                        <M label="Freq." value={c.frequency ? c.frequency.toFixed(2) : na} has={!!c.frequency} />
+                        <M label="C/Result." value={c.cost_per_result ? fmtBRL(c.cost_per_result) : na} has={!!c.cost_per_result} />
+                        <M label="ROI" value={c.revenue && c.spent ? `${(((c.revenue - c.spent) / c.spent) * 100).toFixed(1)}%` : na} has={!!(c.revenue && c.spent)} />
                       </div>
                     </div>
                   </div>
