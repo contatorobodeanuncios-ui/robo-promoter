@@ -88,6 +88,8 @@ export interface AdminCampaignRow {
   meta_effective_status: string | null;
   metrics_last_error: string | null;
   metrics_last_synced_at: string | null;
+  scheduled_start_at: string | null;
+  scheduled_end_at: string | null;
 
 }
 
@@ -143,6 +145,8 @@ export const adminListCampaigns = createServerFn({ method: "GET" })
         meta_effective_status: c.meta_effective_status ?? null,
         metrics_last_error: c.metrics_last_error ?? null,
         metrics_last_synced_at: c.metrics_last_synced_at ?? null,
+        scheduled_start_at: c.scheduled_start_at ?? null,
+        scheduled_end_at: c.scheduled_end_at ?? null,
       };
     });
   });
@@ -175,96 +179,31 @@ export interface MetaAdAccountCampaign {
   name: string;
   status: string;
   effective_status: string;
-  account_id: string;
-  account_name: string;
-  already_linked_to: string | null;
+  ad_account_id: string;
+  already_linked_to: string | null; // nome da campanha do app que já usa esse ID, se houver
 }
 
-export interface MetaAdAccountInfo {
-  account_id: string;
-  account_name: string;
-  campaign_count: number;
-  error: string | null;
-}
-
-export interface MetaAdAccountListResult {
-  campaigns: MetaAdAccountCampaign[];
-  accounts: MetaAdAccountInfo[];
-}
-
-// Busca as campanhas reais em cada conta de anúncios do Meta.
-// Retorna também um diagnóstico por conta para o admin ver quando uma conta
-// não retornou campanhas (permissão do token, conta sem campanhas, etc.).
+// Busca as campanhas que existem de verdade nas contas de anúncios do Meta
+// (usa META_AD_ACCOUNT_ID + META_ACCESS_TOKEN, os mesmos já configurados
+// para a sincronização). Suporta várias contas: coloque os IDs separados
+// por vírgula no secret META_AD_ACCOUNT_ID (ex: "123,456,789").
+// Serve para o admin escolher e vincular sem precisar copiar/colar o ID
+// manualmente — e sem depender de nome bater exatamente, já que quem
+// escolhe é uma pessoa olhando a lista.
 export const adminListMetaAdAccountCampaigns = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }): Promise<MetaAdAccountListResult> => {
+  .handler(async ({ context }): Promise<MetaAdAccountCampaign[]> => {
     await assertAdmin(context.userId, context.claims as { email?: string });
     const token = process.env.META_ACCESS_TOKEN;
-    const adAccountId = process.env.META_AD_ACCOUNT_ID;
+    const rawAccountIds = process.env.META_AD_ACCOUNT_ID;
     if (!token) throw new Error("META_ACCESS_TOKEN não configurado no servidor");
-    if (!adAccountId) throw new Error("META_AD_ACCOUNT_ID não configurado no servidor");
+    if (!rawAccountIds) throw new Error("META_AD_ACCOUNT_ID não configurado no servidor");
 
-    const accountIds = adAccountId
+    const accountIds = rawAccountIds
       .split(",")
-      .map((s) => s.trim().replace(/^act_/, ""))
-      .filter((s) => s.length > 0);
-    if (accountIds.length === 0) throw new Error("META_AD_ACCOUNT_ID vazio");
-
-    const campaigns: MetaAdAccountCampaign[] = [];
-    const accounts: MetaAdAccountInfo[] = [];
-
-    for (const acc of accountIds) {
-      let accountName = `act_${acc}`;
-      let accountError: string | null = null;
-      try {
-        const nameRes = await fetch(
-          `https://graph.facebook.com/v20.0/act_${acc}?fields=name,account_status&access_token=${encodeURIComponent(token)}`,
-        );
-        if (nameRes.ok) {
-          const nj = (await nameRes.json()) as { name?: string; account_status?: number };
-          if (nj.name) accountName = nj.name;
-          // account_status: 1=ACTIVE, 2=DISABLED, 3=UNSETTLED, 7=PENDING_RISK_REVIEW, 8=PENDING_SETTLEMENT, 9=IN_GRACE_PERIOD, 100=PENDING_CLOSURE, 101=CLOSED, 201=ANY_ACTIVE, 202=ANY_CLOSED
-          if (nj.account_status && nj.account_status !== 1) {
-            accountError = `Conta com status ${nj.account_status} no Meta (não ACTIVE)`;
-          }
-        } else {
-          const t = await nameRes.text();
-          accountError = `Não foi possível ler a conta (${nameRes.status}): ${t.slice(0, 160)}`;
-        }
-      } catch (e) {
-        accountError = e instanceof Error ? e.message : String(e);
-      }
-
-      let campaignCount = 0;
-      try {
-        const url = `https://graph.facebook.com/v20.0/act_${acc}/campaigns?fields=id,name,status,effective_status&limit=100&access_token=${encodeURIComponent(token)}`;
-        const res = await fetch(url);
-        if (!res.ok) {
-          const txt = await res.text();
-          accountError = accountError ?? `Meta API ${res.status}: ${txt.slice(0, 200)}`;
-        } else {
-          const json = (await res.json()) as {
-            data?: Array<{ id: string; name: string; status: string; effective_status: string }>;
-          };
-          for (const c of json.data ?? []) {
-            campaigns.push({
-              id: c.id,
-              name: c.name,
-              status: c.status,
-              effective_status: c.effective_status,
-              account_id: acc,
-              account_name: accountName,
-              already_linked_to: null,
-            });
-            campaignCount++;
-          }
-        }
-      } catch (e) {
-        accountError = accountError ?? (e instanceof Error ? e.message : String(e));
-      }
-
-      accounts.push({ account_id: acc, account_name: accountName, campaign_count: campaignCount, error: accountError });
-    }
+      .map((id) => id.trim().replace(/^act_/, ""))
+      .filter(Boolean);
+    if (accountIds.length === 0) throw new Error("META_AD_ACCOUNT_ID está vazio");
 
     const admin = await getSupabaseAdmin();
     const { data: already } = await admin
@@ -272,9 +211,44 @@ export const adminListMetaAdAccountCampaigns = createServerFn({ method: "GET" })
       .select("name, meta_campaign_id")
       .not("meta_campaign_id", "is", null);
     const linkedMap = new Map((already ?? []).map((c) => [c.meta_campaign_id as string, c.name]));
-    for (const c of campaigns) c.already_linked_to = linkedMap.get(c.id) ?? null;
 
-    return { campaigns, accounts };
+    const results: MetaAdAccountCampaign[] = [];
+    const fetchErrors: string[] = [];
+
+    // Busca cada conta em sequência (evita estourar rate limit do Meta se
+    // houver muitas contas) e segue mesmo se uma delas falhar.
+    for (const accId of accountIds) {
+      try {
+        const url = `https://graph.facebook.com/v20.0/act_${accId}/campaigns?fields=id,name,status,effective_status&limit=100&access_token=${encodeURIComponent(token)}`;
+        const res = await fetch(url);
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error(`conta ${accId}: HTTP ${res.status} — ${txt.slice(0, 150)}`);
+        }
+        const json = (await res.json()) as {
+          data?: Array<{ id: string; name: string; status: string; effective_status: string }>;
+        };
+        for (const c of json.data ?? []) {
+          results.push({
+            id: c.id,
+            name: c.name,
+            status: c.status,
+            effective_status: c.effective_status,
+            ad_account_id: accId,
+            already_linked_to: linkedMap.get(c.id) ?? null,
+          });
+        }
+      } catch (e) {
+        fetchErrors.push(e instanceof Error ? e.message : String(e));
+      }
+    }
+
+    // Só falha de vez se TODAS as contas derem erro — se pelo menos uma
+    // funcionou, devolve o que conseguiu e ignora as que falharam.
+    if (results.length === 0 && fetchErrors.length > 0) {
+      throw new Error(fetchErrors.join(" | "));
+    }
+    return results;
   });
 
 // Vincula manualmente o ID da campanha no Meta a uma campanha do sistema.
@@ -306,75 +280,7 @@ export const adminSetMetaCampaignId = createServerFn({ method: "POST" })
       target_id: data.id,
       details: { meta_campaign_id: value },
     });
-
-    // Sincronização IMEDIATA das métricas da campanha recém-vinculada,
-    // sem esperar o próximo tick do cron. Se falhar, salvamos o erro na
-    // própria campanha e seguimos — o cron tenta de novo depois.
-    let synced = false;
-    let syncError: string | null = null;
-    if (value) {
-      const token = process.env.META_ACCESS_TOKEN;
-      if (!token) {
-        syncError = "META_ACCESS_TOKEN não configurado — métricas entrarão no próximo sync";
-      } else {
-        try {
-          const nowIso = new Date().toISOString();
-          const insUrl = `https://graph.facebook.com/v20.0/${value}/insights?fields=spend,clicks,impressions,ctr,cpc&date_preset=maximum&access_token=${encodeURIComponent(token)}`;
-          const stUrl = `https://graph.facebook.com/v20.0/${value}?fields=effective_status&access_token=${encodeURIComponent(token)}`;
-          const [insRes, stRes] = await Promise.all([fetch(insUrl), fetch(stUrl)]);
-          if (!insRes.ok) throw new Error(`Insights ${insRes.status}: ${(await insRes.text()).slice(0, 200)}`);
-          const insJson = (await insRes.json()) as { data?: Array<Record<string, string>> };
-          const stJson = (await stRes.json()) as { effective_status?: string };
-          const row = insJson.data?.[0];
-          const effective = stJson.effective_status ?? null;
-          const mapStatus = (eff: string | null): string | null => {
-            switch ((eff ?? "").toUpperCase()) {
-              case "ACTIVE": return "rodando";
-              case "PAUSED":
-              case "CAMPAIGN_PAUSED": return "paused";
-              case "ARCHIVED":
-              case "DELETED": return "encerrada_saldo_consumido";
-              case "PENDING_REVIEW":
-              case "IN_PROCESS":
-              case "WITH_ISSUES": return "em_revisao";
-              default: return null;
-            }
-          };
-          const spend = Number(row?.spend ?? 0);
-          const clicks = Number(row?.clicks ?? 0);
-          const impressions = Number(row?.impressions ?? 0);
-          const update: Record<string, unknown> = {
-            metrics_last_synced_at: nowIso,
-            metrics_last_error: null,
-            meta_effective_status: effective,
-            updated_at: nowIso,
-          };
-          if (row) {
-            update.spent = spend;
-            update.clicks = clicks;
-            update.impressions = impressions;
-            update.ctr = Number(row.ctr ?? 0);
-            update.cpc = Number(row.cpc ?? 0);
-          }
-          if (spend > 0 || clicks > 0 || impressions > 0) {
-            update.started_at = nowIso;
-            update.started_running_at = nowIso;
-          }
-          const mapped = mapStatus(effective);
-          if (mapped) update.status = mapped;
-          await supabaseAdmin.from("campaigns").update(update as never).eq("id", data.id);
-          synced = true;
-        } catch (e) {
-          syncError = e instanceof Error ? e.message : String(e);
-          await supabaseAdmin
-            .from("campaigns")
-            .update({ metrics_last_error: syncError, metrics_last_synced_at: new Date().toISOString() } as never)
-            .eq("id", data.id);
-        }
-      }
-    }
-
-    return { ok: true, meta_campaign_id: value, synced, syncError };
+    return { ok: true, meta_campaign_id: value };
   });
 
 // Submits campaign through Meta Marketing API (skeleton).
@@ -954,7 +860,7 @@ export const adminUpdateProfile = createServerFn({ method: "POST" })
       Object.entries(rest).filter(([, v]) => v !== undefined),
     );
     if (Object.keys(update).length === 0) return { ok: true };
-    const { error } = await admin.from("profiles").update(update as never).eq("id", user_id);
+    const { error } = await admin.from("profiles").update(update).eq("id", user_id);
     if (error) throw new Error(error.message);
     await admin.from("admin_audit_log").insert({
       admin_email: (context.claims as { email?: string })?.email ?? "",
@@ -1002,159 +908,36 @@ export const adminUpdateCampaignMetrics = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// ============ Magic link (entrada direta) — item 7/8 ============
-export const adminGenerateAccessLink = createServerFn({ method: "POST" })
+// ============ Modo de manutenção ============
+export const setMaintenanceMode = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ user_id: z.string().uuid() }).parse(d))
-  .handler(async ({ data, context }): Promise<{ url: string; email: string | null; expires_at: string }> => {
+  .inputValidator((d: unknown) =>
+    z.object({
+      enabled: z.boolean(),
+      message: z.string().max(1000).optional(),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
     await assertAdmin(context.userId, context.claims as { email?: string });
     const admin = await getSupabaseAdmin();
-    const { data: u } = await admin.auth.admin.getUserById(data.user_id);
-    const email = u?.user?.email;
-    if (!email) throw new Error("Usuário sem e-mail — impossível gerar link de acesso");
-
-    const siteUrl = process.env.SITE_URL
-      || process.env.PUBLIC_SITE_URL
-      || "https://robo-promoter.lovable.app";
-    const { data: link, error } = await admin.auth.admin.generateLink({
-      type: "magiclink",
-      email,
-      options: { redirectTo: `${siteUrl}/dashboard` },
+    const { data: existing } = await admin
+      .from("app_settings")
+      .select("value")
+      .eq("key", "maintenance_mode")
+      .maybeSingle();
+    const prevMsg = (existing?.value as { message?: string } | null)?.message;
+    const { error } = await admin.from("app_settings").upsert({
+      key: "maintenance_mode",
+      value: { enabled: data.enabled, message: data.message ?? prevMsg ?? "" },
+      updated_at: new Date().toISOString(),
     });
     if (error) throw new Error(error.message);
-    const targetUrl = link.properties?.action_link ?? "";
-    if (!targetUrl) throw new Error("Supabase não retornou um link válido");
-
-    // Gera slug curto único (8 chars alfanuméricos). Retenta em caso de colisão.
-    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789abcdefghijkmnpqrstuvwxyz";
-    const makeSlug = () => {
-      let s = "";
-      for (let i = 0; i < 8; i++) s += alphabet[Math.floor(Math.random() * alphabet.length)];
-      return s;
-    };
-    const adminEmail = (context.claims as { email?: string })?.email ?? "";
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-    let slug = "";
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const candidate = makeSlug();
-      const { error: insErr } = await admin.from("access_link_slugs").insert({
-        slug: candidate,
-        target_url: targetUrl,
-        target_user_id: data.user_id,
-        created_by_email: adminEmail,
-        expires_at: expiresAt,
-      });
-      if (!insErr) { slug = candidate; break; }
-      if (!insErr || !String(insErr.message).includes("duplicate")) {
-        if (attempt === 4) throw new Error(insErr.message);
-      }
-    }
-    if (!slug) throw new Error("Não foi possível gerar slug único");
-
-    const shortUrl = `${siteUrl}/e/${slug}`;
-
-    await admin.from("admin_magic_link_events").insert({
-      admin_email: adminEmail,
-      target_user_id: data.user_id,
-      target_email: email,
-    });
     await admin.from("admin_audit_log").insert({
-      admin_email: adminEmail,
-      action: "magic_link_generate",
-      target_type: "user",
-      target_id: data.user_id,
-      details: { target_email: email, slug },
+      admin_email: (context.claims as { email?: string })?.email ?? "",
+      action: data.enabled ? "maintenance_on" : "maintenance_off",
+      target_type: "app_settings",
+      target_id: "maintenance_mode",
+      details: { message: data.message ?? null },
     });
-    return { url: shortUrl, email, expires_at: expiresAt };
+    return { ok: true };
   });
-
-// ============ Auditoria Meta (item 14) ============
-export interface MetaLinkAuditRow {
-  id: string;
-  campaign_id: string;
-  campaign_name: string | null;
-  changed_by_email: string | null;
-  old_meta_campaign_id: string | null;
-  new_meta_campaign_id: string | null;
-  old_meta_ad_account_id: string | null;
-  new_meta_ad_account_id: string | null;
-  created_at: string;
-}
-
-export const adminListMetaLinkAudit = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }): Promise<MetaLinkAuditRow[]> => {
-    await assertAdmin(context.userId, context.claims as { email?: string });
-    const admin = await getSupabaseAdmin();
-    const { data, error } = await admin
-      .from("campaign_meta_link_audit")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(300);
-    if (error) throw new Error(error.message);
-    const rows = (data ?? []) as unknown as Array<{
-      id: string; campaign_id: string; changed_by_email: string | null;
-      old_meta_campaign_id: string | null; new_meta_campaign_id: string | null;
-      old_meta_ad_account_id: string | null; new_meta_ad_account_id: string | null;
-      created_at: string;
-    }>;
-    const campIds = Array.from(new Set(rows.map((r) => r.campaign_id)));
-    const { data: camps } = await admin
-      .from("campaigns")
-      .select("id, name")
-      .in("id", campIds.length ? campIds : ["00000000-0000-0000-0000-000000000000"]);
-    const nameMap = new Map((camps ?? []).map((c) => [c.id, c.name]));
-    return rows.map((r) => ({
-      ...r,
-      campaign_name: nameMap.get(r.campaign_id) ?? null,
-    }));
-  });
-
-// ============ IA de métricas — leitura (item 6) ============
-export interface AIReviewRow {
-  id: string;
-  campaign_id: string;
-  campaign_name: string | null;
-  verdict: "good" | "warn" | "bad" | "no_data";
-  summary: string;
-  recommendations: string[];
-  created_at: string;
-}
-
-export const adminListAIReviews = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }): Promise<AIReviewRow[]> => {
-    await assertAdmin(context.userId, context.claims as { email?: string });
-    const admin = await getSupabaseAdmin();
-    // Traz a review mais recente por campanha.
-    const { data, error } = await admin
-      .from("campaign_ai_reviews")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(500);
-    if (error) throw new Error(error.message);
-    const seen = new Set<string>();
-    const rows = (data ?? []).filter((r) => {
-      if (seen.has(r.campaign_id)) return false;
-      seen.add(r.campaign_id);
-      return true;
-    });
-    const campIds = rows.map((r) => r.campaign_id);
-    const { data: camps } = await admin
-      .from("campaigns")
-      .select("id, name")
-      .in("id", campIds.length ? campIds : ["00000000-0000-0000-0000-000000000000"]);
-    const nameMap = new Map((camps ?? []).map((c) => [c.id, c.name]));
-    return rows.map((r) => ({
-      id: r.id,
-      campaign_id: r.campaign_id,
-      campaign_name: nameMap.get(r.campaign_id) ?? null,
-      verdict: r.verdict,
-      summary: r.summary,
-      recommendations: Array.isArray(r.recommendations)
-        ? (r.recommendations as unknown as string[])
-        : [],
-      created_at: r.created_at,
-    }));
-  });
-
