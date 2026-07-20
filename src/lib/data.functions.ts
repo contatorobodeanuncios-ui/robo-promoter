@@ -39,7 +39,6 @@ export interface CampaignRow {
   funding_type: FundingType;
   pix_total_budget: number;
   pix_remaining_budget: number;
-  // Novos campos
   reach: number;
   results: number;
   revenue: number;
@@ -51,6 +50,8 @@ export interface CampaignRow {
   started_running_at: string | null;
   ended_at: string | null;
   created_at: string;
+  // Item novo: data/hora exata escolhida pelo cliente para o anúncio começar.
+  scheduled_start_at: string | null;
 }
 
 interface DbCampaign {
@@ -86,6 +87,7 @@ interface DbCampaign {
   started_running_at?: string | null;
   ended_at?: string | null;
   created_at?: string;
+  scheduled_start_at?: string | null;
 }
 
 const num = (v: string | number | null | undefined) => (v == null ? 0 : Number(v));
@@ -123,6 +125,7 @@ const mapCampaign = (r: DbCampaign): CampaignRow => ({
   started_running_at: r.started_running_at ?? null,
   ended_at: r.ended_at ?? null,
   created_at: r.created_at ?? "",
+  scheduled_start_at: r.scheduled_start_at ?? null,
 });
 
 
@@ -141,9 +144,15 @@ export const getAppData = createServerFn({ method: "GET" })
     };
   });
 
+// Limites alinhados aos tetos REAIS do próprio Facebook (não um teto artificial
+// do app): imagem até 30MB (spec oficial de anúncio Meta), texto principal até
+// 2200 caracteres, título até 400 (folga sobre os ~255 que a Meta usa).
+// Antes: image limitado a base64 de ~6MB embutido direto no banco (ineficiente
+// e o motivo do limite baixo); agora a imagem é uma URL do Storage, então o
+// limite de caracteres aqui é só o tamanho de uma URL, não do arquivo.
 const campaignInput = z.object({
   name: z.string().min(1).max(200),
-  image: z.string().max(8_000_000).default(""),
+  image: z.string().max(2000).default(""), // URL do Storage, não mais base64
   status: z.enum([
     "running",
     "analyzing",
@@ -157,8 +166,8 @@ const campaignInput = z.object({
   impressions: z.number().int().min(0).default(0),
   ctr: z.number().min(0).default(0),
   cpc: z.number().min(0).default(0),
-  copy: z.string().max(2000).default(""),
-  headline: z.string().max(300).default(""),
+  copy: z.string().max(2200).default(""),
+  headline: z.string().max(400).default(""),
   link: z.string().max(2000).default(""),
   budget: z.number().int().min(1).max(10000),
   days: z.number().int().min(1).max(365),
@@ -167,6 +176,7 @@ const campaignInput = z.object({
   radius: z.number().int().min(1).max(200),
   funding_type: z.enum(["wallet", "pix_dedicated"]).default("wallet"),
   pix_total_budget: z.number().min(0).optional(),
+  scheduled_start_at: z.string().datetime().nullable().optional(),
 });
 
 export interface CreateCampaignResult {
@@ -177,10 +187,28 @@ export interface CreateCampaignResult {
   remainingDue: number;
 }
 
+// Verifica o modo de manutenção antes de criar campanha — item novo.
+async function assertNotInMaintenance() {
+  const admin = await getAdmin();
+  const { data } = await admin
+    .from("app_settings")
+    .select("value")
+    .eq("key", "maintenance_mode")
+    .maybeSingle();
+  const v = data?.value as { enabled?: boolean; message?: string } | null;
+  if (v?.enabled) {
+    throw new Error(
+      v.message ||
+        "Para sua segurança, não é possível colocar um anúncio no ar neste momento. Será liberado em breve. Sugerimos que volte em algumas horas. Pedimos que aguarde, por gentileza!",
+    );
+  }
+}
+
 export const createCampaign = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => campaignInput.parse(data))
   .handler(async ({ data, context }): Promise<CreateCampaignResult> => {
+    await assertNotInMaintenance();
     const { supabase, userId } = context;
     const totalCost = Math.round(data.budget * data.days);
     const isPix = data.funding_type === "pix_dedicated";
@@ -204,6 +232,7 @@ export const createCampaign = createServerFn({ method: "POST" })
       funding_type: data.funding_type,
       pix_total_budget: isPix ? totalCost : null,
       pix_remaining_budget: isPix ? 0 : null,
+      scheduled_start_at: data.scheduled_start_at ?? null,
     };
     const { data: row, error } = await supabase
       .from("campaigns")
@@ -212,8 +241,6 @@ export const createCampaign = createServerFn({ method: "POST" })
       .single();
     if (error) throw new Error(error.message);
 
-    // PIX dedicado: NÃO debita saldo do app. Cliente precisa pagar por fora
-    // e o valor vai 100% pra Meta Ads. Sem reembolso.
     if (isPix) {
       return {
         campaign: mapCampaign(row as unknown as DbCampaign),
@@ -312,3 +339,30 @@ export const wipeAll = createServerFn({ method: "POST" })
     if (delErr) throw new Error(delErr.message);
     return { ok: true };
   });
+
+// ============ Modo de manutenção (item novo) ============
+export interface MaintenanceMode {
+  enabled: boolean;
+  message: string;
+}
+
+const DEFAULT_MAINTENANCE_MESSAGE =
+  "Para sua segurança, não é possível colocar um anúncio no ar neste momento. " +
+  "Será liberado em breve. Sugerimos que volte em algumas horas. " +
+  "Pedimos que aguarde, por gentileza!";
+
+export const getMaintenanceMode = createServerFn({ method: "GET" }).handler(
+  async (): Promise<MaintenanceMode> => {
+    const admin = await getAdmin();
+    const { data } = await admin
+      .from("app_settings")
+      .select("value")
+      .eq("key", "maintenance_mode")
+      .maybeSingle();
+    const v = data?.value as { enabled?: boolean; message?: string } | null;
+    return {
+      enabled: !!v?.enabled,
+      message: v?.message || DEFAULT_MAINTENANCE_MESSAGE,
+    };
+  },
+);
