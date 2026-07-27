@@ -17,6 +17,19 @@ export type CampaignStatus =
 
 export type FundingType = "wallet" | "pix_dedicated";
 
+// Criativo: além da imagem única, agora dá pra mandar vídeo ou carrossel
+// (várias imagens, na ordem em que o cliente enviou).
+export type CampaignMediaType = "image" | "video" | "carousel";
+
+export interface CampaignMediaItem {
+  path: string;   // caminho no Storage (bucket campaign-creatives)
+  kind: "image" | "video";
+  name: string;
+  mime: string;
+  size: number;
+}
+
+
 export interface CampaignRow {
   id: string;
   name: string;
