@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { Json } from "@/integrations/supabase/types";
+import { parseMedia, type CampaignMediaItem, type CampaignMediaType } from "@/lib/data.functions";
 
 export type CampaignMode = "manual" | "automatic";
 
@@ -90,8 +91,10 @@ export interface AdminCampaignRow {
   metrics_last_synced_at: string | null;
   scheduled_start_at: string | null;
   scheduled_end_at: string | null;
-
+  media_type: CampaignMediaType;
+  media: CampaignMediaItem[];
 }
+
 
 export const adminListCampaigns = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -147,7 +150,10 @@ export const adminListCampaigns = createServerFn({ method: "GET" })
         metrics_last_synced_at: c.metrics_last_synced_at ?? null,
         scheduled_start_at: c.scheduled_start_at ?? null,
         scheduled_end_at: c.scheduled_end_at ?? null,
+        media_type: ((c as { media_type?: string }).media_type ?? "image") as CampaignMediaType,
+        media: parseMedia((c as { media?: unknown }).media),
       };
+
     });
   });
 
@@ -180,19 +186,30 @@ export interface MetaAdAccountCampaign {
   status: string;
   effective_status: string;
   ad_account_id: string;
+  account_id: string;
+  account_name: string;
   already_linked_to: string | null; // nome da campanha do app que já usa esse ID, se houver
 }
 
+export interface MetaAdAccountInfo {
+  account_id: string;
+  account_name: string;
+  campaign_count: number;
+  error: string | null;
+}
+
+export interface MetaAdAccountCampaignsResult {
+  campaigns: MetaAdAccountCampaign[];
+  accounts: MetaAdAccountInfo[];
+}
+
 // Busca as campanhas que existem de verdade nas contas de anúncios do Meta
-// (usa META_AD_ACCOUNT_ID + META_ACCESS_TOKEN, os mesmos já configurados
-// para a sincronização). Suporta várias contas: coloque os IDs separados
-// por vírgula no secret META_AD_ACCOUNT_ID (ex: "123,456,789").
-// Serve para o admin escolher e vincular sem precisar copiar/colar o ID
-// manualmente — e sem depender de nome bater exatamente, já que quem
-// escolhe é uma pessoa olhando a lista.
+// (usa META_AD_ACCOUNT_ID + META_ACCESS_TOKEN). Suporta várias contas:
+// IDs separados por vírgula no secret META_AD_ACCOUNT_ID.
+// Contas que falham não derrubam a busca — voltam com `error` preenchido.
 export const adminListMetaAdAccountCampaigns = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }): Promise<MetaAdAccountCampaign[]> => {
+  .handler(async ({ context }): Promise<MetaAdAccountCampaignsResult> => {
     await assertAdmin(context.userId, context.claims as { email?: string });
     const token = process.env.META_ACCESS_TOKEN;
     const rawAccountIds = process.env.META_AD_ACCOUNT_ID;
@@ -212,44 +229,89 @@ export const adminListMetaAdAccountCampaigns = createServerFn({ method: "GET" })
       .not("meta_campaign_id", "is", null);
     const linkedMap = new Map((already ?? []).map((c) => [c.meta_campaign_id as string, c.name]));
 
-    const results: MetaAdAccountCampaign[] = [];
-    const fetchErrors: string[] = [];
+    const campaigns: MetaAdAccountCampaign[] = [];
+    const accounts: MetaAdAccountInfo[] = [];
 
-    // Busca cada conta em sequência (evita estourar rate limit do Meta se
-    // houver muitas contas) e segue mesmo se uma delas falhar.
     for (const accId of accountIds) {
+      let accountName = `act_${accId}`;
       try {
-        const url = `https://graph.facebook.com/v20.0/act_${accId}/campaigns?fields=id,name,status,effective_status&limit=100&access_token=${encodeURIComponent(token)}`;
+        const infoRes = await fetch(
+          `https://graph.facebook.com/v20.0/act_${accId}?fields=name,account_status&access_token=${encodeURIComponent(token)}`,
+        );
+        if (infoRes.ok) {
+          const info = (await infoRes.json()) as { name?: string };
+          if (info.name) accountName = info.name;
+        }
+
+        const url = `https://graph.facebook.com/v20.0/act_${accId}/campaigns?fields=id,name,status,effective_status&limit=200&access_token=${encodeURIComponent(token)}`;
         const res = await fetch(url);
         if (!res.ok) {
           const txt = await res.text();
-          throw new Error(`conta ${accId}: HTTP ${res.status} — ${txt.slice(0, 150)}`);
+          throw new Error(`HTTP ${res.status} — ${txt.slice(0, 150)}`);
         }
         const json = (await res.json()) as {
           data?: Array<{ id: string; name: string; status: string; effective_status: string }>;
         };
-        for (const c of json.data ?? []) {
-          results.push({
+        const list = json.data ?? [];
+        for (const c of list) {
+          campaigns.push({
             id: c.id,
             name: c.name,
             status: c.status,
             effective_status: c.effective_status,
             ad_account_id: accId,
+            account_id: accId,
+            account_name: accountName,
             already_linked_to: linkedMap.get(c.id) ?? null,
           });
         }
+        accounts.push({ account_id: accId, account_name: accountName, campaign_count: list.length, error: null });
       } catch (e) {
-        fetchErrors.push(e instanceof Error ? e.message : String(e));
+        accounts.push({
+          account_id: accId,
+          account_name: accountName,
+          campaign_count: 0,
+          error: e instanceof Error ? e.message : String(e),
+        });
       }
     }
 
-    // Só falha de vez se TODAS as contas derem erro — se pelo menos uma
-    // funcionou, devolve o que conseguiu e ignora as que falharam.
-    if (results.length === 0 && fetchErrors.length > 0) {
-      throw new Error(fetchErrors.join(" | "));
+    if (campaigns.length === 0 && accounts.every((a) => a.error)) {
+      throw new Error(accounts.map((a) => `${a.account_name}: ${a.error}`).join(" | "));
     }
-    return results;
+    return { campaigns, accounts };
   });
+
+// Sincroniza métricas de UMA campanha logo após o vínculo, para o admin ver
+// resultado imediato em vez de esperar o cron.
+async function syncSingleCampaignMetrics(campaignId: string, metaCampaignId: string) {
+  const token = process.env.META_ACCESS_TOKEN;
+  if (!token) throw new Error("META_ACCESS_TOKEN não configurado");
+  const url = `https://graph.facebook.com/v20.0/${metaCampaignId}/insights?fields=spend,clicks,impressions,ctr,cpc,reach,frequency,cpm&date_preset=maximum&access_token=${encodeURIComponent(token)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Meta API ${res.status}: ${(await res.text()).slice(0, 180)}`);
+  const json = (await res.json()) as {
+    data?: Array<Record<string, string>>;
+  };
+  const row = json.data?.[0];
+  const admin = await getSupabaseAdmin();
+  const n = (v: string | undefined) => (v == null ? 0 : Number(v) || 0);
+  await admin
+    .from("campaigns")
+    .update({
+      spent: n(row?.spend),
+      clicks: Math.round(n(row?.clicks)),
+      impressions: Math.round(n(row?.impressions)),
+      ctr: n(row?.ctr),
+      cpc: n(row?.cpc),
+      reach: Math.round(n(row?.reach)),
+      frequency: n(row?.frequency),
+      cpm: n(row?.cpm),
+      metrics_last_synced_at: new Date().toISOString(),
+      metrics_last_error: null,
+    })
+    .eq("id", campaignId);
+}
 
 // Vincula manualmente o ID da campanha no Meta a uma campanha do sistema.
 // Após salvo, o cron meta-metrics-sync passa a sincronizar as métricas reais.
@@ -280,8 +342,24 @@ export const adminSetMetaCampaignId = createServerFn({ method: "POST" })
       target_id: data.id,
       details: { meta_campaign_id: value },
     });
-    return { ok: true, meta_campaign_id: value };
+
+    let synced = false;
+    let syncError: string | null = null;
+    if (value) {
+      try {
+        await syncSingleCampaignMetrics(data.id, value);
+        synced = true;
+      } catch (e) {
+        syncError = e instanceof Error ? e.message : String(e);
+        await supabaseAdmin
+          .from("campaigns")
+          .update({ metrics_last_error: syncError })
+          .eq("id", data.id);
+      }
+    }
+    return { ok: true as const, meta_campaign_id: value, synced, syncError };
   });
+
 
 // Submits campaign through Meta Marketing API (skeleton).
 // In manual mode → returns analyzing; automatic mode → tries Meta API and falls back to analyzing on failure.
@@ -856,9 +934,10 @@ export const adminUpdateProfile = createServerFn({ method: "POST" })
     await assertAdmin(context.userId, context.claims as { email?: string });
     const admin = await getSupabaseAdmin();
     const { user_id, ...rest } = data;
-    const update = Object.fromEntries(
-      Object.entries(rest).filter(([, v]) => v !== undefined),
-    );
+    const update: { display_name?: string | null; email?: string | null; phone?: string | null } = {};
+    if (rest.display_name !== undefined) update.display_name = rest.display_name;
+    if (rest.email !== undefined) update.email = rest.email;
+    if (rest.phone !== undefined) update.phone = rest.phone;
     if (Object.keys(update).length === 0) return { ok: true };
     const { error } = await admin.from("profiles").update(update).eq("id", user_id);
     if (error) throw new Error(error.message);
@@ -940,4 +1019,177 @@ export const setMaintenanceMode = createServerFn({ method: "POST" })
       details: { message: data.message ?? null },
     });
     return { ok: true };
+  });
+
+// ============ Link de acesso direto (magic link com slug curto) ============
+export const adminGenerateAccessLink = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ user_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+
+    const { data: userRes, error: userErr } = await admin.auth.admin.getUserById(data.user_id);
+    if (userErr || !userRes?.user?.email) throw new Error("Usuário sem e-mail cadastrado");
+    const email = userRes.user.email;
+
+    const siteUrl = process.env.PUBLIC_SITE_URL || "https://robo-promoter.lovable.app";
+    const { data: linkRes, error: linkErr } = await admin.auth.admin.generateLink({
+      type: "magiclink",
+      email,
+      options: { redirectTo: `${siteUrl}/dashboard` },
+    });
+    if (linkErr || !linkRes?.properties?.action_link) {
+      throw new Error(linkErr?.message ?? "Falha ao gerar link de acesso");
+    }
+    const target = linkRes.properties.action_link;
+
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+    const slug = Array.from({ length: 8 }, () =>
+      alphabet[Math.floor(Math.random() * alphabet.length)],
+    ).join("");
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
+    const { error: slugErr } = await admin.from("access_link_slugs").insert({
+      slug,
+      target_url: target,
+      target_user_id: data.user_id,
+      created_by_email: (context.claims as { email?: string })?.email ?? null,
+      expires_at: expiresAt,
+    });
+    if (slugErr) throw new Error(slugErr.message);
+
+    await admin.from("admin_magic_link_events").insert({
+      admin_email: (context.claims as { email?: string })?.email ?? "",
+      target_user_id: data.user_id,
+      target_email: email,
+    });
+
+    return { url: `${siteUrl}/e/${slug}`, email, expires_at: expiresAt };
+  });
+
+// ============ Auditoria de vínculos Meta ============
+export interface MetaLinkAuditRow {
+  id: string;
+  campaign_id: string;
+  campaign_name: string | null;
+  changed_by_email: string | null;
+  old_meta_campaign_id: string | null;
+  new_meta_campaign_id: string | null;
+  old_meta_ad_account_id: string | null;
+  new_meta_ad_account_id: string | null;
+  created_at: string;
+}
+
+export const adminListMetaLinkAudit = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<MetaLinkAuditRow[]> => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const { data: rows, error } = await admin
+      .from("campaign_meta_link_audit")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (error) throw new Error(error.message);
+    const ids = Array.from(new Set((rows ?? []).map((r) => r.campaign_id)));
+    const { data: camps } = await admin
+      .from("campaigns")
+      .select("id, name")
+      .in("id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]);
+    const nameMap = new Map((camps ?? []).map((c) => [c.id, c.name]));
+    return (rows ?? []).map((r) => ({
+      id: r.id,
+      campaign_id: r.campaign_id,
+      campaign_name: nameMap.get(r.campaign_id) ?? null,
+      changed_by_email: r.changed_by_email ?? null,
+      old_meta_campaign_id: r.old_meta_campaign_id ?? null,
+      new_meta_campaign_id: r.new_meta_campaign_id ?? null,
+      old_meta_ad_account_id: r.old_meta_ad_account_id ?? null,
+      new_meta_ad_account_id: r.new_meta_ad_account_id ?? null,
+      created_at: r.created_at,
+    }));
+  });
+
+// ============ IA de métricas: listagem das análises ============
+export interface AIReviewRow {
+  id: string;
+  campaign_id: string;
+  campaign_name: string | null;
+  verdict: "good" | "warn" | "bad" | "no_data";
+  summary: string;
+  recommendations: string[];
+  created_at: string;
+}
+
+export const adminListAIReviews = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<AIReviewRow[]> => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const { data: rows, error } = await admin
+      .from("campaign_ai_reviews")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (error) throw new Error(error.message);
+    const ids = Array.from(new Set((rows ?? []).map((r) => r.campaign_id)));
+    const { data: camps } = await admin
+      .from("campaigns")
+      .select("id, name")
+      .in("id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]);
+    const nameMap = new Map((camps ?? []).map((c) => [c.id, c.name]));
+    return (rows ?? []).map((r) => ({
+      id: r.id,
+      campaign_id: r.campaign_id,
+      campaign_name: nameMap.get(r.campaign_id) ?? null,
+      verdict: r.verdict as AIReviewRow["verdict"],
+      summary: r.summary,
+      recommendations: Array.isArray(r.recommendations)
+        ? (r.recommendations as Json[]).map((x) => String(x))
+        : [],
+      created_at: r.created_at,
+    }));
+  });
+
+// ============ Criativos: URLs assinadas para o admin ver e baixar ============
+// O bucket campaign-creatives é privado, então o admin precisa de URLs
+// assinadas. `download` faz o navegador baixar o arquivo original (sem
+// recompressão, resolução intacta) em um clique.
+export const adminGetCampaignMediaUrls = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ campaign_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const { data: camp, error } = await admin
+      .from("campaigns")
+      .select("media, media_type, image")
+      .eq("id", data.campaign_id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    const items = parseMedia((camp as { media?: unknown } | null)?.media);
+    const mediaType = ((camp as { media_type?: string } | null)?.media_type ?? "image") as CampaignMediaType;
+
+    const out: Array<CampaignMediaItem & { url: string; downloadUrl: string }> = [];
+    for (const it of items) {
+      const [view, dl] = await Promise.all([
+        admin.storage.from("campaign-creatives").createSignedUrl(it.path, 60 * 60),
+        admin.storage
+          .from("campaign-creatives")
+          .createSignedUrl(it.path, 60 * 60, { download: it.name || true }),
+      ]);
+      if (view.data?.signedUrl) {
+        out.push({
+          ...it,
+          url: view.data.signedUrl,
+          downloadUrl: dl.data?.signedUrl ?? view.data.signedUrl,
+        });
+      }
+    }
+    return {
+      media_type: mediaType,
+      items: out,
+      legacy_image: out.length === 0 ? ((camp as { image?: string } | null)?.image ?? "") : "",
+    };
   });

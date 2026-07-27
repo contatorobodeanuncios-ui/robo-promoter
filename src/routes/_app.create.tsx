@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import {
   UploadCloud, ScanLine, Check, Sparkles, MapPin, Users, Target,
   Rocket, ChevronLeft, ChevronRight, Loader2, CalendarDays, AlertTriangle, X, Clock, Wrench,
+  Image as ImageIcon, Video, Images,
 } from "lucide-react";
 import { MapPreview } from "@/components/app/MapPreview";
 import { reachRange, fmtRange } from "@/lib/mock-data";
@@ -54,8 +55,10 @@ function CreateWizard() {
   });
 
   const [step, setStep] = useState(1);
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [image, setImage] = useState<string | null>(null);
+  // Criativo: imagem única, vídeo ou carrossel (várias imagens, em ordem).
+  const [mediaMode, setMediaMode] = useState<"image" | "video" | "carousel">("image");
+  const [files, setFiles] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [scanState, setScanState] = useState<"idle" | "scanning" | "done">("idle");
   const [analysis, setAnalysis] = useState<CreativeAnalysis | null>(null);
@@ -70,21 +73,23 @@ function CreateWizard() {
   const [days, setDays] = useState(7);
   const [fundingType, setFundingType] = useState<"wallet" | "pix_dedicated">("wallet");
   const [launching, setLaunching] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   // Item novo: horário exato de início/fim escolhido pelo cliente (opcional).
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [startAt, setStartAt] = useState(""); // formato datetime-local
   const [endAt, setEndAt] = useState("");
 
-  const handleFile = async (f: File) => {
-    if (f.size > META_MAX_IMAGE_MB * 1024 * 1024) {
-      toast.error(`Imagem maior que ${META_MAX_IMAGE_MB}MB`, {
-        description: "Esse é o limite máximo aceito pelo próprio Facebook para anúncios — não é uma restrição do app.",
-      });
-      return;
-    }
-    setImageFile(f);
-    const url = URL.createObjectURL(f);
-    setImage(url);
+  const resetMedia = (mode?: "image" | "video" | "carousel") => {
+    previews.forEach((u) => URL.revokeObjectURL(u));
+    setFiles([]);
+    setPreviews([]);
+    setImageDataUrl(null);
+    setScanState("idle");
+    setAnalysis(null);
+    if (mode) setMediaMode(mode);
+  };
+
+  const analyzeFirstImage = (f: File) => {
     setScanState("scanning");
     setAnalysis(null);
     const reader = new FileReader();
@@ -92,14 +97,7 @@ function CreateWizard() {
       const dataUrl = reader.result as string;
       setImageDataUrl(dataUrl);
       try {
-        const result = await analyzeFn({
-          data: {
-            imageDataUrl: dataUrl,
-            headline,
-            body,
-            link,
-          },
-        });
+        const result = await analyzeFn({ data: { imageDataUrl: dataUrl, headline, body, link } });
         setAnalysis(result);
         setScanState("done");
         if (!result.compliant) {
@@ -107,7 +105,7 @@ function CreateWizard() {
         } else if (result.issues.some((i) => i.severity === "soft_warning")) {
           toast.warning("A IA sugeriu ajustes de design (não bloqueia).");
         }
-      } catch (err) {
+      } catch {
         toast.error("Falha ao analisar criativo");
         setScanState("done");
       }
@@ -115,18 +113,89 @@ function CreateWizard() {
     reader.readAsDataURL(f);
   };
 
+  // Recebe os arquivos conforme o modo escolhido.
+  const handleFiles = (list: FileList | null, mode: "image" | "video" | "carousel") => {
+    const picked = Array.from(list ?? []);
+    if (picked.length === 0) return;
+
+    if (mode === "image" || mode === "carousel") {
+      const invalid = picked.find((f) => !f.type.startsWith("image/"));
+      if (invalid) {
+        toast.error("Só imagens aqui", { description: "Para vídeo, use a aba Vídeo." });
+        return;
+      }
+      const tooBig = picked.find((f) => f.size > META_MAX_IMAGE_MB * 1024 * 1024);
+      if (tooBig) {
+        toast.error(`Imagem maior que ${META_MAX_IMAGE_MB}MB`, {
+          description: "Esse é o limite máximo aceito pelo próprio Facebook — não é uma restrição do app.",
+        });
+        return;
+      }
+    } else if (!picked[0].type.startsWith("video/")) {
+      toast.error("Selecione um arquivo de vídeo");
+      return;
+    }
+
+    if (mode === "carousel") {
+      // Carrossel: acumula quantas imagens o cliente quiser, na ordem enviada.
+      const next = [...files, ...picked].slice(0, 30);
+      setFiles(next);
+      setPreviews((p) => [...p, ...picked.map((f) => URL.createObjectURL(f))].slice(0, 30));
+      if (!imageDataUrl) analyzeFirstImage(next[0]);
+      return;
+    }
+
+    previews.forEach((u) => URL.revokeObjectURL(u));
+    const f = picked[0];
+    setFiles([f]);
+    setPreviews([URL.createObjectURL(f)]);
+    if (mode === "image") {
+      analyzeFirstImage(f);
+    } else {
+      // Vídeo: a análise de imagem da IA não se aplica, segue direto.
+      setImageDataUrl(null);
+      setAnalysis(null);
+      setScanState("done");
+    }
+  };
+
+  const removeAt = (i: number) => {
+    URL.revokeObjectURL(previews[i]);
+    const nf = files.filter((_, idx) => idx !== i);
+    setFiles(nf);
+    setPreviews(previews.filter((_, idx) => idx !== i));
+    if (nf.length === 0) setScanState("idle");
+  };
+
+
   const launch = async () => {
-    if (!image || !imageFile) return;
+    if (files.length === 0) return;
     setLaunching(true);
     try {
-      // Sobe o arquivo de verdade pro Storage (não vai mais base64 pro banco).
-      const { path } = await uploadPathFn({ data: { filename: imageFile.name } });
-      const { error: upErr } = await supabase.storage
-        .from("campaign-creatives")
-        .upload(path, imageFile, { contentType: imageFile.type || "image/jpeg" });
-      if (upErr) throw new Error(`Falha ao enviar imagem: ${upErr.message}`);
-      const { data: pub } = supabase.storage.from("campaign-creatives").getPublicUrl(path);
-      const persistedImage = pub.publicUrl;
+      // Sobe todos os arquivos do criativo (imagem, vídeo ou carrossel) para o
+      // Storage, na ordem em que o cliente enviou.
+      const media: { path: string; kind: "image" | "video"; name: string; mime: string; size: number }[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        setUploadProgress(`Enviando ${i + 1} de ${files.length}...`);
+        const { path } = await uploadPathFn({ data: { filename: f.name } });
+        const { error: upErr } = await supabase.storage
+          .from("campaign-creatives")
+          .upload(path, f, { contentType: f.type || "application/octet-stream" });
+        if (upErr) throw new Error(`Falha ao enviar ${f.name}: ${upErr.message}`);
+        media.push({
+          path,
+          kind: f.type.startsWith("video/") ? "video" : "image",
+          name: f.name,
+          mime: f.type,
+          size: f.size,
+        });
+      }
+      setUploadProgress(null);
+      const firstImage = media.find((m) => m.kind === "image");
+      const persistedImage = firstImage
+        ? supabase.storage.from("campaign-creatives").getPublicUrl(firstImage.path).data.publicUrl
+        : "";
 
       const scheduledStartIso = scheduleEnabled && startAt ? new Date(startAt).toISOString() : null;
       const scheduledEndIso = scheduleEnabled && endAt ? new Date(endAt).toISOString() : null;
@@ -139,6 +208,9 @@ function CreateWizard() {
       const result = await addCampaign({
         name: headline || "Nova campanha",
         image: persistedImage,
+        media_type: mediaMode,
+        media,
+
         status: "analyzing",
         spent: 0,
         clicks: 0,
@@ -200,7 +272,7 @@ function CreateWizard() {
   };
 
   const canNext =
-    (step === 1 && scanState === "done" && (analysis?.compliant ?? true)) ||
+    (step === 1 && files.length > 0 && scanState === "done" && (analysis?.compliant ?? true)) ||
     (step === 2 && headline && body && link) ||
     (step === 3 && city.trim() && neighborhood.trim() && Number(radius) > 0) ||
     step === 4;
@@ -260,64 +332,152 @@ function CreateWizard() {
               <p className="text-sm text-muted-foreground">A IA verifica conformidade com as políticas do Facebook.</p>
             </div>
 
-            {!image && (
+            {files.length === 0 && (
               <label className="block">
                 <input
                   type="file"
-                  accept="image/*"
+                  accept={mediaMode === "video" ? "video/*" : "image/*"}
+                  multiple={mediaMode === "carousel"}
                   className="sr-only"
-                  onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+                  onChange={(e) => handleFiles(e.target.files, mediaMode)}
                 />
                 <div className="border-2 border-dashed border-white/15 rounded-2xl p-12 text-center cursor-pointer hover:border-primary/50 hover:bg-white/[0.02] transition-all">
                   <UploadCloud className="h-10 w-10 mx-auto text-primary mb-3 animate-float" />
-                  <p className="font-medium">Arraste uma imagem ou clique para enviar</p>
+                  <p className="font-medium">
+                    {mediaMode === "video"
+                      ? "Clique para enviar um vídeo"
+                      : mediaMode === "carousel"
+                        ? "Clique para enviar as imagens do carrossel"
+                        : "Arraste uma imagem ou clique para enviar"}
+                  </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    PNG ou JPG até {META_MAX_IMAGE_MB}MB (limite do próprio Facebook) · Recomendado 1080×1080
+                    {mediaMode === "video"
+                      ? "Qualquer formato de vídeo (MP4, MOV, etc.) · resolução original preservada"
+                      : mediaMode === "carousel"
+                        ? `Quantas imagens quiser (até 30), na ordem que você escolher · até ${META_MAX_IMAGE_MB}MB cada`
+                        : `PNG ou JPG até ${META_MAX_IMAGE_MB}MB (limite do próprio Facebook) · Recomendado 1080×1080`}
                   </p>
                 </div>
               </label>
             )}
 
-            {image && (
+            {/* Botões de tipo de criativo, logo abaixo do upload */}
+            <div className="flex flex-wrap gap-2">
+              {([
+                { id: "image", label: "Imagem", icon: ImageIcon },
+                { id: "video", label: "Vídeo", icon: Video },
+                { id: "carousel", label: "Carrossel", icon: Images },
+              ] as const).map((m) => {
+                const Icon = m.icon;
+                const active = mediaMode === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => { if (!active) resetMedia(m.id); }}
+                    className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium border transition-all ${
+                      active
+                        ? "border-primary/60 bg-primary/10 text-foreground border-glow"
+                        : "border-white/10 text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" /> {m.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {files.length > 0 && (
               <div className="grid md:grid-cols-2 gap-6">
-                <div className="relative aspect-square rounded-2xl overflow-hidden border border-white/10">
-                  <img
-                    src={imageDataUrl || image}
-                    alt="preview"
-                    className="absolute inset-0 h-full w-full object-cover"
-                    onError={(e) => {
-                      if (imageDataUrl && (e.currentTarget as HTMLImageElement).src !== imageDataUrl) {
-                        (e.currentTarget as HTMLImageElement).src = imageDataUrl;
-                      }
-                    }}
-                  />
-                  {scanState === "scanning" && (
-                    <>
-                      <div className="absolute inset-0 bg-primary/10" />
-                      <div className="absolute inset-x-0 h-12 bg-gradient-to-b from-transparent via-primary/70 to-transparent animate-scan" />
-                      <div className="absolute inset-4 border border-primary/60 rounded-xl" />
-                      <div className="absolute top-3 left-3 right-3 flex items-center gap-2 glass rounded-lg px-3 py-1.5 text-xs">
-                        <ScanLine className="h-3.5 w-3.5 text-primary animate-pulse" />
-                        Robô analisando criativo...
-                      </div>
-                    </>
-                  )}
-                  {scanState === "done" && (
-                    <div className="absolute top-3 left-3 right-3 flex items-center gap-2 glass rounded-lg px-3 py-1.5 text-xs text-success">
-                      <Check className="h-3.5 w-3.5" /> Imagem aprovada
+                <div className="space-y-3">
+                  {mediaMode === "video" ? (
+                    <div className="relative aspect-video rounded-2xl overflow-hidden border border-white/10 bg-black">
+                      <video src={previews[0]} controls className="h-full w-full object-contain" />
+                    </div>
+                  ) : mediaMode === "carousel" ? (
+                    <div className="grid grid-cols-3 gap-2">
+                      {previews.map((p, i) => (
+                        <div key={p} className="relative aspect-square rounded-xl overflow-hidden border border-white/10">
+                          <img src={p} alt={`imagem ${i + 1}`} className="h-full w-full object-cover" />
+                          <span className="absolute top-1 left-1 rounded-md bg-background/80 px-1.5 text-[11px] font-semibold">
+                            {i + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeAt(i)}
+                            className="absolute top-1 right-1 rounded-md bg-background/80 p-1 hover:bg-destructive/80"
+                            aria-label={`remover imagem ${i + 1}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                      <label className="aspect-square rounded-xl border-2 border-dashed border-white/15 grid place-items-center cursor-pointer hover:border-primary/50">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="sr-only"
+                          onChange={(e) => handleFiles(e.target.files, "carousel")}
+                        />
+                        <UploadCloud className="h-5 w-5 text-primary" />
+                      </label>
+                    </div>
+                  ) : (
+                    <div className="relative aspect-square rounded-2xl overflow-hidden border border-white/10">
+                      <img
+                        src={imageDataUrl || previews[0]}
+                        alt="preview"
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                      {scanState === "scanning" && (
+                        <>
+                          <div className="absolute inset-0 bg-primary/10" />
+                          <div className="absolute inset-x-0 h-12 bg-gradient-to-b from-transparent via-primary/70 to-transparent animate-scan" />
+                          <div className="absolute inset-4 border border-primary/60 rounded-xl" />
+                          <div className="absolute top-3 left-3 right-3 flex items-center gap-2 glass rounded-lg px-3 py-1.5 text-xs">
+                            <ScanLine className="h-3.5 w-3.5 text-primary animate-pulse" />
+                            Robô analisando criativo...
+                          </div>
+                        </>
+                      )}
+                      {scanState === "done" && (
+                        <div className="absolute top-3 left-3 right-3 flex items-center gap-2 glass rounded-lg px-3 py-1.5 text-xs text-success">
+                          <Check className="h-3.5 w-3.5" /> Imagem aprovada
+                        </div>
+                      )}
                     </div>
                   )}
+                  <p className="text-[11px] text-muted-foreground">
+                    {files.length} arquivo{files.length > 1 ? "s" : ""} selecionado{files.length > 1 ? "s" : ""}
+                  </p>
                 </div>
 
-                <AiAnalysisPanel
-                  scanState={scanState}
-                  analysis={analysis}
-                  onReset={() => { setImage(null); setImageFile(null); setImageDataUrl(null); setScanState("idle"); setAnalysis(null); }}
-                />
+                {mediaMode === "video" ? (
+                  <div className="glass rounded-2xl p-5 border border-white/5 space-y-3">
+                    <p className="font-medium text-sm flex items-center gap-2">
+                      <Video className="h-4 w-4 text-primary" /> Vídeo pronto para envio
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      A análise automática de conformidade só roda em imagens. O vídeo será revisado
+                      manualmente pela equipe antes de subir no Meta.
+                    </p>
+                    <Button variant="outline" size="sm" onClick={() => resetMedia("video")}>
+                      Trocar vídeo
+                    </Button>
+                  </div>
+                ) : (
+                  <AiAnalysisPanel
+                    scanState={scanState}
+                    analysis={analysis}
+                    onReset={() => resetMedia(mediaMode)}
+                  />
+                )}
               </div>
             )}
           </div>
         )}
+
 
         {step === 2 && (
           <div className="space-y-5 max-w-2xl">
@@ -570,7 +730,7 @@ function CreateWizard() {
             </div>
 
             <Button variant="neon" size="lg" className="w-full h-14 text-base animate-pulse-glow" onClick={launch} disabled={launching}>
-              {launching ? <><Loader2 className="animate-spin" /> Ativando robô...</> : <><Rocket /> {fundingType === "pix_dedicated" ? "Gerar PIX e Lançar" : "Ativar Robô e Lançar Anúncio"}</>}
+              {launching ? <><Loader2 className="animate-spin" /> {uploadProgress ?? "Ativando robô..."}</> : <><Rocket /> {fundingType === "pix_dedicated" ? "Gerar PIX e Lançar" : "Ativar Robô e Lançar Anúncio"}</>}
             </Button>
           </div>
         )}

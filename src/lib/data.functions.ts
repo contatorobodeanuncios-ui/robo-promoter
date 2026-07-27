@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import type { Json } from "@/integrations/supabase/types";
 
 async function getAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -16,6 +17,19 @@ export type CampaignStatus =
   | "encerrada_saldo_consumido";
 
 export type FundingType = "wallet" | "pix_dedicated";
+
+// Criativo: além da imagem única, agora dá pra mandar vídeo ou carrossel
+// (várias imagens, na ordem em que o cliente enviou).
+export type CampaignMediaType = "image" | "video" | "carousel";
+
+export interface CampaignMediaItem {
+  path: string;   // caminho no Storage (bucket campaign-creatives)
+  kind: "image" | "video";
+  name: string;
+  mime: string;
+  size: number;
+}
+
 
 export interface CampaignRow {
   id: string;
@@ -53,7 +67,10 @@ export interface CampaignRow {
   // Item novo: data/hora exata escolhida pelo cliente para o anúncio começar e terminar.
   scheduled_start_at: string | null;
   scheduled_end_at: string | null;
+  media_type: CampaignMediaType;
+  media: CampaignMediaItem[];
 }
+
 
 interface DbCampaign {
   id: string;
@@ -90,9 +107,26 @@ interface DbCampaign {
   created_at?: string;
   scheduled_start_at?: string | null;
   scheduled_end_at?: string | null;
+  media_type?: string | null;
+  media?: unknown;
 }
 
 const num = (v: string | number | null | undefined) => (v == null ? 0 : Number(v));
+
+export const parseMedia = (v: unknown): CampaignMediaItem[] => {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((x): x is Record<string, unknown> => !!x && typeof x === "object")
+    .map((x) => ({
+      path: String(x.path ?? ""),
+      kind: x.kind === "video" ? ("video" as const) : ("image" as const),
+      name: String(x.name ?? ""),
+      mime: String(x.mime ?? ""),
+      size: Number(x.size ?? 0),
+    }))
+    .filter((x) => x.path.length > 0);
+};
+
 
 const mapCampaign = (r: DbCampaign): CampaignRow => ({
   id: r.id,
@@ -129,7 +163,10 @@ const mapCampaign = (r: DbCampaign): CampaignRow => ({
   created_at: r.created_at ?? "",
   scheduled_start_at: r.scheduled_start_at ?? null,
   scheduled_end_at: r.scheduled_end_at ?? null,
+  media_type: (r.media_type ?? "image") as CampaignMediaType,
+  media: parseMedia(r.media),
 });
+
 
 
 export const getAppData = createServerFn({ method: "GET" })
@@ -181,7 +218,22 @@ const campaignInput = z.object({
   pix_total_budget: z.number().min(0).optional(),
   scheduled_start_at: z.string().datetime().nullable().optional(),
   scheduled_end_at: z.string().datetime().nullable().optional(),
+  // Criativo: imagem única, vídeo ou carrossel (várias imagens, em ordem).
+  media_type: z.enum(["image", "video", "carousel"]).default("image"),
+  media: z
+    .array(
+      z.object({
+        path: z.string().min(1).max(500),
+        kind: z.enum(["image", "video"]),
+        name: z.string().max(200).default(""),
+        mime: z.string().max(120).default(""),
+        size: z.number().min(0).default(0),
+      }),
+    )
+    .max(30)
+    .default([]),
 });
+
 
 export interface CreateCampaignResult {
   campaign: CampaignRow;
@@ -238,6 +290,9 @@ export const createCampaign = createServerFn({ method: "POST" })
       pix_remaining_budget: isPix ? 0 : null,
       scheduled_start_at: data.scheduled_start_at ?? null,
       scheduled_end_at: data.scheduled_end_at ?? null,
+      media_type: data.media_type,
+      media: data.media as unknown as Json,
+
     };
     const { data: row, error } = await supabase
       .from("campaigns")
@@ -386,4 +441,27 @@ export const getCreativeUploadPath = createServerFn({ method: "POST" })
     const safe = data.filename.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-100);
     const path = `creatives/${context.userId}/${Date.now()}-${safe}`;
     return { path };
+  });
+
+// Gera URLs assinadas para o próprio usuário ver seus criativos (o bucket
+// campaign-creatives é privado). Só libera caminhos dentro da pasta do usuário.
+export const getMyCreativeSignedUrls = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ paths: z.array(z.string().min(1).max(500)).max(30) }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const prefix = `creatives/${context.userId}/`;
+    const allowed = data.paths.filter((p) => p.startsWith(prefix));
+    if (allowed.length === 0) return { urls: {} as Record<string, string> };
+    const admin = await getAdmin();
+    const { data: signed, error } = await admin.storage
+      .from("campaign-creatives")
+      .createSignedUrls(allowed, 60 * 60);
+    if (error) throw new Error(error.message);
+    const urls: Record<string, string> = {};
+    for (const s of signed ?? []) {
+      if (s.path && s.signedUrl) urls[s.path] = s.signedUrl;
+    }
+    return { urls };
   });
