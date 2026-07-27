@@ -330,6 +330,7 @@ export type Database = {
           reach: number
           results: number
           revenue: number
+          scheduled_end_at: string | null
           scheduled_start_at: string | null
           spent: number
           started_at: string | null
@@ -374,6 +375,7 @@ export type Database = {
           reach?: number
           results?: number
           revenue?: number
+          scheduled_end_at?: string | null
           scheduled_start_at?: string | null
           spent?: number
           started_at?: string | null
@@ -418,6 +420,7 @@ export type Database = {
           reach?: number
           results?: number
           revenue?: number
+          scheduled_end_at?: string | null
           scheduled_start_at?: string | null
           spent?: number
           started_at?: string | null
