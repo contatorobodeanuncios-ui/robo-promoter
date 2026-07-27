@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import {
   UploadCloud, ScanLine, Check, Sparkles, MapPin, Users, Target,
   Rocket, ChevronLeft, ChevronRight, Loader2, CalendarDays, AlertTriangle, X, Clock, Wrench,
+  Image as ImageIcon, Video, Images,
 } from "lucide-react";
 import { MapPreview } from "@/components/app/MapPreview";
 import { reachRange, fmtRange } from "@/lib/mock-data";
