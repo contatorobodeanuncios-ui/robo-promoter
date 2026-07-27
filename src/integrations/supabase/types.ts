@@ -315,6 +315,8 @@ export type Database = {
           impressions: number
           invoice_url: string | null
           link: string
+          media: Json
+          media_type: string
           meta_ad_account_id: string | null
           meta_campaign_id: string | null
           meta_effective_status: string | null
@@ -360,6 +362,8 @@ export type Database = {
           impressions?: number
           invoice_url?: string | null
           link?: string
+          media?: Json
+          media_type?: string
           meta_ad_account_id?: string | null
           meta_campaign_id?: string | null
           meta_effective_status?: string | null
@@ -405,6 +409,8 @@ export type Database = {
           impressions?: number
           invoice_url?: string | null
           link?: string
+          media?: Json
+          media_type?: string
           meta_ad_account_id?: string | null
           meta_campaign_id?: string | null
           meta_effective_status?: string | null
