@@ -331,64 +331,152 @@ function CreateWizard() {
               <p className="text-sm text-muted-foreground">A IA verifica conformidade com as políticas do Facebook.</p>
             </div>
 
-            {!image && (
+            {files.length === 0 && (
               <label className="block">
                 <input
                   type="file"
-                  accept="image/*"
+                  accept={mediaMode === "video" ? "video/*" : "image/*"}
+                  multiple={mediaMode === "carousel"}
                   className="sr-only"
-                  onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+                  onChange={(e) => handleFiles(e.target.files, mediaMode)}
                 />
                 <div className="border-2 border-dashed border-white/15 rounded-2xl p-12 text-center cursor-pointer hover:border-primary/50 hover:bg-white/[0.02] transition-all">
                   <UploadCloud className="h-10 w-10 mx-auto text-primary mb-3 animate-float" />
-                  <p className="font-medium">Arraste uma imagem ou clique para enviar</p>
+                  <p className="font-medium">
+                    {mediaMode === "video"
+                      ? "Clique para enviar um vídeo"
+                      : mediaMode === "carousel"
+                        ? "Clique para enviar as imagens do carrossel"
+                        : "Arraste uma imagem ou clique para enviar"}
+                  </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    PNG ou JPG até {META_MAX_IMAGE_MB}MB (limite do próprio Facebook) · Recomendado 1080×1080
+                    {mediaMode === "video"
+                      ? "Qualquer formato de vídeo (MP4, MOV, etc.) · resolução original preservada"
+                      : mediaMode === "carousel"
+                        ? `Quantas imagens quiser (até 30), na ordem que você escolher · até ${META_MAX_IMAGE_MB}MB cada`
+                        : `PNG ou JPG até ${META_MAX_IMAGE_MB}MB (limite do próprio Facebook) · Recomendado 1080×1080`}
                   </p>
                 </div>
               </label>
             )}
 
-            {image && (
+            {/* Botões de tipo de criativo, logo abaixo do upload */}
+            <div className="flex flex-wrap gap-2">
+              {([
+                { id: "image", label: "Imagem", icon: ImageIcon },
+                { id: "video", label: "Vídeo", icon: Video },
+                { id: "carousel", label: "Carrossel", icon: Images },
+              ] as const).map((m) => {
+                const Icon = m.icon;
+                const active = mediaMode === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => { if (!active) resetMedia(m.id); }}
+                    className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium border transition-all ${
+                      active
+                        ? "border-primary/60 bg-primary/10 text-foreground border-glow"
+                        : "border-white/10 text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" /> {m.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {files.length > 0 && (
               <div className="grid md:grid-cols-2 gap-6">
-                <div className="relative aspect-square rounded-2xl overflow-hidden border border-white/10">
-                  <img
-                    src={imageDataUrl || image}
-                    alt="preview"
-                    className="absolute inset-0 h-full w-full object-cover"
-                    onError={(e) => {
-                      if (imageDataUrl && (e.currentTarget as HTMLImageElement).src !== imageDataUrl) {
-                        (e.currentTarget as HTMLImageElement).src = imageDataUrl;
-                      }
-                    }}
-                  />
-                  {scanState === "scanning" && (
-                    <>
-                      <div className="absolute inset-0 bg-primary/10" />
-                      <div className="absolute inset-x-0 h-12 bg-gradient-to-b from-transparent via-primary/70 to-transparent animate-scan" />
-                      <div className="absolute inset-4 border border-primary/60 rounded-xl" />
-                      <div className="absolute top-3 left-3 right-3 flex items-center gap-2 glass rounded-lg px-3 py-1.5 text-xs">
-                        <ScanLine className="h-3.5 w-3.5 text-primary animate-pulse" />
-                        Robô analisando criativo...
-                      </div>
-                    </>
-                  )}
-                  {scanState === "done" && (
-                    <div className="absolute top-3 left-3 right-3 flex items-center gap-2 glass rounded-lg px-3 py-1.5 text-xs text-success">
-                      <Check className="h-3.5 w-3.5" /> Imagem aprovada
+                <div className="space-y-3">
+                  {mediaMode === "video" ? (
+                    <div className="relative aspect-video rounded-2xl overflow-hidden border border-white/10 bg-black">
+                      <video src={previews[0]} controls className="h-full w-full object-contain" />
+                    </div>
+                  ) : mediaMode === "carousel" ? (
+                    <div className="grid grid-cols-3 gap-2">
+                      {previews.map((p, i) => (
+                        <div key={p} className="relative aspect-square rounded-xl overflow-hidden border border-white/10">
+                          <img src={p} alt={`imagem ${i + 1}`} className="h-full w-full object-cover" />
+                          <span className="absolute top-1 left-1 rounded-md bg-background/80 px-1.5 text-[11px] font-semibold">
+                            {i + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeAt(i)}
+                            className="absolute top-1 right-1 rounded-md bg-background/80 p-1 hover:bg-destructive/80"
+                            aria-label={`remover imagem ${i + 1}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                      <label className="aspect-square rounded-xl border-2 border-dashed border-white/15 grid place-items-center cursor-pointer hover:border-primary/50">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="sr-only"
+                          onChange={(e) => handleFiles(e.target.files, "carousel")}
+                        />
+                        <UploadCloud className="h-5 w-5 text-primary" />
+                      </label>
+                    </div>
+                  ) : (
+                    <div className="relative aspect-square rounded-2xl overflow-hidden border border-white/10">
+                      <img
+                        src={imageDataUrl || previews[0]}
+                        alt="preview"
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                      {scanState === "scanning" && (
+                        <>
+                          <div className="absolute inset-0 bg-primary/10" />
+                          <div className="absolute inset-x-0 h-12 bg-gradient-to-b from-transparent via-primary/70 to-transparent animate-scan" />
+                          <div className="absolute inset-4 border border-primary/60 rounded-xl" />
+                          <div className="absolute top-3 left-3 right-3 flex items-center gap-2 glass rounded-lg px-3 py-1.5 text-xs">
+                            <ScanLine className="h-3.5 w-3.5 text-primary animate-pulse" />
+                            Robô analisando criativo...
+                          </div>
+                        </>
+                      )}
+                      {scanState === "done" && (
+                        <div className="absolute top-3 left-3 right-3 flex items-center gap-2 glass rounded-lg px-3 py-1.5 text-xs text-success">
+                          <Check className="h-3.5 w-3.5" /> Imagem aprovada
+                        </div>
+                      )}
                     </div>
                   )}
+                  <p className="text-[11px] text-muted-foreground">
+                    {files.length} arquivo{files.length > 1 ? "s" : ""} selecionado{files.length > 1 ? "s" : ""}
+                  </p>
                 </div>
 
-                <AiAnalysisPanel
-                  scanState={scanState}
-                  analysis={analysis}
-                  onReset={() => { setImage(null); setImageFile(null); setImageDataUrl(null); setScanState("idle"); setAnalysis(null); }}
-                />
+                {mediaMode === "video" ? (
+                  <div className="glass rounded-2xl p-5 border border-white/5 space-y-3">
+                    <p className="font-medium text-sm flex items-center gap-2">
+                      <Video className="h-4 w-4 text-primary" /> Vídeo pronto para envio
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      A análise automática de conformidade só roda em imagens. O vídeo será revisado
+                      manualmente pela equipe antes de subir no Meta.
+                    </p>
+                    <Button variant="outline" size="sm" onClick={() => resetMedia("video")}>
+                      Trocar vídeo
+                    </Button>
+                  </div>
+                ) : (
+                  <AiAnalysisPanel
+                    scanState={scanState}
+                    analysis={analysis}
+                    onReset={() => resetMedia(mediaMode)}
+                  />
+                )}
               </div>
             )}
           </div>
         )}
+
 
         {step === 2 && (
           <div className="space-y-5 max-w-2xl">
