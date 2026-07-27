@@ -54,8 +54,10 @@ function CreateWizard() {
   });
 
   const [step, setStep] = useState(1);
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [image, setImage] = useState<string | null>(null);
+  // Criativo: imagem única, vídeo ou carrossel (várias imagens, em ordem).
+  const [mediaMode, setMediaMode] = useState<"image" | "video" | "carousel">("image");
+  const [files, setFiles] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [scanState, setScanState] = useState<"idle" | "scanning" | "done">("idle");
   const [analysis, setAnalysis] = useState<CreativeAnalysis | null>(null);
@@ -70,21 +72,23 @@ function CreateWizard() {
   const [days, setDays] = useState(7);
   const [fundingType, setFundingType] = useState<"wallet" | "pix_dedicated">("wallet");
   const [launching, setLaunching] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   // Item novo: horário exato de início/fim escolhido pelo cliente (opcional).
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [startAt, setStartAt] = useState(""); // formato datetime-local
   const [endAt, setEndAt] = useState("");
 
-  const handleFile = async (f: File) => {
-    if (f.size > META_MAX_IMAGE_MB * 1024 * 1024) {
-      toast.error(`Imagem maior que ${META_MAX_IMAGE_MB}MB`, {
-        description: "Esse é o limite máximo aceito pelo próprio Facebook para anúncios — não é uma restrição do app.",
-      });
-      return;
-    }
-    setImageFile(f);
-    const url = URL.createObjectURL(f);
-    setImage(url);
+  const resetMedia = (mode?: "image" | "video" | "carousel") => {
+    previews.forEach((u) => URL.revokeObjectURL(u));
+    setFiles([]);
+    setPreviews([]);
+    setImageDataUrl(null);
+    setScanState("idle");
+    setAnalysis(null);
+    if (mode) setMediaMode(mode);
+  };
+
+  const analyzeFirstImage = (f: File) => {
     setScanState("scanning");
     setAnalysis(null);
     const reader = new FileReader();
@@ -92,14 +96,7 @@ function CreateWizard() {
       const dataUrl = reader.result as string;
       setImageDataUrl(dataUrl);
       try {
-        const result = await analyzeFn({
-          data: {
-            imageDataUrl: dataUrl,
-            headline,
-            body,
-            link,
-          },
-        });
+        const result = await analyzeFn({ data: { imageDataUrl: dataUrl, headline, body, link } });
         setAnalysis(result);
         setScanState("done");
         if (!result.compliant) {
@@ -107,13 +104,68 @@ function CreateWizard() {
         } else if (result.issues.some((i) => i.severity === "soft_warning")) {
           toast.warning("A IA sugeriu ajustes de design (não bloqueia).");
         }
-      } catch (err) {
+      } catch {
         toast.error("Falha ao analisar criativo");
         setScanState("done");
       }
     };
     reader.readAsDataURL(f);
   };
+
+  // Recebe os arquivos conforme o modo escolhido.
+  const handleFiles = (list: FileList | null, mode: "image" | "video" | "carousel") => {
+    const picked = Array.from(list ?? []);
+    if (picked.length === 0) return;
+
+    if (mode === "image" || mode === "carousel") {
+      const invalid = picked.find((f) => !f.type.startsWith("image/"));
+      if (invalid) {
+        toast.error("Só imagens aqui", { description: "Para vídeo, use a aba Vídeo." });
+        return;
+      }
+      const tooBig = picked.find((f) => f.size > META_MAX_IMAGE_MB * 1024 * 1024);
+      if (tooBig) {
+        toast.error(`Imagem maior que ${META_MAX_IMAGE_MB}MB`, {
+          description: "Esse é o limite máximo aceito pelo próprio Facebook — não é uma restrição do app.",
+        });
+        return;
+      }
+    } else if (!picked[0].type.startsWith("video/")) {
+      toast.error("Selecione um arquivo de vídeo");
+      return;
+    }
+
+    if (mode === "carousel") {
+      // Carrossel: acumula quantas imagens o cliente quiser, na ordem enviada.
+      const next = [...files, ...picked].slice(0, 30);
+      setFiles(next);
+      setPreviews((p) => [...p, ...picked.map((f) => URL.createObjectURL(f))].slice(0, 30));
+      if (!imageDataUrl) analyzeFirstImage(next[0]);
+      return;
+    }
+
+    previews.forEach((u) => URL.revokeObjectURL(u));
+    const f = picked[0];
+    setFiles([f]);
+    setPreviews([URL.createObjectURL(f)]);
+    if (mode === "image") {
+      analyzeFirstImage(f);
+    } else {
+      // Vídeo: a análise de imagem da IA não se aplica, segue direto.
+      setImageDataUrl(null);
+      setAnalysis(null);
+      setScanState("done");
+    }
+  };
+
+  const removeAt = (i: number) => {
+    URL.revokeObjectURL(previews[i]);
+    const nf = files.filter((_, idx) => idx !== i);
+    setFiles(nf);
+    setPreviews(previews.filter((_, idx) => idx !== i));
+    if (nf.length === 0) setScanState("idle");
+  };
+
 
   const launch = async () => {
     if (!image || !imageFile) return;
