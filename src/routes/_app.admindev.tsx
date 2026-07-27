@@ -39,6 +39,7 @@ import {
   adminGenerateAccessLink,
   adminListMetaLinkAudit,
   adminListAIReviews,
+  adminGetCampaignMediaUrls,
   type AdminCampaignRow,
   type AdminClientRow,
   type PixAttemptRow,
@@ -59,7 +60,7 @@ import {
 } from "@/lib/payment.functions";
 import { adminListConversations } from "@/lib/support.functions";
 import { supabase } from "@/integrations/supabase/client";
-import { Shield, Zap, Hand, Eye, X, Rocket, Loader2, Link2, Check, Ban, CreditCard, AlertTriangle, Trash2, PowerOff, UserPlus, Copy, Settings, Users, Megaphone, Wallet, Pencil, UserCheck, KeyRound, Sparkles, History, ThumbsUp, ThumbsDown, HelpCircle, RefreshCw } from "lucide-react";
+import { Shield, Zap, Hand, Eye, X, Rocket, Loader2, Link2, Check, Ban, CreditCard, AlertTriangle, Trash2, PowerOff, UserPlus, Copy, Settings, Users, Megaphone, Wallet, Pencil, UserCheck, KeyRound, Sparkles, History, ThumbsUp, ThumbsDown, HelpCircle, RefreshCw, Download } from "lucide-react";
 
 export const Route = createFileRoute("/_app/admindev")({
   ssr: false,
