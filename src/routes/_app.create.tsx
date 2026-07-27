@@ -272,7 +272,7 @@ function CreateWizard() {
   };
 
   const canNext =
-    (step === 1 && scanState === "done" && (analysis?.compliant ?? true)) ||
+    (step === 1 && files.length > 0 && scanState === "done" && (analysis?.compliant ?? true)) ||
     (step === 2 && headline && body && link) ||
     (step === 3 && city.trim() && neighborhood.trim() && Number(radius) > 0) ||
     step === 4;
