@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,12 +11,14 @@ import { Slider } from "@/components/ui/slider";
 import { toast } from "sonner";
 import {
   UploadCloud, ScanLine, Check, Sparkles, MapPin, Users, Target,
-  Rocket, ChevronLeft, ChevronRight, Loader2, CalendarDays, AlertTriangle, X,
+  Rocket, ChevronLeft, ChevronRight, Loader2, CalendarDays, AlertTriangle, X, Clock, Wrench,
 } from "lucide-react";
 import { MapPreview } from "@/components/app/MapPreview";
 import { reachRange, fmtRange } from "@/lib/mock-data";
 import { analyzeCreative, type CreativeAnalysis } from "@/lib/ai-analysis.functions";
+import { getCreativeUploadPath, getMaintenanceMode } from "@/lib/data.functions";
 import { useAppStore } from "@/lib/store";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_app/create")({
   head: () => ({
@@ -34,11 +37,24 @@ const steps = [
   { n: 4, title: "Lançar", desc: "Orçamento e robô" },
 ];
 
+// Limite real do Facebook para imagem de anúncio (não é um teto do app).
+const META_MAX_IMAGE_MB = 30;
+
 function CreateWizard() {
   const nav = useNavigate();
   const addCampaign = useAppStore((s) => s.addCampaign);
   const analyzeFn = useServerFn(analyzeCreative);
+  const uploadPathFn = useServerFn(getCreativeUploadPath);
+  const maintenanceFn = useServerFn(getMaintenanceMode);
+
+  const maintenanceQ = useQuery({
+    queryKey: ["maintenance-mode"],
+    queryFn: () => maintenanceFn(),
+    staleTime: 30_000,
+  });
+
   const [step, setStep] = useState(1);
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [image, setImage] = useState<string | null>(null);
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [scanState, setScanState] = useState<"idle" | "scanning" | "done">("idle");
@@ -54,13 +70,23 @@ function CreateWizard() {
   const [days, setDays] = useState(7);
   const [fundingType, setFundingType] = useState<"wallet" | "pix_dedicated">("wallet");
   const [launching, setLaunching] = useState(false);
+  // Item novo: horário exato de início/fim escolhido pelo cliente (opcional).
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [startAt, setStartAt] = useState(""); // formato datetime-local
+  const [endAt, setEndAt] = useState("");
 
   const handleFile = async (f: File) => {
+    if (f.size > META_MAX_IMAGE_MB * 1024 * 1024) {
+      toast.error(`Imagem maior que ${META_MAX_IMAGE_MB}MB`, {
+        description: "Esse é o limite máximo aceito pelo próprio Facebook para anúncios — não é uma restrição do app.",
+      });
+      return;
+    }
+    setImageFile(f);
     const url = URL.createObjectURL(f);
     setImage(url);
     setScanState("scanning");
     setAnalysis(null);
-    // Lê base64 para enviar ao AI gateway
     const reader = new FileReader();
     reader.onload = async () => {
       const dataUrl = reader.result as string;
@@ -90,12 +116,26 @@ function CreateWizard() {
   };
 
   const launch = async () => {
-    if (!image) return;
+    if (!image || !imageFile) return;
     setLaunching(true);
     try {
-      // Salva como data URL para que a imagem não quebre na prévia
-      // (especialmente no celular, onde object URLs ficam inválidos).
-      const persistedImage = imageDataUrl || image;
+      // Sobe o arquivo de verdade pro Storage (não vai mais base64 pro banco).
+      const { path } = await uploadPathFn({ data: { filename: imageFile.name } });
+      const { error: upErr } = await supabase.storage
+        .from("campaign-creatives")
+        .upload(path, imageFile, { contentType: imageFile.type || "image/jpeg" });
+      if (upErr) throw new Error(`Falha ao enviar imagem: ${upErr.message}`);
+      const { data: pub } = supabase.storage.from("campaign-creatives").getPublicUrl(path);
+      const persistedImage = pub.publicUrl;
+
+      const scheduledStartIso = scheduleEnabled && startAt ? new Date(startAt).toISOString() : null;
+      const scheduledEndIso = scheduleEnabled && endAt ? new Date(endAt).toISOString() : null;
+      if (scheduledStartIso && scheduledEndIso && new Date(scheduledEndIso) <= new Date(scheduledStartIso)) {
+        toast.error("O horário de término precisa ser depois do horário de início");
+        setLaunching(false);
+        return;
+      }
+
       const result = await addCampaign({
         name: headline || "Nova campanha",
         image: persistedImage,
@@ -127,6 +167,8 @@ function CreateWizard() {
         started_running_at: null,
         ended_at: null,
         created_at: new Date().toISOString(),
+        scheduled_start_at: scheduledStartIso,
+        scheduled_end_at: scheduledEndIso,
       });
       if (result.paid) {
         toast.success("Anúncio pago com saldo do app!", {
@@ -151,7 +193,7 @@ function CreateWizard() {
         });
       }
     } catch (e) {
-      toast.error("Falha ao criar campanha", { description: String(e) });
+      toast.error("Falha ao criar campanha", { description: e instanceof Error ? e.message : String(e) });
     } finally {
       setLaunching(false);
     }
@@ -162,6 +204,23 @@ function CreateWizard() {
     (step === 2 && headline && body && link) ||
     (step === 3 && city.trim() && neighborhood.trim() && Number(radius) > 0) ||
     step === 4;
+
+  // Modo de manutenção: bloqueia a criação de novas campanhas pra todo mundo.
+  if (maintenanceQ.data?.enabled) {
+    return (
+      <div className="p-6 lg:p-10 max-w-2xl mx-auto">
+        <div className="glass-strong rounded-2xl p-10 text-center space-y-4 border border-warning/30">
+          <div className="mx-auto h-16 w-16 rounded-full bg-warning/10 border border-warning/30 grid place-items-center">
+            <Wrench className="h-7 w-7 text-warning" />
+          </div>
+          <h1 className="text-2xl font-bold">Em manutenção</h1>
+          <p className="text-sm text-muted-foreground whitespace-pre-line">
+            {maintenanceQ.data.message}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 lg:p-10 max-w-5xl mx-auto space-y-8">
@@ -212,7 +271,9 @@ function CreateWizard() {
                 <div className="border-2 border-dashed border-white/15 rounded-2xl p-12 text-center cursor-pointer hover:border-primary/50 hover:bg-white/[0.02] transition-all">
                   <UploadCloud className="h-10 w-10 mx-auto text-primary mb-3 animate-float" />
                   <p className="font-medium">Arraste uma imagem ou clique para enviar</p>
-                  <p className="text-xs text-muted-foreground mt-1">PNG, JPG até 10MB · Recomendado 1080×1080</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    PNG ou JPG até {META_MAX_IMAGE_MB}MB (limite do próprio Facebook) · Recomendado 1080×1080
+                  </p>
                 </div>
               </label>
             )}
@@ -225,7 +286,6 @@ function CreateWizard() {
                     alt="preview"
                     className="absolute inset-0 h-full w-full object-cover"
                     onError={(e) => {
-                      // fallback se objectURL quebrar (caso celular)
                       if (imageDataUrl && (e.currentTarget as HTMLImageElement).src !== imageDataUrl) {
                         (e.currentTarget as HTMLImageElement).src = imageDataUrl;
                       }
@@ -252,7 +312,7 @@ function CreateWizard() {
                 <AiAnalysisPanel
                   scanState={scanState}
                   analysis={analysis}
-                  onReset={() => { setImage(null); setImageDataUrl(null); setScanState("idle"); setAnalysis(null); }}
+                  onReset={() => { setImage(null); setImageFile(null); setImageDataUrl(null); setScanState("idle"); setAnalysis(null); }}
                 />
               </div>
             )}
@@ -268,10 +328,12 @@ function CreateWizard() {
             <div className="space-y-1.5">
               <Label>Título do anúncio</Label>
               <Input placeholder="Ex: 🔥 Pizza grande por R$29,90" value={headline} onChange={(e) => setHeadline(e.target.value)} />
+              <p className="text-[11px] text-muted-foreground">{headline.length} caracteres — sem limite do app (o Facebook recomenda até ~255 para exibição completa)</p>
             </div>
             <div className="space-y-1.5">
               <Label>Texto principal</Label>
               <Textarea rows={4} placeholder="Descreva sua oferta de forma irresistível..." value={body} onChange={(e) => setBody(e.target.value)} />
+              <p className="text-[11px] text-muted-foreground">{body.length} caracteres — sem limite do app (o Facebook mostra os primeiros ~125 antes de "ver mais")</p>
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <Sparkles className="h-3 w-3 text-primary" /> Dica do robô: comece com um benefício claro nos primeiros 60 caracteres.
               </p>
@@ -307,7 +369,6 @@ function CreateWizard() {
               </div>
             </div>
 
-            {/* Localização SEMPRE obrigatória, mesmo com IA ativa */}
             <div className="glass rounded-2xl p-5 space-y-4 border border-white/5">
               <div className="flex items-center gap-2">
                 <MapPin className="h-4 w-4 text-primary" />
@@ -416,6 +477,32 @@ function CreateWizard() {
                   <p className="font-semibold">R$ {(budget * days).toLocaleString("pt-BR")}</p>
                 </div>
               </div>
+            </div>
+
+            {/* Item novo: horário exato de início/fim */}
+            <div className="glass rounded-2xl p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium flex items-center gap-1.5">
+                  <Clock className="h-4 w-4 text-primary" /> Agendar horário exato (opcional)
+                </p>
+                <Switch checked={scheduleEnabled} onCheckedChange={setScheduleEnabled} />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Sem isso, o anúncio começa assim que for aprovado e pago. Se você quer que comece
+                (ou termine) num dia e horário específico, ative e preencha abaixo.
+              </p>
+              {scheduleEnabled && (
+                <div className="grid sm:grid-cols-2 gap-3 pt-1 animate-in fade-in slide-in-from-top-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Início</Label>
+                    <Input type="datetime-local" value={startAt} onChange={(e) => setStartAt(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Término</Label>
+                    <Input type="datetime-local" value={endAt} onChange={(e) => setEndAt(e.target.value)} />
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="glass rounded-xl p-3 flex items-start gap-2 text-xs text-muted-foreground">
