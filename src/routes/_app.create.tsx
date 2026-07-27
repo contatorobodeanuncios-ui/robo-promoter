@@ -730,7 +730,7 @@ function CreateWizard() {
             </div>
 
             <Button variant="neon" size="lg" className="w-full h-14 text-base animate-pulse-glow" onClick={launch} disabled={launching}>
-              {launching ? <><Loader2 className="animate-spin" /> Ativando robô...</> : <><Rocket /> {fundingType === "pix_dedicated" ? "Gerar PIX e Lançar" : "Ativar Robô e Lançar Anúncio"}</>}
+              {launching ? <><Loader2 className="animate-spin" /> {uploadProgress ?? "Ativando robô..."}</> : <><Rocket /> {fundingType === "pix_dedicated" ? "Gerar PIX e Lançar" : "Ativar Robô e Lançar Anúncio"}</>}
             </Button>
           </div>
         )}
