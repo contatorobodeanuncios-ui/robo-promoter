@@ -106,9 +106,26 @@ interface DbCampaign {
   created_at?: string;
   scheduled_start_at?: string | null;
   scheduled_end_at?: string | null;
+  media_type?: string | null;
+  media?: unknown;
 }
 
 const num = (v: string | number | null | undefined) => (v == null ? 0 : Number(v));
+
+export const parseMedia = (v: unknown): CampaignMediaItem[] => {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((x): x is Record<string, unknown> => !!x && typeof x === "object")
+    .map((x) => ({
+      path: String(x.path ?? ""),
+      kind: x.kind === "video" ? ("video" as const) : ("image" as const),
+      name: String(x.name ?? ""),
+      mime: String(x.mime ?? ""),
+      size: Number(x.size ?? 0),
+    }))
+    .filter((x) => x.path.length > 0);
+};
+
 
 const mapCampaign = (r: DbCampaign): CampaignRow => ({
   id: r.id,
