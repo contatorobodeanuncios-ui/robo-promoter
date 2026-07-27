@@ -289,6 +289,9 @@ export const createCampaign = createServerFn({ method: "POST" })
       pix_remaining_budget: isPix ? 0 : null,
       scheduled_start_at: data.scheduled_start_at ?? null,
       scheduled_end_at: data.scheduled_end_at ?? null,
+      media_type: data.media_type,
+      media: data.media as unknown as Json,
+
     };
     const { data: row, error } = await supabase
       .from("campaigns")
