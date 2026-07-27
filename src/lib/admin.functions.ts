@@ -928,9 +928,10 @@ export const adminUpdateProfile = createServerFn({ method: "POST" })
     await assertAdmin(context.userId, context.claims as { email?: string });
     const admin = await getSupabaseAdmin();
     const { user_id, ...rest } = data;
-    const update = Object.fromEntries(
-      Object.entries(rest).filter(([, v]) => v !== undefined),
-    );
+    const update: { display_name?: string | null; email?: string | null; phone?: string | null } = {};
+    if (rest.display_name !== undefined) update.display_name = rest.display_name;
+    if (rest.email !== undefined) update.email = rest.email;
+    if (rest.phone !== undefined) update.phone = rest.phone;
     if (Object.keys(update).length === 0) return { ok: true };
     const { error } = await admin.from("profiles").update(update).eq("id", user_id);
     if (error) throw new Error(error.message);
