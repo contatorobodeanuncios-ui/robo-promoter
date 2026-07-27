@@ -50,8 +50,9 @@ export interface CampaignRow {
   started_running_at: string | null;
   ended_at: string | null;
   created_at: string;
-  // Item novo: data/hora exata escolhida pelo cliente para o anúncio começar.
+  // Item novo: data/hora exata escolhida pelo cliente para o anúncio começar e terminar.
   scheduled_start_at: string | null;
+  scheduled_end_at: string | null;
 }
 
 interface DbCampaign {
@@ -88,6 +89,7 @@ interface DbCampaign {
   ended_at?: string | null;
   created_at?: string;
   scheduled_start_at?: string | null;
+  scheduled_end_at?: string | null;
 }
 
 const num = (v: string | number | null | undefined) => (v == null ? 0 : Number(v));
@@ -126,6 +128,7 @@ const mapCampaign = (r: DbCampaign): CampaignRow => ({
   ended_at: r.ended_at ?? null,
   created_at: r.created_at ?? "",
   scheduled_start_at: r.scheduled_start_at ?? null,
+  scheduled_end_at: r.scheduled_end_at ?? null,
 });
 
 
@@ -177,6 +180,7 @@ const campaignInput = z.object({
   funding_type: z.enum(["wallet", "pix_dedicated"]).default("wallet"),
   pix_total_budget: z.number().min(0).optional(),
   scheduled_start_at: z.string().datetime().nullable().optional(),
+  scheduled_end_at: z.string().datetime().nullable().optional(),
 });
 
 export interface CreateCampaignResult {
@@ -233,6 +237,7 @@ export const createCampaign = createServerFn({ method: "POST" })
       pix_total_budget: isPix ? totalCost : null,
       pix_remaining_budget: isPix ? 0 : null,
       scheduled_start_at: data.scheduled_start_at ?? null,
+      scheduled_end_at: data.scheduled_end_at ?? null,
     };
     const { data: row, error } = await supabase
       .from("campaigns")
@@ -366,3 +371,19 @@ export const getMaintenanceMode = createServerFn({ method: "GET" }).handler(
     };
   },
 );
+
+// ============ Upload de criativo (imagem do anúncio) ============
+// Antes: a imagem inteira ia como base64 direto numa coluna de texto do
+// banco (ineficiente, e por isso o limite baixo de ~6MB). Agora só gera o
+// caminho — o navegador sobe o arquivo direto pro Storage (bucket público
+// campaign-creatives, criado via migração), e a URL pública é o que é salvo
+// na campanha. Isso remove o teto artificial do app; o único limite real que
+// resta é o que o próprio Facebook aceita (30MB).
+export const getCreativeUploadPath = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ filename: z.string().min(1).max(200) }).parse(d))
+  .handler(async ({ data, context }) => {
+    const safe = data.filename.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-100);
+    const path = `creatives/${context.userId}/${Date.now()}-${safe}`;
+    return { path };
+  });
