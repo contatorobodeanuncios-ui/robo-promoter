@@ -442,3 +442,26 @@ export const getCreativeUploadPath = createServerFn({ method: "POST" })
     const path = `creatives/${context.userId}/${Date.now()}-${safe}`;
     return { path };
   });
+
+// Gera URLs assinadas para o próprio usuário ver seus criativos (o bucket
+// campaign-creatives é privado). Só libera caminhos dentro da pasta do usuário.
+export const getMyCreativeSignedUrls = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ paths: z.array(z.string().min(1).max(500)).max(30) }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const prefix = `creatives/${context.userId}/`;
+    const allowed = data.paths.filter((p) => p.startsWith(prefix));
+    if (allowed.length === 0) return { urls: {} as Record<string, string> };
+    const admin = await getAdmin();
+    const { data: signed, error } = await admin.storage
+      .from("campaign-creatives")
+      .createSignedUrls(allowed, 60 * 60);
+    if (error) throw new Error(error.message);
+    const urls: Record<string, string> = {};
+    for (const s of signed ?? []) {
+      if (s.path && s.signedUrl) urls[s.path] = s.signedUrl;
+    }
+    return { urls };
+  });
