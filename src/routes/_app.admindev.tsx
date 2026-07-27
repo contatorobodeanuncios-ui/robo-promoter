@@ -941,15 +941,82 @@ function MetaCampaignIdCell({ id, value }: { id: string; value: string | null })
   );
 }
 
+// Galeria do criativo: mostra vídeo ou as imagens do carrossel em sequência,
+// na mesma ordem em que o cliente enviou, com download em 1 clique (arquivo
+// original, resolução intacta).
+function CreativeMedia({ campaignId, fallbackImage }: { campaignId: string; fallbackImage: string }) {
+  const fn = useServerFn(adminGetCampaignMediaUrls);
+  const q = useQuery({
+    queryKey: ["admin-campaign-media", campaignId],
+    queryFn: () => fn({ data: { campaign_id: campaignId } }),
+    staleTime: 5 * 60_000,
+  });
+
+  if (q.isLoading) {
+    return <div className="w-full aspect-square bg-black/40 grid place-items-center text-xs text-white/50">Carregando criativo...</div>;
+  }
+  const items = q.data?.items ?? [];
+  if (items.length === 0) {
+    return fallbackImage ? (
+      <img src={fallbackImage} alt="" className="w-full aspect-square object-cover bg-black" />
+    ) : (
+      <div className="w-full aspect-square bg-black/40 grid place-items-center text-xs text-white/50">Sem criativo enviado</div>
+    );
+  }
+
+  return (
+    <div className="space-y-2 bg-black/40 p-2">
+      {items.map((m, i) => (
+        <div key={m.path} className="relative rounded-lg overflow-hidden border border-white/10 bg-black">
+          <div className="flex items-center justify-between px-2 py-1 text-[11px] text-white/70 bg-white/5">
+            <span className="truncate">
+              {items.length > 1 ? `${i + 1}/${items.length} · ` : ""}{m.name || m.path.split("/").pop()}
+              {m.size ? ` · ${(m.size / 1024 / 1024).toFixed(1)}MB` : ""}
+            </span>
+            <a
+              href={m.downloadUrl}
+              download={m.name || undefined}
+              className="flex items-center gap-1 text-primary hover:underline shrink-0"
+            >
+              <Download className="h-3 w-3" /> Baixar
+            </a>
+          </div>
+          {m.kind === "video" ? (
+            <video src={m.url} controls preload="metadata" className="w-full max-h-[420px] bg-black" />
+          ) : (
+            <img src={m.url} alt={m.name} className="w-full object-contain max-h-[420px] bg-black" />
+          )}
+        </div>
+      ))}
+      {items.length > 1 && (
+        <a
+          href={items[0].downloadUrl}
+          className="hidden"
+          aria-hidden
+        >
+          .
+        </a>
+      )}
+    </div>
+  );
+}
+
 function FbPreview({ campaign, onClose }: { campaign: AdminCampaignRow; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 overflow-y-auto" onClick={onClose}>
       <div
-        className="bg-[#18191a] rounded-xl max-w-md w-full overflow-hidden border border-white/10 shadow-2xl"
+        className="bg-[#18191a] rounded-xl max-w-md w-full overflow-hidden border border-white/10 shadow-2xl my-8"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
-          <span className="text-xs text-white/60">Prévia · Facebook Feed</span>
+          <span className="text-xs text-white/60">
+            Prévia · Facebook Feed
+            {campaign.media_type === "video"
+              ? " · Vídeo"
+              : campaign.media_type === "carousel"
+                ? ` · Carrossel (${campaign.media.length})`
+                : ""}
+          </span>
           <button onClick={onClose} className="text-white/60 hover:text-white">
             <X className="h-4 w-4" />
           </button>
@@ -963,9 +1030,7 @@ function FbPreview({ campaign, onClose }: { campaign: AdminCampaignRow; onClose:
             </div>
           </div>
           <p className="px-3 pb-3 text-sm">{campaign.copy || campaign.headline}</p>
-          {campaign.image && (
-            <img src={campaign.image} alt="" className="w-full aspect-square object-cover bg-black" />
-          )}
+          <CreativeMedia campaignId={campaign.id} fallbackImage={campaign.image} />
           <div className="px-3 py-2 bg-[#3a3b3c] flex items-center justify-between">
             <div className="text-xs">
               <p className="uppercase text-white/50 text-[10px]">
@@ -982,6 +1047,7 @@ function FbPreview({ campaign, onClose }: { campaign: AdminCampaignRow; onClose:
     </div>
   );
 }
+
 
 function MetaHealthCard() {
   const fn = useServerFn(getMetaMetricsHealth);
