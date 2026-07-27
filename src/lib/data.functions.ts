@@ -66,7 +66,10 @@ export interface CampaignRow {
   // Item novo: data/hora exata escolhida pelo cliente para o anúncio começar e terminar.
   scheduled_start_at: string | null;
   scheduled_end_at: string | null;
+  media_type: CampaignMediaType;
+  media: CampaignMediaItem[];
 }
+
 
 interface DbCampaign {
   id: string;
