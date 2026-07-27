@@ -989,15 +989,6 @@ function CreativeMedia({ campaignId, fallbackImage }: { campaignId: string; fall
           )}
         </div>
       ))}
-      {items.length > 1 && (
-        <a
-          href={items[0].downloadUrl}
-          className="hidden"
-          aria-hidden
-        >
-          .
-        </a>
-      )}
     </div>
   );
 }
