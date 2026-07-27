@@ -217,7 +217,22 @@ const campaignInput = z.object({
   pix_total_budget: z.number().min(0).optional(),
   scheduled_start_at: z.string().datetime().nullable().optional(),
   scheduled_end_at: z.string().datetime().nullable().optional(),
+  // Criativo: imagem única, vídeo ou carrossel (várias imagens, em ordem).
+  media_type: z.enum(["image", "video", "carousel"]).default("image"),
+  media: z
+    .array(
+      z.object({
+        path: z.string().min(1).max(500),
+        kind: z.enum(["image", "video"]),
+        name: z.string().max(200).default(""),
+        mime: z.string().max(120).default(""),
+        size: z.number().min(0).default(0),
+      }),
+    )
+    .max(30)
+    .default([]),
 });
+
 
 export interface CreateCampaignResult {
   campaign: CampaignRow;
