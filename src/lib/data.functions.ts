@@ -162,7 +162,10 @@ const mapCampaign = (r: DbCampaign): CampaignRow => ({
   created_at: r.created_at ?? "",
   scheduled_start_at: r.scheduled_start_at ?? null,
   scheduled_end_at: r.scheduled_end_at ?? null,
+  media_type: (r.media_type ?? "image") as CampaignMediaType,
+  media: parseMedia(r.media),
 });
+
 
 
 export const getAppData = createServerFn({ method: "GET" })
