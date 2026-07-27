@@ -149,7 +149,10 @@ export const adminListCampaigns = createServerFn({ method: "GET" })
         metrics_last_synced_at: c.metrics_last_synced_at ?? null,
         scheduled_start_at: c.scheduled_start_at ?? null,
         scheduled_end_at: c.scheduled_end_at ?? null,
+        media_type: ((c as { media_type?: string }).media_type ?? "image") as CampaignMediaType,
+        media: parseMedia((c as { media?: unknown }).media),
       };
+
     });
   });
 
