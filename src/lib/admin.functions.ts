@@ -90,8 +90,10 @@ export interface AdminCampaignRow {
   metrics_last_synced_at: string | null;
   scheduled_start_at: string | null;
   scheduled_end_at: string | null;
-
+  media_type: CampaignMediaType;
+  media: CampaignMediaItem[];
 }
+
 
 export const adminListCampaigns = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
