@@ -168,17 +168,33 @@ function CreateWizard() {
 
 
   const launch = async () => {
-    if (!image || !imageFile) return;
+    if (files.length === 0) return;
     setLaunching(true);
     try {
-      // Sobe o arquivo de verdade pro Storage (não vai mais base64 pro banco).
-      const { path } = await uploadPathFn({ data: { filename: imageFile.name } });
-      const { error: upErr } = await supabase.storage
-        .from("campaign-creatives")
-        .upload(path, imageFile, { contentType: imageFile.type || "image/jpeg" });
-      if (upErr) throw new Error(`Falha ao enviar imagem: ${upErr.message}`);
-      const { data: pub } = supabase.storage.from("campaign-creatives").getPublicUrl(path);
-      const persistedImage = pub.publicUrl;
+      // Sobe todos os arquivos do criativo (imagem, vídeo ou carrossel) para o
+      // Storage, na ordem em que o cliente enviou.
+      const media: { path: string; kind: "image" | "video"; name: string; mime: string; size: number }[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        setUploadProgress(`Enviando ${i + 1} de ${files.length}...`);
+        const { path } = await uploadPathFn({ data: { filename: f.name } });
+        const { error: upErr } = await supabase.storage
+          .from("campaign-creatives")
+          .upload(path, f, { contentType: f.type || "application/octet-stream" });
+        if (upErr) throw new Error(`Falha ao enviar ${f.name}: ${upErr.message}`);
+        media.push({
+          path,
+          kind: f.type.startsWith("video/") ? "video" : "image",
+          name: f.name,
+          mime: f.type,
+          size: f.size,
+        });
+      }
+      setUploadProgress(null);
+      const firstImage = media.find((m) => m.kind === "image");
+      const persistedImage = firstImage
+        ? supabase.storage.from("campaign-creatives").getPublicUrl(firstImage.path).data.publicUrl
+        : "";
 
       const scheduledStartIso = scheduleEnabled && startAt ? new Date(startAt).toISOString() : null;
       const scheduledEndIso = scheduleEnabled && endAt ? new Date(endAt).toISOString() : null;
@@ -191,6 +207,9 @@ function CreateWizard() {
       const result = await addCampaign({
         name: headline || "Nova campanha",
         image: persistedImage,
+        media_type: mediaMode,
+        media,
+
         status: "analyzing",
         spent: 0,
         clicks: 0,
