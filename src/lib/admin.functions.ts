@@ -1151,3 +1151,45 @@ export const adminListAIReviews = createServerFn({ method: "GET" })
       created_at: r.created_at,
     }));
   });
+
+// ============ Criativos: URLs assinadas para o admin ver e baixar ============
+// O bucket campaign-creatives é privado, então o admin precisa de URLs
+// assinadas. `download` faz o navegador baixar o arquivo original (sem
+// recompressão, resolução intacta) em um clique.
+export const adminGetCampaignMediaUrls = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ campaign_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const { data: camp, error } = await admin
+      .from("campaigns")
+      .select("media, media_type, image")
+      .eq("id", data.campaign_id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    const items = parseMedia((camp as { media?: unknown } | null)?.media);
+    const mediaType = ((camp as { media_type?: string } | null)?.media_type ?? "image") as CampaignMediaType;
+
+    const out: Array<CampaignMediaItem & { url: string; downloadUrl: string }> = [];
+    for (const it of items) {
+      const [view, dl] = await Promise.all([
+        admin.storage.from("campaign-creatives").createSignedUrl(it.path, 60 * 60),
+        admin.storage
+          .from("campaign-creatives")
+          .createSignedUrl(it.path, 60 * 60, { download: it.name || true }),
+      ]);
+      if (view.data?.signedUrl) {
+        out.push({
+          ...it,
+          url: view.data.signedUrl,
+          downloadUrl: dl.data?.signedUrl ?? view.data.signedUrl,
+        });
+      }
+    }
+    return {
+      media_type: mediaType,
+      items: out,
+      legacy_image: out.length === 0 ? ((camp as { image?: string } | null)?.image ?? "") : "",
+    };
+  });
