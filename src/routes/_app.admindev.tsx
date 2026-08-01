@@ -1021,24 +1021,100 @@ function FbPreview({ campaign, onClose }: { campaign: AdminCampaignRow; onClose:
               <p className="text-white/50">Patrocinado · 🌐</p>
             </div>
           </div>
-          <p className="px-3 pb-3 text-sm">{campaign.copy || campaign.headline}</p>
+          <p className="px-3 pb-3 text-sm whitespace-pre-wrap break-words">{campaign.copy || campaign.headline}</p>
           <CreativeMedia campaignId={campaign.id} fallbackImage={campaign.image} />
-          <div className="px-3 py-2 bg-[#3a3b3c] flex items-center justify-between">
-            <div className="text-xs">
+          <div className="px-3 py-2 bg-[#3a3b3c] flex items-center justify-between gap-2">
+            <div className="text-xs min-w-0">
               <p className="uppercase text-white/50 text-[10px]">
                 {safeHostname(campaign.link)}
               </p>
-              <p className="font-semibold text-sm">{campaign.headline || campaign.name}</p>
+              <p className="font-semibold text-sm break-words">{campaign.headline || campaign.name}</p>
             </div>
-            <button className="bg-[#4e4f50] hover:bg-[#5a5b5c] text-white text-xs font-semibold px-3 py-1.5 rounded">
+            <button className="bg-[#4e4f50] hover:bg-[#5a5b5c] text-white text-xs font-semibold px-3 py-1.5 rounded shrink-0">
               Saiba mais
             </button>
           </div>
+        </div>
+
+        {/* Dados exatos preenchidos pelo cliente */}
+        <div className="p-4 space-y-3 text-xs bg-[#18191a] border-t border-white/10">
+          <Field label="Nome da campanha" value={campaign.name} />
+          <Field label="Título (headline)" value={campaign.headline || "—"} />
+          <Field label="Texto do anúncio" value={campaign.copy || "—"} pre />
+          <div>
+            <p className="text-white/40 uppercase text-[10px] tracking-wider">Link de destino (exato)</p>
+            <div className="flex items-start gap-2">
+              {campaign.link ? (
+                <a
+                  href={/^https?:\/\//i.test(campaign.link) ? campaign.link : `https://${campaign.link}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-primary underline break-all"
+                >
+                  {campaign.link}
+                </a>
+              ) : (
+                <span className="text-white/50 italic">não informado</span>
+              )}
+              {campaign.link && (
+                <button
+                  type="button"
+                  className="p-1 rounded hover:bg-white/10 shrink-0"
+                  onClick={() => {
+                    navigator.clipboard.writeText(campaign.link).then(() => toast.success("Link copiado"));
+                  }}
+                >
+                  <Copy className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          </div>
+          <Field
+            label="Local de veiculação"
+            value={
+              [campaign.neighborhood, campaign.city].filter(Boolean).join(" · ") +
+              (campaign.radius ? ` — raio de ${campaign.radius} km` : "")
+              || "não informado"
+            }
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Investimento por dia" value={fmtBRL(campaign.budget)} />
+            <Field label="Dias de veiculação" value={`${campaign.days} dia(s)`} />
+            <Field label="Total a ser veiculado" value={fmtBRL(campaign.budget * campaign.days)} />
+            <Field label="Total já pago" value={fmtBRL(campaign.total_paid)} />
+          </div>
+          {campaign.funding_type === "pix_dedicated" && (
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="PIX total" value={fmtBRL(campaign.pix_total_budget)} />
+              <Field label="PIX restante" value={fmtBRL(campaign.pix_remaining_budget)} />
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <Field
+              label="Início programado"
+              value={campaign.scheduled_start_at ? new Date(campaign.scheduled_start_at).toLocaleString("pt-BR") : "—"}
+            />
+            <Field
+              label="Fim programado"
+              value={campaign.scheduled_end_at ? new Date(campaign.scheduled_end_at).toLocaleString("pt-BR") : "—"}
+            />
+          </div>
+          <Field label="Cliente" value={`${campaign.client_name ?? "—"} · ${campaign.client_email ?? "—"}`} />
         </div>
       </div>
     </div>
   );
 }
+
+function Field({ label, value, pre }: { label: string; value: string; pre?: boolean }) {
+  return (
+    <div>
+      <p className="text-white/40 uppercase text-[10px] tracking-wider">{label}</p>
+      <p className={`text-white/90 break-words ${pre ? "whitespace-pre-wrap" : ""}`}>{value}</p>
+    </div>
+  );
+}
+
 
 
 function MetaHealthCard() {
