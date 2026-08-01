@@ -13,6 +13,7 @@ import { Route as TermosRouteImport } from './routes/termos'
 import { Route as PrivacidadeRouteImport } from './routes/privacidade'
 import { Route as PowerOnRouteImport } from './routes/power-on'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as EntrarRouteImport } from './routes/entrar'
 import { Route as AguardandoRouteImport } from './routes/aguardando'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
@@ -51,6 +52,11 @@ const PowerOnRoute = PowerOnRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EntrarRoute = EntrarRouteImport.update({
+  id: '/entrar',
+  path: '/entrar',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AguardandoRoute = AguardandoRouteImport.update({
@@ -154,6 +160,7 @@ const ApiPublicESlugRoute = ApiPublicESlugRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/aguardando': typeof AguardandoRoute
+  '/entrar': typeof EntrarRoute
   '/login': typeof LoginRoute
   '/power-on': typeof PowerOnRoute
   '/privacidade': typeof PrivacidadeRoute
@@ -178,6 +185,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/aguardando': typeof AguardandoRoute
+  '/entrar': typeof EntrarRoute
   '/login': typeof LoginRoute
   '/power-on': typeof PowerOnRoute
   '/privacidade': typeof PrivacidadeRoute
@@ -204,6 +212,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
   '/aguardando': typeof AguardandoRoute
+  '/entrar': typeof EntrarRoute
   '/login': typeof LoginRoute
   '/power-on': typeof PowerOnRoute
   '/privacidade': typeof PrivacidadeRoute
@@ -230,6 +239,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/aguardando'
+    | '/entrar'
     | '/login'
     | '/power-on'
     | '/privacidade'
@@ -254,6 +264,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/aguardando'
+    | '/entrar'
     | '/login'
     | '/power-on'
     | '/privacidade'
@@ -279,6 +290,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_app'
     | '/aguardando'
+    | '/entrar'
     | '/login'
     | '/power-on'
     | '/privacidade'
@@ -305,6 +317,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   AguardandoRoute: typeof AguardandoRoute
+  EntrarRoute: typeof EntrarRoute
   LoginRoute: typeof LoginRoute
   PowerOnRoute: typeof PowerOnRoute
   PrivacidadeRoute: typeof PrivacidadeRoute
@@ -345,6 +358,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/entrar': {
+      id: '/entrar'
+      path: '/entrar'
+      fullPath: '/entrar'
+      preLoaderRoute: typeof EntrarRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/aguardando': {
@@ -515,6 +535,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   AguardandoRoute: AguardandoRoute,
+  EntrarRoute: EntrarRoute,
   LoginRoute: LoginRoute,
   PowerOnRoute: PowerOnRoute,
   PrivacidadeRoute: PrivacidadeRoute,

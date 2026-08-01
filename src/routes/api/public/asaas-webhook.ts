@@ -15,7 +15,22 @@ import { createFileRoute } from "@tanstack/react-router";
 export const Route = createFileRoute("/api/public/asaas-webhook")({
   server: {
     handlers: {
+      // Teste de conexão: o Asaas (e o admin) validam a URL com GET/HEAD antes
+      // de ativar o webhook. Sem isso a resposta era 405 e aparecia como
+      // "erro de conexão". Não expõe nada sensível: só diz que está online.
+      GET: async () =>
+        json(
+          {
+            ok: true,
+            endpoint: "asaas-webhook",
+            method: "POST",
+            token_configured: !!process.env.ASAAS_WEBHOOK_TOKEN,
+          },
+          200,
+        ),
+      HEAD: async () => new Response(null, { status: 200 }),
       POST: async ({ request }) => {
+
         const { rateLimit, ipFromRequest } = await import("@/lib/rate-limit");
         const ip = ipFromRequest(request);
         const rl = rateLimit(`asaas-webhook:${ip}`, 60, 5 * 60 * 1000);
