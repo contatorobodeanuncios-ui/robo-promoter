@@ -739,9 +739,13 @@ function AdminDevPage() {
             ) : !campaignsQuery.data?.length ? (
               <div className="p-10 text-center text-sm text-muted-foreground">Nenhuma campanha ainda.</div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-white/5">
+              // Rolagem lateral sempre acessível no computador: o container tem
+              // altura limitada, então a barra horizontal fica visível sem
+              // precisar descer até o fim da lista. Cabeçalho fica fixo.
+              <div className="overflow-auto max-h-[70vh] [scrollbar-width:auto]">
+                <table className="w-full text-sm min-w-[1500px]">
+                  <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-white/5 sticky top-0 z-10 bg-[#12141a]">
+
                     <tr>
                       <th className="px-4 py-3">Cliente</th>
                       <th className="px-4 py-3">Campanha</th>
