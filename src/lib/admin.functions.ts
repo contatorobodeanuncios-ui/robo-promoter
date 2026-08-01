@@ -1051,10 +1051,19 @@ export const adminGenerateAccessLink = createServerFn({ method: "POST" })
       email,
       options: { redirectTo: `${siteUrl}/dashboard` },
     });
-    if (linkErr || !linkRes?.properties?.action_link) {
+    if (linkErr || !linkRes?.properties) {
       throw new Error(linkErr?.message ?? "Falha ao gerar link de acesso");
     }
-    const target = linkRes.properties.action_link;
+    // Importante: NÃO usamos o action_link do Supabase — ele usa o fluxo PKCE,
+    // que exige o "code verifier" gravado no navegador de quem gerou o link.
+    // Como quem abre é o cliente (outro navegador), o login falharia.
+    // Usamos o hashed_token com verifyOtp na nossa própria página /entrar,
+    // que loga direto sem senha e sem verificador.
+    const hashedToken = linkRes.properties.hashed_token;
+    const target = hashedToken
+      ? `${siteUrl}/entrar?th=${encodeURIComponent(hashedToken)}`
+      : linkRes.properties.action_link;
+
 
     const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
     const slug = Array.from({ length: 8 }, () =>
