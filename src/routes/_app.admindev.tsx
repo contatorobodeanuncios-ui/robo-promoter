@@ -629,9 +629,26 @@ function AdminDevPage() {
                   ? "⚡ O Asaas notifica o endpoint /api/public/asaas-webhook e o saldo é creditado automaticamente."
                   : "✋ Você aprova cada pagamento manualmente na lista abaixo antes do saldo ser creditado."}
               </p>
-              <div className="text-[11px] text-muted-foreground glass rounded p-2 font-mono break-all">
-                URL do webhook: <span className="text-primary">/api/public/asaas-webhook</span>
+              <div className="text-[11px] text-muted-foreground glass rounded p-2 font-mono break-all flex items-center gap-2">
+                <span>
+                  URL do webhook:{" "}
+                  <span className="text-primary">
+                    {typeof window !== "undefined" ? window.location.origin : ""}/api/public/asaas-webhook
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  className="p-1 rounded hover:bg-white/10 shrink-0"
+                  onClick={() => {
+                    navigator.clipboard
+                      .writeText(`${window.location.origin}/api/public/asaas-webhook`)
+                      .then(() => toast.success("URL do webhook copiada"));
+                  }}
+                >
+                  <Copy className="h-3 w-3" />
+                </button>
               </div>
+
             </div>
           </section>
 
