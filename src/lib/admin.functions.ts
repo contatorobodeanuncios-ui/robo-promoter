@@ -77,6 +77,12 @@ export interface AdminCampaignRow {
   cost_per_result: number;
   invoice_url: string | null;
   funding_type: "wallet" | "pix_dedicated";
+  city: string;
+  neighborhood: string;
+  radius: number;
+  total_paid: number;
+  pix_total_budget: number;
+  pix_remaining_budget: number;
   image: string;
   headline: string;
   copy: string;
