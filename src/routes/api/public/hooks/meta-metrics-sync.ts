@@ -70,13 +70,15 @@ export const Route = createFileRoute("/api/public/hooks/meta-metrics-sync")({
               // 1) Insights (métricas) — date_preset=maximum garante o total da vida inteira
               // da campanha, não uma janela recente. Sem isso, o Meta usa o padrão dele
               // (geralmente últimos ~28-30 dias), o que subestimaria campanhas mais antigas.
-              const insUrl = `https://graph.facebook.com/v20.0/${c.meta_campaign_id}/insights?fields=spend,clicks,impressions,ctr,cpc&date_preset=maximum&access_token=${encodeURIComponent(token)}`;
+              const insUrl = `https://graph.facebook.com/v20.0/${c.meta_campaign_id}/insights?fields=spend,clicks,impressions,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type&date_preset=maximum&access_token=${encodeURIComponent(token)}`;
               const insRes = await fetch(insUrl);
               if (!insRes.ok) {
                 const errTxt = await insRes.text();
                 throw new Error(`Meta Insights ${insRes.status}: ${errTxt.slice(0, 200)}`);
               }
-              const insJson = (await insRes.json()) as { data?: Array<Record<string, string>> };
+              const insJson = (await insRes.json()) as {
+                data?: Array<Record<string, unknown>>;
+              };
               const row = insJson.data?.[0];
 
               // 2) Effective status
@@ -103,6 +105,33 @@ export const Route = createFileRoute("/api/public/hooks/meta-metrics-sync")({
                 update.impressions = impressions;
                 update.ctr = Number(row.ctr ?? 0);
                 update.cpc = Number(row.cpc ?? 0);
+                update.cpm = Number(row.cpm ?? 0);
+                update.reach = Number(row.reach ?? 0);
+                update.frequency = Number(row.frequency ?? 0);
+                // Resultados: prioriza conversões/leads; cai para link clicks.
+                const actions = (row.actions as Array<{ action_type: string; value: string }> | undefined) ?? [];
+                const pickAction = (types: string[]) =>
+                  actions.find((a) => types.includes(a.action_type));
+                const resultAction = pickAction([
+                  "offsite_conversion.fb_pixel_purchase",
+                  "purchase",
+                  "lead",
+                  "offsite_conversion.fb_pixel_lead",
+                  "onsite_conversion.messaging_conversation_started_7d",
+                  "link_click",
+                ]);
+                if (resultAction) {
+                  const results = Number(resultAction.value ?? 0);
+                  update.results = results;
+                  const costs =
+                    (row.cost_per_action_type as Array<{ action_type: string; value: string }> | undefined) ?? [];
+                  const costRow = costs.find((a) => a.action_type === resultAction.action_type);
+                  update.cost_per_result = costRow
+                    ? Number(costRow.value ?? 0)
+                    : results > 0
+                      ? spend / results
+                      : 0;
+                }
               }
               // Primeira detecção de entrega → grava started_at
               if (hasDelivery && !c.started_at) {
