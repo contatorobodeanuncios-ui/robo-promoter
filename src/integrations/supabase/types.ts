@@ -296,6 +296,7 @@ export type Database = {
       }
       campaigns: {
         Row: {
+          admin_status_lock: boolean
           budget: number
           city: string
           clicks: number
@@ -343,6 +344,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          admin_status_lock?: boolean
           budget?: number
           city?: string
           clicks?: number
@@ -390,6 +392,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          admin_status_lock?: boolean
           budget?: number
           city?: string
           clicks?: number

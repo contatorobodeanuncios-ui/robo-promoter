@@ -1,0 +1,1 @@
+ALTER TABLE public.campaigns ADD COLUMN IF NOT EXISTS admin_status_lock boolean NOT NULL DEFAULT false;

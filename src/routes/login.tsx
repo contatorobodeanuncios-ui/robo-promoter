@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Bot, Sparkles, Zap, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { submitAccessRequest } from "@/lib/admin.functions";
 import { lovable } from "@/integrations/lovable";
 import { toast } from "sonner";
 
@@ -42,16 +43,25 @@ async function routeAfterLogin(
     nav({ to: "/dashboard", replace: true });
     return;
   }
-  // Registra/atualiza o pedido de acesso e desloga; deixa apenas na tela de espera.
-  await supabase.from("access_requests").upsert(
-    {
-      user_id: userId,
-      email,
-      display_name: displayName,
-      status: status === "banned" ? "rejected" : "pending",
-    },
-    { onConflict: "user_id" },
-  );
+  // Registra/atualiza o pedido de acesso. Se o admin deixou as "entradas abertas",
+  // o servidor aprova na hora e o usuário entra direto no painel.
+  try {
+    const res = await submitAccessRequest({ data: { display_name: displayName } });
+    if (res?.approved) {
+      nav({ to: "/dashboard", replace: true });
+      return;
+    }
+  } catch {
+    await supabase.from("access_requests").upsert(
+      {
+        user_id: userId,
+        email,
+        display_name: displayName,
+        status: status === "banned" ? "rejected" : "pending",
+      },
+      { onConflict: "user_id" },
+    );
+  }
   nav({ to: "/aguardando", replace: true });
 }
 

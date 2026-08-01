@@ -27,6 +27,8 @@ import {
   getMetaMetricsHealth,
   adminExportCampaignsCSV,
   adminListAccessRequests,
+  getAutoApproveAccess,
+  setAutoApproveAccess,
   adminApproveAccessRequest,
   adminDenyAccessRequest,
   adminListAllClients,
@@ -1262,6 +1264,32 @@ function AccessLinkButton({ userId, label }: { userId: string; label?: string })
   );
 }
 
+function AutoApproveToggle() {
+  const qc = useQueryClient();
+  const getFn = useServerFn(getAutoApproveAccess);
+  const setFn = useServerFn(setAutoApproveAccess);
+  const q = useQuery({ queryKey: ["auto-approve-access"], queryFn: () => getFn(), refetchInterval: 60_000 });
+  const enabled = q.data?.enabled ?? false;
+  const mut = useMutation({
+    mutationFn: (v: boolean) => setFn({ data: { enabled: v } }),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["auto-approve-access"] });
+      toast.success(r.enabled ? "Entradas abertas: novos cadastros entram na hora" : "Entradas fechadas: aprovação manual");
+    },
+    onError: (e) => toast.error("Falha ao alterar", { description: String(e) }),
+  });
+  return (
+    <Button
+      variant={enabled ? "neon" : "glass"}
+      size="sm"
+      disabled={q.isLoading || mut.isPending}
+      onClick={() => mut.mutate(!enabled)}
+    >
+      {enabled ? "Entradas abertas (ON)" : "Entradas abertas (OFF)"}
+    </Button>
+  );
+}
+
 function AccessRequestsSection() {
   const qc = useQueryClient();
   const listFn = useServerFn(adminListAccessRequests);
@@ -1295,7 +1323,10 @@ function AccessRequestsSection() {
           <UserPlus className="h-5 w-5 text-primary" />
           <h2 className="font-semibold">Solicitações de Acesso</h2>
         </div>
-        <span className="text-xs text-muted-foreground">{pending.length} aguardando</span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground">{pending.length} aguardando</span>
+          <AutoApproveToggle />
+        </div>
       </div>
       {q.isLoading ? (
         <div className="p-8 text-center text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin mx-auto" /></div>

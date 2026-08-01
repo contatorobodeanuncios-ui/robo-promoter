@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Hourglass, LogOut, RefreshCw, Rocket, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/app/Logo";
+import { submitAccessRequest } from "@/lib/admin.functions";
 
 export const Route = createFileRoute("/aguardando")({
   ssr: false,
@@ -30,6 +31,14 @@ function WaitingApprovalPage() {
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) { nav({ to: "/login", replace: true }); return; }
       setEmail(u.user.email ?? "");
+      // Se o admin ligar as "entradas abertas", esta chamada aprova na hora.
+      try {
+        const res = await submitAccessRequest({ data: {} });
+        if (res?.approved) {
+          setStatus("approved");
+          return;
+        }
+      } catch { /* segue com a checagem normal */ }
       const { data: p } = await supabase
         .from("profiles")
         .select("status")

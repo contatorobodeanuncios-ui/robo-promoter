@@ -179,14 +179,17 @@ export const adminSetCampaignStatus = createServerFn({ method: "POST" })
         "running","analyzing","paused",
         "aguardando_vinculo_meta","rodando","encerrada_saldo_consumido","em_revisao",
       ]),
+      lock: z.boolean().optional(),
     }).parse(d),
   )
   .handler(async ({ data, context }) => {
     await assertAdmin(context.userId, context.claims as { email?: string });
     const supabaseAdmin = await getSupabaseAdmin();
+    // Quando o admin define o status manualmente, travamos a campanha para que a
+    // sincronizacao automatica do Meta nao volte o status sozinha (ex.: para "em_revisao").
     const { error } = await supabaseAdmin
       .from("campaigns")
-      .update({ status: data.status })
+      .update({ status: data.status, admin_status_lock: data.lock ?? true } as never)
       .eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
@@ -1213,4 +1216,99 @@ export const adminGetCampaignMediaUrls = createServerFn({ method: "POST" })
       items: out,
       legacy_image: out.length === 0 ? ((camp as { image?: string } | null)?.image ?? "") : "",
     };
+  });
+
+
+// ============ Entradas abertas (aprovacao automatica de acesso) ============
+export const getAutoApproveAccess = createServerFn({ method: "GET" }).handler(async () => {
+  const admin = await getSupabaseAdmin();
+  const { data } = await admin
+    .from("app_settings")
+    .select("value")
+    .eq("key", "auto_approve_access")
+    .maybeSingle();
+  return { enabled: Boolean((data?.value as { enabled?: boolean } | null)?.enabled) };
+});
+
+export const setAutoApproveAccess = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ enabled: z.boolean() }).parse(d))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const { error } = await admin.from("app_settings").upsert({
+      key: "auto_approve_access",
+      value: { enabled: data.enabled },
+      updated_at: new Date().toISOString(),
+    });
+    if (error) throw new Error(error.message);
+    await admin.from("admin_audit_log").insert({
+      admin_email: (context.claims as { email?: string })?.email ?? "",
+      action: data.enabled ? "auto_approve_on" : "auto_approve_off",
+      target_type: "app_settings",
+      target_id: "auto_approve_access",
+    });
+    return { enabled: data.enabled };
+  });
+
+/**
+ * Registra o pedido de acesso do proprio usuario logado. Se as "entradas abertas"
+ * estiverem ligadas pelo admin, aprova na hora e libera o painel.
+ */
+export const submitAccessRequest = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ display_name: z.string().max(200).nullable().optional() }).parse(d ?? {}),
+  )
+  .handler(async ({ data, context }) => {
+    const admin = await getSupabaseAdmin();
+    const userId = context.userId;
+    const email = (context.claims as { email?: string } | undefined)?.email ?? null;
+
+    const { data: prof } = await admin
+      .from("profiles")
+      .select("status")
+      .eq("id", userId)
+      .maybeSingle();
+    const current = (prof?.status ?? "pending") as string;
+    if (current === "banned") {
+      await admin.from("access_requests").upsert(
+        { user_id: userId, email, display_name: data.display_name ?? null, status: "rejected" },
+        { onConflict: "user_id" },
+      );
+      return { approved: false };
+    }
+    if (current === "approved") return { approved: true };
+
+    const { data: setting } = await admin
+      .from("app_settings")
+      .select("value")
+      .eq("key", "auto_approve_access")
+      .maybeSingle();
+    const auto = Boolean((setting?.value as { enabled?: boolean } | null)?.enabled);
+
+    await admin.from("access_requests").upsert(
+      {
+        user_id: userId,
+        email,
+        display_name: data.display_name ?? null,
+        status: auto ? "approved" : "pending",
+        reviewed_at: auto ? new Date().toISOString() : null,
+      },
+      { onConflict: "user_id" },
+    );
+
+    if (!auto) return { approved: false };
+
+    const { error: pErr } = await admin.from("profiles").upsert(
+      {
+        id: userId,
+        status: "approved",
+        email,
+        display_name: data.display_name ?? (email ? email.split("@")[0] : null),
+      },
+      { onConflict: "id" },
+    );
+    if (pErr) throw new Error(pErr.message);
+    return { approved: true };
   });
