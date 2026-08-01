@@ -77,6 +77,12 @@ export interface AdminCampaignRow {
   cost_per_result: number;
   invoice_url: string | null;
   funding_type: "wallet" | "pix_dedicated";
+  city: string;
+  neighborhood: string;
+  radius: number;
+  total_paid: number;
+  pix_total_budget: number;
+  pix_remaining_budget: number;
   image: string;
   headline: string;
   copy: string;
@@ -136,6 +142,12 @@ export const adminListCampaigns = createServerFn({ method: "GET" })
         cost_per_result: Number(c.cost_per_result ?? 0),
         invoice_url: c.invoice_url ?? null,
         funding_type: (c.funding_type ?? "wallet") as "wallet" | "pix_dedicated",
+        city: c.city ?? "",
+        neighborhood: c.neighborhood ?? "",
+        radius: c.radius ?? 0,
+        total_paid: Number(c.total_paid ?? 0),
+        pix_total_budget: Number(c.pix_total_budget ?? 0),
+        pix_remaining_budget: Number(c.pix_remaining_budget ?? 0),
         image: c.image,
         headline: c.headline,
         copy: c.copy,
@@ -1039,10 +1051,19 @@ export const adminGenerateAccessLink = createServerFn({ method: "POST" })
       email,
       options: { redirectTo: `${siteUrl}/dashboard` },
     });
-    if (linkErr || !linkRes?.properties?.action_link) {
+    if (linkErr || !linkRes?.properties) {
       throw new Error(linkErr?.message ?? "Falha ao gerar link de acesso");
     }
-    const target = linkRes.properties.action_link;
+    // Importante: NÃO usamos o action_link do Supabase — ele usa o fluxo PKCE,
+    // que exige o "code verifier" gravado no navegador de quem gerou o link.
+    // Como quem abre é o cliente (outro navegador), o login falharia.
+    // Usamos o hashed_token com verifyOtp na nossa própria página /entrar,
+    // que loga direto sem senha e sem verificador.
+    const hashedToken = linkRes.properties.hashed_token;
+    const target = hashedToken
+      ? `${siteUrl}/entrar?th=${encodeURIComponent(hashedToken)}`
+      : linkRes.properties.action_link;
+
 
     const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
     const slug = Array.from({ length: 8 }, () =>
