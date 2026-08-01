@@ -997,7 +997,7 @@ function FbPreview({ campaign, onClose }: { campaign: AdminCampaignRow; onClose:
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 overflow-y-auto" onClick={onClose}>
       <div
-        className="bg-[#18191a] rounded-xl max-w-md w-full overflow-hidden border border-white/10 shadow-2xl my-8"
+        className="bg-[#18191a] rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto border border-white/10 shadow-2xl my-8"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
