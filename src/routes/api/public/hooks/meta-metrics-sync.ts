@@ -42,7 +42,7 @@ export const Route = createFileRoute("/api/public/hooks/meta-metrics-sync")({
           // dizer se está ativa, pausada etc. Só pula as já encerradas de vez.
           const { data: campaigns, error: cErr } = await supabaseAdmin
             .from("campaigns")
-            .select("id, meta_campaign_id, started_at, status")
+            .select("id, meta_campaign_id, started_at, status, admin_status_lock")
             .not("meta_campaign_id", "is", null)
             .neq("status", "encerrada_saldo_consumido");
           if (cErr) throw new Error(cErr.message);
@@ -110,7 +110,9 @@ export const Route = createFileRoute("/api/public/hooks/meta-metrics-sync")({
                 if (!update.started_running_at) update.started_running_at = nowIso;
               }
               // Só atualiza status via Meta se não for "aguardando_vinculo_meta" (fluxo de pagamento)
-              if (mappedStatus && c.status !== "aguardando_vinculo_meta") {
+              // e se o admin não tiver travado o status manualmente (admin_status_lock).
+              const locked = Boolean((c as { admin_status_lock?: boolean }).admin_status_lock);
+              if (mappedStatus && !locked && c.status !== "aguardando_vinculo_meta") {
                 update.status = mappedStatus;
                 if (mappedStatus === "paused") update.paused_at = nowIso;
                 if (mappedStatus === "encerrada_saldo_consumido") update.ended_at = nowIso;
