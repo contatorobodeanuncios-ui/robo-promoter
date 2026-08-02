@@ -216,6 +216,9 @@ function AdminDevPage() {
   const rejectPayFn = useServerFn(adminRejectPayment);
   const listWipesFn = useServerFn(adminListWipeEvents);
   const listClientsFn = useServerFn(adminListAllClients);
+  const listAccessFn = useServerFn(adminListAccessRequests);
+  const listAIFn = useServerFn(adminListAIReviews);
+  const listMetaAuditFn = useServerFn(adminListMetaLinkAudit);
 
   const adminQuery = useQuery({
     queryKey: ["admindev-access"],
