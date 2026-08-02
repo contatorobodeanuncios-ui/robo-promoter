@@ -334,6 +334,28 @@ function AdminDevPage() {
     return !!latest && latest > (seen[t] ?? "");
   };
 
+  // ---- Arquivamento de campanhas (apagados / aguardando pagamento) ----
+  const archiveFn = useServerFn(adminArchiveCampaign);
+  const [campaignView, setCampaignView] = useState<"active" | "awaiting_payment" | "deleted">("active");
+  const archiveMutation = useMutation({
+    mutationFn: (v: { id: string; reason: "deleted" | "awaiting_payment" | null }) =>
+      archiveFn({ data: v }),
+    onSuccess: (_r, v) => {
+      qc.invalidateQueries({ queryKey: ["admin-campaigns"] });
+      toast.success(v.reason ? "Campanha arquivada" : "Campanha restaurada");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const allCampaigns = campaignsQuery.data ?? [];
+  const counts = {
+    active: allCampaigns.filter((c) => !c.archived_reason).length,
+    awaiting_payment: allCampaigns.filter((c) => c.archived_reason === "awaiting_payment").length,
+    deleted: allCampaigns.filter((c) => c.archived_reason === "deleted").length,
+  };
+  const visibleCampaigns = allCampaigns.filter((c) =>
+    campaignView === "active" ? !c.archived_reason : c.archived_reason === campaignView,
+  );
 
 
   const [preview, setPreview] = useState<AdminCampaignRow | null>(null);
