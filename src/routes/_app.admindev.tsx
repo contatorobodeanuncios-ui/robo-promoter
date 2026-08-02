@@ -870,42 +870,56 @@ function AdminDevPage() {
         {/* ============ Aba: Campanhas dos Clientes ============ */}
         <TabsContent value="campaigns" className="space-y-6 mt-6">
           <section className="glass-strong rounded-2xl overflow-hidden">
-            <div className="p-5 border-b border-white/5 flex items-center justify-between">
+            <div className="p-4 border-b border-white/5 flex flex-wrap items-center justify-between gap-3">
               <h2 className="font-semibold">Campanhas dos Clientes</h2>
-              <span className="text-xs text-muted-foreground">
-                {campaignsQuery.data?.length ?? 0} no total
-              </span>
+              <div className="flex items-center gap-2">
+                {([
+                  ["active", `Ativas (${counts.active})`],
+                  ["awaiting_payment", `Aguardando pagamento (${counts.awaiting_payment})`],
+                  ["deleted", `Apagados (${counts.deleted})`],
+                ] as const).map(([v, label]) => (
+                  <Button
+                    key={v}
+                    variant={campaignView === v ? "neon" : "glass"}
+                    size="sm"
+                    className="h-7 text-[11px]"
+                    onClick={() => setCampaignView(v)}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
             </div>
             {campaignsQuery.isLoading ? (
               <div className="p-10 text-center text-muted-foreground">
                 <Loader2 className="h-5 w-5 animate-spin mx-auto" />
               </div>
-            ) : !campaignsQuery.data?.length ? (
-              <div className="p-10 text-center text-sm text-muted-foreground">Nenhuma campanha ainda.</div>
+            ) : !visibleCampaigns.length ? (
+              <div className="p-10 text-center text-sm text-muted-foreground">Nenhuma campanha aqui.</div>
             ) : (
               // Rolagem lateral sempre acessível no computador: o container tem
               // altura limitada, então a barra horizontal fica visível sem
               // precisar descer até o fim da lista. Cabeçalho fica fixo.
               <div className="overflow-auto max-h-[70vh] [scrollbar-width:auto]">
-                <table className="w-full text-sm min-w-[1500px]">
-                  <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-white/5 sticky top-0 z-10 bg-[#12141a]">
+                <table className="w-full text-[13px] min-w-[1180px]">
+                  <thead className="text-left text-[10px] uppercase tracking-tight text-muted-foreground border-b border-white/5 sticky top-0 z-10 bg-[#12141a]">
 
                     <tr>
-                      <th className="px-4 py-3">Cliente</th>
-                      <th className="px-4 py-3">Campanha</th>
-                      <th className="px-4 py-3 text-right">Orçamento</th>
-                      <th className="px-4 py-3 text-center">Dias</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3">Datas</th>
-                      <th className="px-4 py-3">ID da campanha no Meta</th>
-                      <th className="px-4 py-3">Sincronização</th>
-                      <th className="px-4 py-3">Link cobrança</th>
-                      <th className="px-4 py-3">Métricas Reais (Meta)</th>
-                      <th className="px-4 py-3 text-right">Ações</th>
+                      <th className="px-2 py-2">Cliente</th>
+                      <th className="px-2 py-2">Campanha</th>
+                      <th className="px-2 py-2 text-right">Orç.</th>
+                      <th className="px-2 py-2 text-center">Dias</th>
+                      <th className="px-2 py-2">Status</th>
+                      <th className="px-2 py-2">Datas</th>
+                      <th className="px-2 py-2">ID Meta</th>
+                      <th className="px-2 py-2">Sinc.</th>
+                      <th className="px-2 py-2">Cobrança</th>
+                      <th className="px-2 py-2">Métricas Reais (Meta)</th>
+                      <th className="px-2 py-2 text-right">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {campaignsQuery.data.map((c) => {
+                    {visibleCampaigns.map((c) => {
                       const isRunning = c.status === "running" || c.status === "rodando";
                       const isPaused = c.status === "paused" || c.status === "encerrada_saldo_consumido";
                       const isPending = c.status === "aguardando_vinculo_meta" || c.status === "analyzing";
@@ -916,18 +930,18 @@ function AdminDevPage() {
                           : "";
                       const fmtDate = (d: string | null) => (d ? new Date(d).toLocaleString("pt-BR") : "—");
                       return (
-                        <tr key={c.id} className={`border-b border-white/5 hover:bg-white/[0.02] ${rowCls}`}>
-                          <td className="px-4 py-3">
-                            <p className="font-medium">{c.client_name ?? "—"}</p>
-                            <p className="text-[11px] text-muted-foreground">{c.client_email ?? c.user_id.slice(0, 8)}</p>
+                        <tr key={c.id} className={`border-b border-white/5 hover:bg-white/[0.02] align-top ${rowCls}`}>
+                          <td className="px-2 py-2">
+                            <p className="font-medium truncate max-w-[140px]">{c.client_name ?? "—"}</p>
+                            <p className="text-[10px] text-muted-foreground truncate max-w-[140px]">{c.client_email ?? c.user_id.slice(0, 8)}</p>
                           </td>
-                          <td className="px-4 py-3">
-                            <p className="font-medium truncate max-w-[200px]">{c.name}</p>
-                            <p className="text-[11px] text-muted-foreground truncate max-w-[200px]">{c.headline}</p>
+                          <td className="px-2 py-2">
+                            <p className="font-medium truncate max-w-[150px]">{c.name}</p>
+                            <p className="text-[10px] text-muted-foreground truncate max-w-[150px]">{c.headline}</p>
                           </td>
-                          <td className="px-4 py-3 text-right tabular-nums">{fmtBRL(c.budget)}</td>
-                          <td className="px-4 py-3 text-center tabular-nums">{c.days}</td>
-                          <td className="px-4 py-3">
+                          <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{fmtBRL(c.budget)}</td>
+                          <td className="px-2 py-2 text-center tabular-nums">{c.days}</td>
+                          <td className="px-2 py-2">
                             <select
                               value={c.status}
                               onChange={(e) =>
@@ -936,7 +950,7 @@ function AdminDevPage() {
                                   status: e.target.value as "running" | "analyzing" | "paused",
                                 })
                               }
-                              className="bg-background border border-white/10 rounded-md px-2 py-1 text-xs"
+                              className="bg-background border border-white/10 rounded-md px-1.5 py-1 text-[11px]"
                             >
                               <option value="analyzing">⏳ Em Análise</option>
                               <option value="running">🟢 Ativo</option>
@@ -945,23 +959,23 @@ function AdminDevPage() {
                               <option value="encerrada_saldo_consumido">⛔ Encerrada</option>
                             </select>
                           </td>
-                          <td className="px-4 py-3 text-[10px] text-muted-foreground space-y-0.5 min-w-[160px]">
+                          <td className="px-2 py-2 text-[10px] leading-tight text-muted-foreground min-w-[135px]">
                             <div>Criada: <span className="text-foreground">{fmtDate(c.created_at)}</span></div>
                             <div>Iniciou: <span className="text-foreground">{fmtDate(c.started_running_at)}</span></div>
                             <div>Pausada: <span className="text-foreground">{fmtDate(c.paused_at)}</span></div>
                             <div>Encerrada: <span className="text-foreground">{fmtDate(c.ended_at)}</span></div>
                           </td>
-                          <td className="px-4 py-3 min-w-[240px] space-y-1">
+                          <td className="px-2 py-2 min-w-[190px] space-y-1">
                             <MetaCampaignIdCell id={c.id} value={c.meta_campaign_id} />
                             <MetaCampaignPickerButton campaignId={c.id} campaignName={c.name} />
                           </td>
-                          <td className="px-4 py-3 min-w-[170px]">
+                          <td className="px-2 py-2 min-w-[150px]">
                             <SyncIndicator campaign={c} />
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="px-2 py-2">
                             {c.invoice_url ? (
                               <div className="flex items-center gap-1">
-                                <a href={c.invoice_url} target="_blank" rel="noreferrer" className="text-[11px] text-primary underline truncate inline-block max-w-[180px]">
+                                <a href={c.invoice_url} target="_blank" rel="noreferrer" className="text-[10px] text-primary underline truncate inline-block max-w-[120px]">
                                   {c.invoice_url}
                                 </a>
                                 <button
@@ -975,13 +989,13 @@ function AdminDevPage() {
                                 </button>
                               </div>
                             ) : (
-                              <span className="text-[11px] text-muted-foreground italic">
+                              <span className="text-[10px] text-muted-foreground italic">
                                 {isPending && c.funding_type === "pix_dedicated" ? "sem cobrança" : "—"}
                               </span>
                             )}
                           </td>
-                          <td className="px-4 py-3">
-                            <div className="grid grid-cols-3 gap-1 text-[10px] min-w-[260px]">
+                          <td className="px-2 py-2">
+                            <div className="grid grid-cols-3 gap-x-2 gap-y-0.5 text-[10px] min-w-[210px]">
                               <Metric label="Cliques" value={c.clicks.toLocaleString("pt-BR")} />
                               <Metric label="Impr." value={c.impressions.toLocaleString("pt-BR")} />
                               <Metric label="CTR" value={`${c.ctr.toFixed(2)}%`} />
@@ -993,22 +1007,58 @@ function AdminDevPage() {
                               <Metric label="ROI" value={c.revenue && c.spent ? `${(((c.revenue - c.spent) / c.spent) * 100).toFixed(1)}%` : "—"} />
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button variant="glass" size="sm" onClick={() => setPreview(c)} title="Pré-visualizar anúncio">
+                          <td className="px-2 py-2 text-right">
+                            <div className="flex flex-wrap justify-end gap-1">
+                              <Button variant="glass" size="sm" className="h-7 text-[11px]" onClick={() => setPreview(c)} title="Pré-visualizar anúncio">
                                 <Eye className="h-3.5 w-3.5" /> Prévia
                               </Button>
-                              <Button variant="glass" size="sm" onClick={() => setMetricsTarget(c)} title="Editar métricas">
+                              <Button variant="glass" size="sm" className="h-7 text-[11px]" onClick={() => setMetricsTarget(c)} title="Editar métricas">
                                 <Pencil className="h-3.5 w-3.5" /> Métricas
                               </Button>
                               <Button
                                 variant="neon"
                                 size="sm"
+                                className="h-7 text-[11px]"
                                 disabled={c.status === "running" || statusMutation.isPending}
                                 onClick={() => statusMutation.mutate({ id: c.id, status: "running" })}
                               >
                                 <Rocket className="h-3.5 w-3.5" /> Ativar
                               </Button>
+                              {c.archived_reason ? (
+                                <Button
+                                  variant="glass"
+                                  size="sm"
+                                  className="h-7 text-[11px]"
+                                  disabled={archiveMutation.isPending}
+                                  title="Tirar do arquivo e voltar para a lista"
+                                  onClick={() => archiveMutation.mutate({ id: c.id, reason: null })}
+                                >
+                                  <ArchiveRestore className="h-3.5 w-3.5" /> Restaurar
+                                </Button>
+                              ) : (
+                                <>
+                                  <Button
+                                    variant="glass"
+                                    size="sm"
+                                    className="h-7 text-[11px]"
+                                    disabled={archiveMutation.isPending}
+                                    title="Arquivar em 'Aguardando pagamento'"
+                                    onClick={() => archiveMutation.mutate({ id: c.id, reason: "awaiting_payment" })}
+                                  >
+                                    <Archive className="h-3.5 w-3.5" /> Aguardando pagamento
+                                  </Button>
+                                  <Button
+                                    variant="glass"
+                                    size="sm"
+                                    className="h-7 text-[11px] text-destructive"
+                                    disabled={archiveMutation.isPending}
+                                    title="Apagar (arquiva em 'Apagados')"
+                                    onClick={() => archiveMutation.mutate({ id: c.id, reason: "deleted" })}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" /> Apagar
+                                  </Button>
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -1021,6 +1071,7 @@ function AdminDevPage() {
             )}
           </section>
         </TabsContent>
+
 
         {/* ============ Aba: Todos os Clientes ============ */}
         <TabsContent value="clients" className="space-y-6 mt-6">
