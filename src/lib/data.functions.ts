@@ -323,6 +323,17 @@ export const createCampaign = createServerFn({ method: "POST" })
       const next = balance - totalCost;
       await admin.from("profiles").update({ balance: next }).eq("id", userId);
       await admin.from("campaigns").update({ total_paid: totalCost }).eq("id", row.id);
+      // Toda campanha precisa aparecer em "Solicitações de pagamento", mesmo
+      // quando foi paga com saldo do app — aqui o registro já nasce como pago.
+      await admin.from("payment_requests").insert({
+        user_id: userId,
+        amount: totalCost,
+        status: "paid",
+        type: "campaign_budget",
+        campaign_id: row.id,
+        note: "Pago com saldo do app",
+        approved_at: new Date().toISOString(),
+      } as never);
       const fresh = { ...(row as unknown as DbCampaign), total_paid: totalCost };
       return {
         campaign: mapCampaign(fresh),
@@ -332,6 +343,7 @@ export const createCampaign = createServerFn({ method: "POST" })
         remainingDue: 0,
       };
     }
+
 
     return {
       campaign: mapCampaign(row as unknown as DbCampaign),
