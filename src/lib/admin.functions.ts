@@ -99,6 +99,8 @@ export interface AdminCampaignRow {
   scheduled_end_at: string | null;
   media_type: CampaignMediaType;
   media: CampaignMediaItem[];
+  archived_at: string | null;
+  archived_reason: "deleted" | "awaiting_payment" | null;
 }
 
 
