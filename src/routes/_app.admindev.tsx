@@ -266,6 +266,73 @@ function AdminDevPage() {
     enabled,
   });
 
+  // Queries compartilhadas (mesma queryKey das seções) só para saber se
+  // chegou coisa nova em cada aba e acender a bolinha de notificação.
+  const accessDotQuery = useQuery({
+    queryKey: ["admin-access-requests"],
+    queryFn: () => listAccessFn(),
+    enabled,
+    refetchInterval: 30_000,
+  });
+  const aiDotQuery = useQuery({
+    queryKey: ["admin-ai-reviews"],
+    queryFn: () => listAIFn(),
+    enabled,
+    refetchInterval: 60_000,
+  });
+  const metaAuditDotQuery = useQuery({
+    queryKey: ["admin-meta-audit"],
+    queryFn: () => listMetaAuditFn(),
+    enabled,
+    refetchInterval: 60_000,
+  });
+
+  const maxDate = (list: Array<{ created_at: string }> | undefined) =>
+    (list ?? []).reduce<string>((acc, r) => (r.created_at > acc ? r.created_at : acc), "");
+
+  const latestByTab: Record<string, string> = {
+    access: maxDate(accessDotQuery.data),
+    payments: maxDate(paymentsQuery.data),
+    settings: maxDate(wipesQuery.data as Array<{ created_at: string }> | undefined),
+    campaigns: maxDate(campaignsQuery.data),
+    clients: maxDate(clientsQuery.data),
+    ai: maxDate(aiDotQuery.data),
+    metaaudit: maxDate(metaAuditDotQuery.data),
+  };
+
+  const [tab, setTab] = useState("access");
+  const [seen, setSeen] = useState<Record<string, string>>({});
+  useEffect(() => {
+    setSeen(
+      Object.fromEntries(
+        ["access", "payments", "settings", "campaigns", "clients", "ai", "metaaudit"].map((t) => [
+          t,
+          readSeen(t),
+        ]),
+      ),
+    );
+  }, []);
+
+  // A aba aberta é marcada como vista assim que os dados dela chegam.
+  const currentLatest = latestByTab[tab] ?? "";
+  useEffect(() => {
+    if (!currentLatest) return;
+    setSeen((prev) => {
+      if ((prev[tab] ?? "") >= currentLatest) return prev;
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(seenStorageKey(tab), currentLatest);
+      }
+      return { ...prev, [tab]: currentLatest };
+    });
+  }, [tab, currentLatest]);
+
+  const hasNew = (t: string) => {
+    const latest = latestByTab[t] ?? "";
+    return !!latest && latest > (seen[t] ?? "");
+  };
+
+
+
   const [preview, setPreview] = useState<AdminCampaignRow | null>(null);
   const [metricsTarget, setMetricsTarget] = useState<AdminCampaignRow | null>(null);
   const [apiKeySet, setApiKeySet] = useState(false);
