@@ -2289,11 +2289,30 @@ function AIReviewsSection() {
   const linkedCampaigns = (campsQ.data ?? []).filter((c) => c.meta_campaign_id);
   const neverReviewed = linkedCampaigns.filter((c) => !reviewedIds.has(c.id));
 
+  // Agrupa por campanha: uma caixinha por campanha, com a análise mais recente
+  // no topo e o histórico dela dentro — em vez de várias entradas soltas.
+  type AIReview = NonNullable<typeof reviewsQ.data>[number];
+  const grouped = (() => {
+    const map = new Map<string, AIReview[]>();
+    for (const r of reviewsQ.data ?? []) {
+      const arr = map.get(r.campaign_id) ?? [];
+      arr.push(r);
+      map.set(r.campaign_id, arr);
+    }
+    return Array.from(map.entries())
+      .map(([campaign_id, reviews]) => ({
+        campaign_id,
+        reviews: [...reviews].sort((a, b) => (a.created_at < b.created_at ? 1 : -1)),
+      }))
+      .sort((a, b) => (a.reviews[0].created_at < b.reviews[0].created_at ? 1 : -1));
+  })();
+
   const counts = {
-    good: (reviewsQ.data ?? []).filter((r) => r.verdict === "good").length,
-    warn: (reviewsQ.data ?? []).filter((r) => r.verdict === "warn").length,
-    bad: (reviewsQ.data ?? []).filter((r) => r.verdict === "bad").length,
+    good: grouped.filter((g) => g.reviews[0].verdict === "good").length,
+    warn: grouped.filter((g) => g.reviews[0].verdict === "warn").length,
+    bad: grouped.filter((g) => g.reviews[0].verdict === "bad").length,
   };
+
 
   return (
     <div className="space-y-6">
