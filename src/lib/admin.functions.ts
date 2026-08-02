@@ -99,6 +99,8 @@ export interface AdminCampaignRow {
   scheduled_end_at: string | null;
   media_type: CampaignMediaType;
   media: CampaignMediaItem[];
+  archived_at: string | null;
+  archived_reason: "deleted" | "awaiting_payment" | null;
 }
 
 
@@ -164,9 +166,48 @@ export const adminListCampaigns = createServerFn({ method: "GET" })
         scheduled_end_at: c.scheduled_end_at ?? null,
         media_type: ((c as { media_type?: string }).media_type ?? "image") as CampaignMediaType,
         media: parseMedia((c as { media?: unknown }).media),
+        archived_at: (c as { archived_at?: string | null }).archived_at ?? null,
+        archived_reason:
+          ((c as { archived_reason?: string | null }).archived_reason ?? null) as
+            | "deleted"
+            | "awaiting_payment"
+            | null,
       };
 
+
     });
+  });
+
+// ============ Arquivamento de campanhas (admin) ============
+// "Apagar" e "Aguardando pagamento" não deletam nada: só tiram a campanha da
+// lista principal e a jogam para a aba de arquivadas correspondente.
+export const adminArchiveCampaign = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      id: z.string().uuid(),
+      reason: z.enum(["deleted", "awaiting_payment"]).nullable(),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const supabaseAdmin = await getSupabaseAdmin();
+    const { error } = await supabaseAdmin
+      .from("campaigns")
+      .update({
+        archived_at: data.reason ? new Date().toISOString() : null,
+        archived_reason: data.reason,
+        archived_by: data.reason ? context.userId : null,
+      } as never)
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    await supabaseAdmin.from("admin_audit_log").insert({
+      admin_email: (context.claims as { email?: string })?.email ?? "",
+      action: data.reason ? `campaign_archive_${data.reason}` : "campaign_unarchive",
+      target_type: "campaign",
+      target_id: data.id,
+    });
+    return { ok: true };
   });
 
 

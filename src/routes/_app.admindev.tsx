@@ -32,6 +32,7 @@ import {
   adminApproveAccessRequest,
   adminDenyAccessRequest,
   adminListAllClients,
+  adminArchiveCampaign,
   adminSetUserStatus,
   adminAdjustBalance,
   adminUpdateProfile,
@@ -62,7 +63,7 @@ import {
 } from "@/lib/payment.functions";
 import { adminListConversations } from "@/lib/support.functions";
 import { supabase } from "@/integrations/supabase/client";
-import { Shield, Zap, Hand, Eye, X, Rocket, Loader2, Link2, Check, Ban, CreditCard, AlertTriangle, Trash2, PowerOff, UserPlus, Copy, Settings, Users, Megaphone, Wallet, Pencil, UserCheck, KeyRound, Sparkles, History, ThumbsUp, ThumbsDown, HelpCircle, RefreshCw, Download } from "lucide-react";
+import { Shield, Zap, Hand, Eye, X, Rocket, Loader2, Link2, Check, Ban, CreditCard, AlertTriangle, Trash2, PowerOff, UserPlus, Copy, Settings, Users, Megaphone, Wallet, Pencil, UserCheck, KeyRound, Sparkles, History, ThumbsUp, ThumbsDown, HelpCircle, RefreshCw, Download, Clock, Archive, ArchiveRestore } from "lucide-react";
 
 export const Route = createFileRoute("/_app/admindev")({
   ssr: false,
@@ -152,6 +153,53 @@ function ErrorHint({ message }: { message: string | null | undefined }) {
   );
 }
 
+// ============ Relógio: há quanto tempo o acesso foi liberado ============
+// Conta a partir do momento em que o admin aprovou (reviewed_at). Atualiza
+// sozinho a cada minuto, mostrando ex.: "22 h 52 min".
+function formatElapsed(fromIso: string, nowMs: number) {
+  const diff = Math.max(0, nowMs - new Date(fromIso).getTime());
+  const totalMin = Math.floor(diff / 60000);
+  const days = Math.floor(totalMin / 1440);
+  const hours = Math.floor((totalMin % 1440) / 60);
+  const minutes = totalMin % 60;
+  if (days > 0) return `${days} d ${hours} h ${minutes} min`;
+  if (hours > 0) return `${hours} h ${minutes} min`;
+  return `${minutes} min`;
+}
+
+function AccessElapsedClock({ since }: { since: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full border border-primary/30 bg-primary/10 text-primary tabular-nums"
+      title={`Acesso liberado em ${new Date(since).toLocaleString("pt-BR")}`}
+    >
+      <Clock className="h-3 w-3" /> com acesso há {formatElapsed(since, now)}
+    </span>
+  );
+}
+
+// ============ Bolinha de notificação nas abas ============
+const seenStorageKey = (tab: string) => `admindev-seen-${tab}`;
+
+function readSeen(tab: string): string {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(seenStorageKey(tab)) ?? "";
+}
+
+function NotifyDot({ show }: { show: boolean }) {
+  if (!show) return null;
+  return (
+    <span className="ml-1 h-2 w-2 rounded-full bg-destructive shadow-[0_0_6px_var(--color-destructive)] inline-block" />
+  );
+}
+
+
+
 function AdminDevPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -169,6 +217,9 @@ function AdminDevPage() {
   const rejectPayFn = useServerFn(adminRejectPayment);
   const listWipesFn = useServerFn(adminListWipeEvents);
   const listClientsFn = useServerFn(adminListAllClients);
+  const listAccessFn = useServerFn(adminListAccessRequests);
+  const listAIFn = useServerFn(adminListAIReviews);
+  const listMetaAuditFn = useServerFn(adminListMetaLinkAudit);
 
   const adminQuery = useQuery({
     queryKey: ["admindev-access"],
@@ -218,6 +269,95 @@ function AdminDevPage() {
     queryFn: () => listClientsFn(),
     enabled,
   });
+
+  // Queries compartilhadas (mesma queryKey das seções) só para saber se
+  // chegou coisa nova em cada aba e acender a bolinha de notificação.
+  const accessDotQuery = useQuery({
+    queryKey: ["admin-access-requests"],
+    queryFn: () => listAccessFn(),
+    enabled,
+    refetchInterval: 30_000,
+  });
+  const aiDotQuery = useQuery({
+    queryKey: ["admin-ai-reviews"],
+    queryFn: () => listAIFn(),
+    enabled,
+    refetchInterval: 60_000,
+  });
+  const metaAuditDotQuery = useQuery({
+    queryKey: ["admin-meta-audit"],
+    queryFn: () => listMetaAuditFn(),
+    enabled,
+    refetchInterval: 60_000,
+  });
+
+  const maxDate = (list: Array<{ created_at: string }> | undefined) =>
+    (list ?? []).reduce<string>((acc, r) => (r.created_at > acc ? r.created_at : acc), "");
+
+  const latestByTab: Record<string, string> = {
+    access: maxDate(accessDotQuery.data),
+    payments: maxDate(paymentsQuery.data),
+    settings: maxDate(wipesQuery.data as Array<{ created_at: string }> | undefined),
+    campaigns: maxDate(campaignsQuery.data),
+    clients: maxDate(clientsQuery.data),
+    ai: maxDate(aiDotQuery.data),
+    metaaudit: maxDate(metaAuditDotQuery.data),
+  };
+
+  const [tab, setTab] = useState("access");
+  const [seen, setSeen] = useState<Record<string, string>>({});
+  useEffect(() => {
+    setSeen(
+      Object.fromEntries(
+        ["access", "payments", "settings", "campaigns", "clients", "ai", "metaaudit"].map((t) => [
+          t,
+          readSeen(t),
+        ]),
+      ),
+    );
+  }, []);
+
+  // A aba aberta é marcada como vista assim que os dados dela chegam.
+  const currentLatest = latestByTab[tab] ?? "";
+  useEffect(() => {
+    if (!currentLatest) return;
+    setSeen((prev) => {
+      if ((prev[tab] ?? "") >= currentLatest) return prev;
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(seenStorageKey(tab), currentLatest);
+      }
+      return { ...prev, [tab]: currentLatest };
+    });
+  }, [tab, currentLatest]);
+
+  const hasNew = (t: string) => {
+    const latest = latestByTab[t] ?? "";
+    return !!latest && latest > (seen[t] ?? "");
+  };
+
+  // ---- Arquivamento de campanhas (apagados / aguardando pagamento) ----
+  const archiveFn = useServerFn(adminArchiveCampaign);
+  const [campaignView, setCampaignView] = useState<"active" | "awaiting_payment" | "deleted">("active");
+  const archiveMutation = useMutation({
+    mutationFn: (v: { id: string; reason: "deleted" | "awaiting_payment" | null }) =>
+      archiveFn({ data: v }),
+    onSuccess: (_r, v) => {
+      qc.invalidateQueries({ queryKey: ["admin-campaigns"] });
+      toast.success(v.reason ? "Campanha arquivada" : "Campanha restaurada");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const allCampaigns = campaignsQuery.data ?? [];
+  const counts = {
+    active: allCampaigns.filter((c) => !c.archived_reason).length,
+    awaiting_payment: allCampaigns.filter((c) => c.archived_reason === "awaiting_payment").length,
+    deleted: allCampaigns.filter((c) => c.archived_reason === "deleted").length,
+  };
+  const visibleCampaigns = allCampaigns.filter((c) =>
+    campaignView === "active" ? !c.archived_reason : c.archived_reason === campaignView,
+  );
+
 
   const [preview, setPreview] = useState<AdminCampaignRow | null>(null);
   const [metricsTarget, setMetricsTarget] = useState<AdminCampaignRow | null>(null);
@@ -357,30 +497,38 @@ function AdminDevPage() {
         </nav>
       </header>
 
-      <Tabs defaultValue="access" className="w-full">
+      <Tabs value={tab} onValueChange={setTab} className="w-full">
         <TabsList className="flex flex-wrap h-auto gap-1 bg-transparent p-0 justify-start">
           <TabsTrigger value="access" className="gap-1.5">
             <UserPlus className="h-3.5 w-3.5" /> Solicitações de Acesso
+            <NotifyDot show={hasNew("access")} />
           </TabsTrigger>
           <TabsTrigger value="payments" className="gap-1.5">
             <CreditCard className="h-3.5 w-3.5" /> Solicitações de Pagamento
+            <NotifyDot show={hasNew("payments")} />
           </TabsTrigger>
           <TabsTrigger value="settings" className="gap-1.5">
             <Settings className="h-3.5 w-3.5" /> Configurações Internas
+            <NotifyDot show={hasNew("settings")} />
           </TabsTrigger>
           <TabsTrigger value="campaigns" className="gap-1.5">
             <Megaphone className="h-3.5 w-3.5" /> Campanhas dos Clientes
+            <NotifyDot show={hasNew("campaigns")} />
           </TabsTrigger>
           <TabsTrigger value="clients" className="gap-1.5">
             <Users className="h-3.5 w-3.5" /> Todos os Clientes
+            <NotifyDot show={hasNew("clients")} />
           </TabsTrigger>
           <TabsTrigger value="ai" className="gap-1.5">
             <Sparkles className="h-3.5 w-3.5" /> IA de Métricas
+            <NotifyDot show={hasNew("ai")} />
           </TabsTrigger>
           <TabsTrigger value="metaaudit" className="gap-1.5">
             <History className="h-3.5 w-3.5" /> Auditoria Meta
+            <NotifyDot show={hasNew("metaaudit")} />
           </TabsTrigger>
         </TabsList>
+
 
         {/* ============ Aba: Solicitações de Acesso ============ */}
         <TabsContent value="access" className="space-y-6 mt-6">
@@ -745,42 +893,56 @@ function AdminDevPage() {
         {/* ============ Aba: Campanhas dos Clientes ============ */}
         <TabsContent value="campaigns" className="space-y-6 mt-6">
           <section className="glass-strong rounded-2xl overflow-hidden">
-            <div className="p-5 border-b border-white/5 flex items-center justify-between">
+            <div className="p-4 border-b border-white/5 flex flex-wrap items-center justify-between gap-3">
               <h2 className="font-semibold">Campanhas dos Clientes</h2>
-              <span className="text-xs text-muted-foreground">
-                {campaignsQuery.data?.length ?? 0} no total
-              </span>
+              <div className="flex items-center gap-2">
+                {([
+                  ["active", `Ativas (${counts.active})`],
+                  ["awaiting_payment", `Aguardando pagamento (${counts.awaiting_payment})`],
+                  ["deleted", `Apagados (${counts.deleted})`],
+                ] as const).map(([v, label]) => (
+                  <Button
+                    key={v}
+                    variant={campaignView === v ? "neon" : "glass"}
+                    size="sm"
+                    className="h-7 text-[11px]"
+                    onClick={() => setCampaignView(v)}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
             </div>
             {campaignsQuery.isLoading ? (
               <div className="p-10 text-center text-muted-foreground">
                 <Loader2 className="h-5 w-5 animate-spin mx-auto" />
               </div>
-            ) : !campaignsQuery.data?.length ? (
-              <div className="p-10 text-center text-sm text-muted-foreground">Nenhuma campanha ainda.</div>
+            ) : !visibleCampaigns.length ? (
+              <div className="p-10 text-center text-sm text-muted-foreground">Nenhuma campanha aqui.</div>
             ) : (
               // Rolagem lateral sempre acessível no computador: o container tem
               // altura limitada, então a barra horizontal fica visível sem
               // precisar descer até o fim da lista. Cabeçalho fica fixo.
               <div className="overflow-auto max-h-[70vh] [scrollbar-width:auto]">
-                <table className="w-full text-sm min-w-[1500px]">
-                  <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-white/5 sticky top-0 z-10 bg-[#12141a]">
+                <table className="w-full text-[13px] min-w-[1180px]">
+                  <thead className="text-left text-[10px] uppercase tracking-tight text-muted-foreground border-b border-white/5 sticky top-0 z-10 bg-[#12141a]">
 
                     <tr>
-                      <th className="px-4 py-3">Cliente</th>
-                      <th className="px-4 py-3">Campanha</th>
-                      <th className="px-4 py-3 text-right">Orçamento</th>
-                      <th className="px-4 py-3 text-center">Dias</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3">Datas</th>
-                      <th className="px-4 py-3">ID da campanha no Meta</th>
-                      <th className="px-4 py-3">Sincronização</th>
-                      <th className="px-4 py-3">Link cobrança</th>
-                      <th className="px-4 py-3">Métricas Reais (Meta)</th>
-                      <th className="px-4 py-3 text-right">Ações</th>
+                      <th className="px-2 py-2">Cliente</th>
+                      <th className="px-2 py-2">Campanha</th>
+                      <th className="px-2 py-2 text-right">Orç.</th>
+                      <th className="px-2 py-2 text-center">Dias</th>
+                      <th className="px-2 py-2">Status</th>
+                      <th className="px-2 py-2">Datas</th>
+                      <th className="px-2 py-2">ID Meta</th>
+                      <th className="px-2 py-2">Sinc.</th>
+                      <th className="px-2 py-2">Cobrança</th>
+                      <th className="px-2 py-2">Métricas Reais (Meta)</th>
+                      <th className="px-2 py-2 text-right">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {campaignsQuery.data.map((c) => {
+                    {visibleCampaigns.map((c) => {
                       const isRunning = c.status === "running" || c.status === "rodando";
                       const isPaused = c.status === "paused" || c.status === "encerrada_saldo_consumido";
                       const isPending = c.status === "aguardando_vinculo_meta" || c.status === "analyzing";
@@ -791,18 +953,18 @@ function AdminDevPage() {
                           : "";
                       const fmtDate = (d: string | null) => (d ? new Date(d).toLocaleString("pt-BR") : "—");
                       return (
-                        <tr key={c.id} className={`border-b border-white/5 hover:bg-white/[0.02] ${rowCls}`}>
-                          <td className="px-4 py-3">
-                            <p className="font-medium">{c.client_name ?? "—"}</p>
-                            <p className="text-[11px] text-muted-foreground">{c.client_email ?? c.user_id.slice(0, 8)}</p>
+                        <tr key={c.id} className={`border-b border-white/5 hover:bg-white/[0.02] align-top ${rowCls}`}>
+                          <td className="px-2 py-2">
+                            <p className="font-medium truncate max-w-[140px]">{c.client_name ?? "—"}</p>
+                            <p className="text-[10px] text-muted-foreground truncate max-w-[140px]">{c.client_email ?? c.user_id.slice(0, 8)}</p>
                           </td>
-                          <td className="px-4 py-3">
-                            <p className="font-medium truncate max-w-[200px]">{c.name}</p>
-                            <p className="text-[11px] text-muted-foreground truncate max-w-[200px]">{c.headline}</p>
+                          <td className="px-2 py-2">
+                            <p className="font-medium truncate max-w-[150px]">{c.name}</p>
+                            <p className="text-[10px] text-muted-foreground truncate max-w-[150px]">{c.headline}</p>
                           </td>
-                          <td className="px-4 py-3 text-right tabular-nums">{fmtBRL(c.budget)}</td>
-                          <td className="px-4 py-3 text-center tabular-nums">{c.days}</td>
-                          <td className="px-4 py-3">
+                          <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{fmtBRL(c.budget)}</td>
+                          <td className="px-2 py-2 text-center tabular-nums">{c.days}</td>
+                          <td className="px-2 py-2">
                             <select
                               value={c.status}
                               onChange={(e) =>
@@ -811,7 +973,7 @@ function AdminDevPage() {
                                   status: e.target.value as "running" | "analyzing" | "paused",
                                 })
                               }
-                              className="bg-background border border-white/10 rounded-md px-2 py-1 text-xs"
+                              className="bg-background border border-white/10 rounded-md px-1.5 py-1 text-[11px]"
                             >
                               <option value="analyzing">⏳ Em Análise</option>
                               <option value="running">🟢 Ativo</option>
@@ -820,23 +982,23 @@ function AdminDevPage() {
                               <option value="encerrada_saldo_consumido">⛔ Encerrada</option>
                             </select>
                           </td>
-                          <td className="px-4 py-3 text-[10px] text-muted-foreground space-y-0.5 min-w-[160px]">
+                          <td className="px-2 py-2 text-[10px] leading-tight text-muted-foreground min-w-[135px]">
                             <div>Criada: <span className="text-foreground">{fmtDate(c.created_at)}</span></div>
                             <div>Iniciou: <span className="text-foreground">{fmtDate(c.started_running_at)}</span></div>
                             <div>Pausada: <span className="text-foreground">{fmtDate(c.paused_at)}</span></div>
                             <div>Encerrada: <span className="text-foreground">{fmtDate(c.ended_at)}</span></div>
                           </td>
-                          <td className="px-4 py-3 min-w-[240px] space-y-1">
+                          <td className="px-2 py-2 min-w-[190px] space-y-1">
                             <MetaCampaignIdCell id={c.id} value={c.meta_campaign_id} />
                             <MetaCampaignPickerButton campaignId={c.id} campaignName={c.name} />
                           </td>
-                          <td className="px-4 py-3 min-w-[170px]">
+                          <td className="px-2 py-2 min-w-[150px]">
                             <SyncIndicator campaign={c} />
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="px-2 py-2">
                             {c.invoice_url ? (
                               <div className="flex items-center gap-1">
-                                <a href={c.invoice_url} target="_blank" rel="noreferrer" className="text-[11px] text-primary underline truncate inline-block max-w-[180px]">
+                                <a href={c.invoice_url} target="_blank" rel="noreferrer" className="text-[10px] text-primary underline truncate inline-block max-w-[120px]">
                                   {c.invoice_url}
                                 </a>
                                 <button
@@ -850,13 +1012,13 @@ function AdminDevPage() {
                                 </button>
                               </div>
                             ) : (
-                              <span className="text-[11px] text-muted-foreground italic">
+                              <span className="text-[10px] text-muted-foreground italic">
                                 {isPending && c.funding_type === "pix_dedicated" ? "sem cobrança" : "—"}
                               </span>
                             )}
                           </td>
-                          <td className="px-4 py-3">
-                            <div className="grid grid-cols-3 gap-1 text-[10px] min-w-[260px]">
+                          <td className="px-2 py-2">
+                            <div className="grid grid-cols-3 gap-x-2 gap-y-0.5 text-[10px] min-w-[210px]">
                               <Metric label="Cliques" value={c.clicks.toLocaleString("pt-BR")} />
                               <Metric label="Impr." value={c.impressions.toLocaleString("pt-BR")} />
                               <Metric label="CTR" value={`${c.ctr.toFixed(2)}%`} />
@@ -868,22 +1030,58 @@ function AdminDevPage() {
                               <Metric label="ROI" value={c.revenue && c.spent ? `${(((c.revenue - c.spent) / c.spent) * 100).toFixed(1)}%` : "—"} />
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button variant="glass" size="sm" onClick={() => setPreview(c)} title="Pré-visualizar anúncio">
+                          <td className="px-2 py-2 text-right">
+                            <div className="flex flex-wrap justify-end gap-1">
+                              <Button variant="glass" size="sm" className="h-7 text-[11px]" onClick={() => setPreview(c)} title="Pré-visualizar anúncio">
                                 <Eye className="h-3.5 w-3.5" /> Prévia
                               </Button>
-                              <Button variant="glass" size="sm" onClick={() => setMetricsTarget(c)} title="Editar métricas">
+                              <Button variant="glass" size="sm" className="h-7 text-[11px]" onClick={() => setMetricsTarget(c)} title="Editar métricas">
                                 <Pencil className="h-3.5 w-3.5" /> Métricas
                               </Button>
                               <Button
                                 variant="neon"
                                 size="sm"
+                                className="h-7 text-[11px]"
                                 disabled={c.status === "running" || statusMutation.isPending}
                                 onClick={() => statusMutation.mutate({ id: c.id, status: "running" })}
                               >
                                 <Rocket className="h-3.5 w-3.5" /> Ativar
                               </Button>
+                              {c.archived_reason ? (
+                                <Button
+                                  variant="glass"
+                                  size="sm"
+                                  className="h-7 text-[11px]"
+                                  disabled={archiveMutation.isPending}
+                                  title="Tirar do arquivo e voltar para a lista"
+                                  onClick={() => archiveMutation.mutate({ id: c.id, reason: null })}
+                                >
+                                  <ArchiveRestore className="h-3.5 w-3.5" /> Restaurar
+                                </Button>
+                              ) : (
+                                <>
+                                  <Button
+                                    variant="glass"
+                                    size="sm"
+                                    className="h-7 text-[11px]"
+                                    disabled={archiveMutation.isPending}
+                                    title="Arquivar em 'Aguardando pagamento'"
+                                    onClick={() => archiveMutation.mutate({ id: c.id, reason: "awaiting_payment" })}
+                                  >
+                                    <Archive className="h-3.5 w-3.5" /> Aguardando pagamento
+                                  </Button>
+                                  <Button
+                                    variant="glass"
+                                    size="sm"
+                                    className="h-7 text-[11px] text-destructive"
+                                    disabled={archiveMutation.isPending}
+                                    title="Apagar (arquiva em 'Apagados')"
+                                    onClick={() => archiveMutation.mutate({ id: c.id, reason: "deleted" })}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" /> Apagar
+                                  </Button>
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -896,6 +1094,7 @@ function AdminDevPage() {
             )}
           </section>
         </TabsContent>
+
 
         {/* ============ Aba: Todos os Clientes ============ */}
         <TabsContent value="clients" className="space-y-6 mt-6">
@@ -1343,7 +1542,13 @@ function AccessRequestsSection() {
                   {new Date(r.created_at).toLocaleString("pt-BR")}
                   {r.reviewed_at && r.status !== "pending" && ` · revisado em ${new Date(r.reviewed_at).toLocaleString("pt-BR")}`}
                 </p>
+                {r.status === "approved" && r.reviewed_at && (
+                  <div className="mt-1">
+                    <AccessElapsedClock since={r.reviewed_at} />
+                  </div>
+                )}
               </div>
+
               <div className="flex items-center gap-2">
                 <span className={`text-[11px] px-2 py-1 rounded-full border ${
                   r.status === "approved" ? "border-success/40 text-success bg-success/10" :
@@ -1862,7 +2067,9 @@ function SupportUnreadBadge() {
     };
   }, [qc]);
 
-  const count = (q.data ?? []).filter((c) => c.unread_by_admin).length;
+  // Só conta como novidade quando existe mensagem de verdade — conversa aberta
+  // sem nenhuma mensagem não gera notificação.
+  const count = (q.data ?? []).filter((c) => c.unread_by_admin && !!c.last_message_at).length;
   if (!count) return null;
 
   return (
@@ -2090,11 +2297,30 @@ function AIReviewsSection() {
   const linkedCampaigns = (campsQ.data ?? []).filter((c) => c.meta_campaign_id);
   const neverReviewed = linkedCampaigns.filter((c) => !reviewedIds.has(c.id));
 
+  // Agrupa por campanha: uma caixinha por campanha, com a análise mais recente
+  // no topo e o histórico dela dentro — em vez de várias entradas soltas.
+  type AIReview = NonNullable<typeof reviewsQ.data>[number];
+  const grouped = (() => {
+    const map = new Map<string, AIReview[]>();
+    for (const r of reviewsQ.data ?? []) {
+      const arr = map.get(r.campaign_id) ?? [];
+      arr.push(r);
+      map.set(r.campaign_id, arr);
+    }
+    return Array.from(map.entries())
+      .map(([campaign_id, reviews]) => ({
+        campaign_id,
+        reviews: [...reviews].sort((a, b) => (a.created_at < b.created_at ? 1 : -1)),
+      }))
+      .sort((a, b) => (a.reviews[0].created_at < b.reviews[0].created_at ? 1 : -1));
+  })();
+
   const counts = {
-    good: (reviewsQ.data ?? []).filter((r) => r.verdict === "good").length,
-    warn: (reviewsQ.data ?? []).filter((r) => r.verdict === "warn").length,
-    bad: (reviewsQ.data ?? []).filter((r) => r.verdict === "bad").length,
+    good: grouped.filter((g) => g.reviews[0].verdict === "good").length,
+    warn: grouped.filter((g) => g.reviews[0].verdict === "warn").length,
+    bad: grouped.filter((g) => g.reviews[0].verdict === "bad").length,
   };
+
 
   return (
     <div className="space-y-6">
@@ -2139,48 +2365,67 @@ function AIReviewsSection() {
 
       <section className="glass-strong rounded-2xl overflow-hidden">
         <div className="p-5 border-b border-white/5">
-          <h2 className="font-semibold">Últimas análises</h2>
+          <h2 className="font-semibold">Análises por campanha</h2>
+          <p className="text-xs text-muted-foreground">
+            Uma caixinha por campanha: mostra a avaliação atual e, abaixo, as atualizações recentes dela.
+          </p>
         </div>
         {reviewsQ.isLoading ? (
           <div className="p-8 text-center text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin mx-auto" /></div>
-        ) : !(reviewsQ.data ?? []).length ? (
+        ) : !grouped.length ? (
           <div className="p-8 text-center text-sm text-muted-foreground">
             Nenhuma análise ainda. Vincule campanhas ao Meta e aguarde o próximo ciclo, ou analise manualmente acima.
           </div>
         ) : (
-          <div className="divide-y divide-white/5">
-            {(reviewsQ.data ?? []).map((r) => {
-              const meta = verdictMeta[r.verdict];
+          <div className="p-4 grid gap-4 md:grid-cols-2">
+            {grouped.map((g) => {
+              const latest = g.reviews[0];
+              const meta = verdictMeta[latest.verdict];
               const Icon = meta.icon;
               return (
-                <div key={r.id} className="p-4 space-y-2">
+                <div key={g.campaign_id} className="glass rounded-xl p-4 space-y-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className={`inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-full border shrink-0 ${meta.cls}`}>
                         <Icon className="h-3.5 w-3.5" /> {meta.label}
                       </span>
-                      <p className="font-medium truncate">{r.campaign_name ?? r.campaign_id.slice(0, 8)}</p>
+                      <p className="font-medium truncate">{latest.campaign_name ?? g.campaign_id.slice(0, 8)}</p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[10px] text-muted-foreground">
-                        {new Date(r.created_at).toLocaleString("pt-BR")}
-                      </span>
-                      <Button
-                        variant="glass"
-                        size="sm"
-                        className="h-7 text-[11px]"
-                        disabled={reviewMut.isPending}
-                        onClick={() => reviewMut.mutate(r.campaign_id)}
-                      >
-                        <RefreshCw className="h-3 w-3" /> Reavaliar
-                      </Button>
-                    </div>
+                    <Button
+                      variant="glass"
+                      size="sm"
+                      className="h-7 text-[11px]"
+                      disabled={reviewMut.isPending}
+                      onClick={() => reviewMut.mutate(g.campaign_id)}
+                    >
+                      <RefreshCw className="h-3 w-3" /> Reavaliar
+                    </Button>
                   </div>
-                  <p className="text-sm">{r.summary}</p>
-                  {r.recommendations.length > 0 && (
+                  <p className="text-[10px] text-muted-foreground">
+                    Atualizado em {new Date(latest.created_at).toLocaleString("pt-BR")}
+                  </p>
+                  <p className="text-sm">{latest.summary}</p>
+                  {latest.recommendations.length > 0 && (
                     <ul className="text-xs text-muted-foreground space-y-1 pl-4 list-disc">
-                      {r.recommendations.map((rec, i) => <li key={i}>{rec}</li>)}
+                      {latest.recommendations.map((rec, i) => <li key={i}>{rec}</li>)}
                     </ul>
+                  )}
+                  {g.reviews.length > 1 && (
+                    <details className="pt-1">
+                      <summary className="text-[11px] text-muted-foreground cursor-pointer">
+                        Atualizações anteriores ({g.reviews.length - 1})
+                      </summary>
+                      <div className="mt-2 space-y-2 border-l border-white/10 pl-3">
+                        {g.reviews.slice(1, 6).map((r) => (
+                          <div key={r.id} className="text-[11px]">
+                            <span className="text-muted-foreground">
+                              {new Date(r.created_at).toLocaleString("pt-BR")} · {verdictMeta[r.verdict].label}
+                            </span>
+                            <p>{r.summary}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
                   )}
                 </div>
               );
@@ -2188,6 +2433,7 @@ function AIReviewsSection() {
           </div>
         )}
       </section>
+
     </div>
   );
 }
