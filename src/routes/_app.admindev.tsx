@@ -1542,7 +1542,13 @@ function AccessRequestsSection() {
                   {new Date(r.created_at).toLocaleString("pt-BR")}
                   {r.reviewed_at && r.status !== "pending" && ` · revisado em ${new Date(r.reviewed_at).toLocaleString("pt-BR")}`}
                 </p>
+                {r.status === "approved" && r.reviewed_at && (
+                  <div className="mt-1">
+                    <AccessElapsedClock since={r.reviewed_at} />
+                  </div>
+                )}
               </div>
+
               <div className="flex items-center gap-2">
                 <span className={`text-[11px] px-2 py-1 rounded-full border ${
                   r.status === "approved" ? "border-success/40 text-success bg-success/10" :
