@@ -32,6 +32,7 @@ import {
   adminApproveAccessRequest,
   adminDenyAccessRequest,
   adminListAllClients,
+  adminArchiveCampaign,
   adminSetUserStatus,
   adminAdjustBalance,
   adminUpdateProfile,
