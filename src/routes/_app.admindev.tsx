@@ -2338,48 +2338,67 @@ function AIReviewsSection() {
 
       <section className="glass-strong rounded-2xl overflow-hidden">
         <div className="p-5 border-b border-white/5">
-          <h2 className="font-semibold">Últimas análises</h2>
+          <h2 className="font-semibold">Análises por campanha</h2>
+          <p className="text-xs text-muted-foreground">
+            Uma caixinha por campanha: mostra a avaliação atual e, abaixo, as atualizações recentes dela.
+          </p>
         </div>
         {reviewsQ.isLoading ? (
           <div className="p-8 text-center text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin mx-auto" /></div>
-        ) : !(reviewsQ.data ?? []).length ? (
+        ) : !grouped.length ? (
           <div className="p-8 text-center text-sm text-muted-foreground">
             Nenhuma análise ainda. Vincule campanhas ao Meta e aguarde o próximo ciclo, ou analise manualmente acima.
           </div>
         ) : (
-          <div className="divide-y divide-white/5">
-            {(reviewsQ.data ?? []).map((r) => {
-              const meta = verdictMeta[r.verdict];
+          <div className="p-4 grid gap-4 md:grid-cols-2">
+            {grouped.map((g) => {
+              const latest = g.reviews[0];
+              const meta = verdictMeta[latest.verdict];
               const Icon = meta.icon;
               return (
-                <div key={r.id} className="p-4 space-y-2">
+                <div key={g.campaign_id} className="glass rounded-xl p-4 space-y-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className={`inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-full border shrink-0 ${meta.cls}`}>
                         <Icon className="h-3.5 w-3.5" /> {meta.label}
                       </span>
-                      <p className="font-medium truncate">{r.campaign_name ?? r.campaign_id.slice(0, 8)}</p>
+                      <p className="font-medium truncate">{latest.campaign_name ?? g.campaign_id.slice(0, 8)}</p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[10px] text-muted-foreground">
-                        {new Date(r.created_at).toLocaleString("pt-BR")}
-                      </span>
-                      <Button
-                        variant="glass"
-                        size="sm"
-                        className="h-7 text-[11px]"
-                        disabled={reviewMut.isPending}
-                        onClick={() => reviewMut.mutate(r.campaign_id)}
-                      >
-                        <RefreshCw className="h-3 w-3" /> Reavaliar
-                      </Button>
-                    </div>
+                    <Button
+                      variant="glass"
+                      size="sm"
+                      className="h-7 text-[11px]"
+                      disabled={reviewMut.isPending}
+                      onClick={() => reviewMut.mutate(g.campaign_id)}
+                    >
+                      <RefreshCw className="h-3 w-3" /> Reavaliar
+                    </Button>
                   </div>
-                  <p className="text-sm">{r.summary}</p>
-                  {r.recommendations.length > 0 && (
+                  <p className="text-[10px] text-muted-foreground">
+                    Atualizado em {new Date(latest.created_at).toLocaleString("pt-BR")}
+                  </p>
+                  <p className="text-sm">{latest.summary}</p>
+                  {latest.recommendations.length > 0 && (
                     <ul className="text-xs text-muted-foreground space-y-1 pl-4 list-disc">
-                      {r.recommendations.map((rec, i) => <li key={i}>{rec}</li>)}
+                      {latest.recommendations.map((rec, i) => <li key={i}>{rec}</li>)}
                     </ul>
+                  )}
+                  {g.reviews.length > 1 && (
+                    <details className="pt-1">
+                      <summary className="text-[11px] text-muted-foreground cursor-pointer">
+                        Atualizações anteriores ({g.reviews.length - 1})
+                      </summary>
+                      <div className="mt-2 space-y-2 border-l border-white/10 pl-3">
+                        {g.reviews.slice(1, 6).map((r) => (
+                          <div key={r.id} className="text-[11px]">
+                            <span className="text-muted-foreground">
+                              {new Date(r.created_at).toLocaleString("pt-BR")} · {verdictMeta[r.verdict].label}
+                            </span>
+                            <p>{r.summary}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
                   )}
                 </div>
               );
@@ -2387,6 +2406,7 @@ function AIReviewsSection() {
           </div>
         )}
       </section>
+
     </div>
   );
 }
