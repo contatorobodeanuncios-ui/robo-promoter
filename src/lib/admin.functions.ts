@@ -178,6 +178,38 @@ export const adminListCampaigns = createServerFn({ method: "GET" })
     });
   });
 
+// ============ Arquivamento de campanhas (admin) ============
+// "Apagar" e "Aguardando pagamento" não deletam nada: só tiram a campanha da
+// lista principal e a jogam para a aba de arquivadas correspondente.
+export const adminArchiveCampaign = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      id: z.string().uuid(),
+      reason: z.enum(["deleted", "awaiting_payment"]).nullable(),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const supabaseAdmin = await getSupabaseAdmin();
+    const { error } = await supabaseAdmin
+      .from("campaigns")
+      .update({
+        archived_at: data.reason ? new Date().toISOString() : null,
+        archived_reason: data.reason,
+        archived_by: data.reason ? context.userId : null,
+      } as never)
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    await supabaseAdmin.from("admin_audit_log").insert({
+      admin_email: (context.claims as { email?: string })?.email ?? "",
+      action: data.reason ? `campaign_archive_${data.reason}` : "campaign_unarchive",
+      target_type: "campaign",
+      target_id: data.id,
+    });
+    return { ok: true };
+  });
+
 
 export const adminSetCampaignStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
