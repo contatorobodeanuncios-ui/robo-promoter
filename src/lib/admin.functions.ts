@@ -165,6 +165,7 @@ export const adminListCampaigns = createServerFn({ method: "GET" })
         scheduled_start_at: c.scheduled_start_at ?? null,
         scheduled_end_at: c.scheduled_end_at ?? null,
         media_type: ((c as { media_type?: string }).media_type ?? "image") as CampaignMediaType,
+        media: parseMedia((c as { media?: unknown }).media),
         archived_at: (c as { archived_at?: string | null }).archived_at ?? null,
         archived_reason:
           ((c as { archived_reason?: string | null }).archived_reason ?? null) as
