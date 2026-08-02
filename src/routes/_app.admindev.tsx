@@ -474,30 +474,38 @@ function AdminDevPage() {
         </nav>
       </header>
 
-      <Tabs defaultValue="access" className="w-full">
+      <Tabs value={tab} onValueChange={setTab} className="w-full">
         <TabsList className="flex flex-wrap h-auto gap-1 bg-transparent p-0 justify-start">
           <TabsTrigger value="access" className="gap-1.5">
             <UserPlus className="h-3.5 w-3.5" /> Solicitações de Acesso
+            <NotifyDot show={hasNew("access")} />
           </TabsTrigger>
           <TabsTrigger value="payments" className="gap-1.5">
             <CreditCard className="h-3.5 w-3.5" /> Solicitações de Pagamento
+            <NotifyDot show={hasNew("payments")} />
           </TabsTrigger>
           <TabsTrigger value="settings" className="gap-1.5">
             <Settings className="h-3.5 w-3.5" /> Configurações Internas
+            <NotifyDot show={hasNew("settings")} />
           </TabsTrigger>
           <TabsTrigger value="campaigns" className="gap-1.5">
             <Megaphone className="h-3.5 w-3.5" /> Campanhas dos Clientes
+            <NotifyDot show={hasNew("campaigns")} />
           </TabsTrigger>
           <TabsTrigger value="clients" className="gap-1.5">
             <Users className="h-3.5 w-3.5" /> Todos os Clientes
+            <NotifyDot show={hasNew("clients")} />
           </TabsTrigger>
           <TabsTrigger value="ai" className="gap-1.5">
             <Sparkles className="h-3.5 w-3.5" /> IA de Métricas
+            <NotifyDot show={hasNew("ai")} />
           </TabsTrigger>
           <TabsTrigger value="metaaudit" className="gap-1.5">
             <History className="h-3.5 w-3.5" /> Auditoria Meta
+            <NotifyDot show={hasNew("metaaudit")} />
           </TabsTrigger>
         </TabsList>
+
 
         {/* ============ Aba: Solicitações de Acesso ============ */}
         <TabsContent value="access" className="space-y-6 mt-6">
