@@ -2067,7 +2067,9 @@ function SupportUnreadBadge() {
     };
   }, [qc]);
 
-  const count = (q.data ?? []).filter((c) => c.unread_by_admin).length;
+  // Só conta como novidade quando existe mensagem de verdade — conversa aberta
+  // sem nenhuma mensagem não gera notificação.
+  const count = (q.data ?? []).filter((c) => c.unread_by_admin && !!c.last_message_at).length;
   if (!count) return null;
 
   return (
