@@ -152,6 +152,53 @@ function ErrorHint({ message }: { message: string | null | undefined }) {
   );
 }
 
+// ============ Relógio: há quanto tempo o acesso foi liberado ============
+// Conta a partir do momento em que o admin aprovou (reviewed_at). Atualiza
+// sozinho a cada minuto, mostrando ex.: "22 h 52 min".
+function formatElapsed(fromIso: string, nowMs: number) {
+  const diff = Math.max(0, nowMs - new Date(fromIso).getTime());
+  const totalMin = Math.floor(diff / 60000);
+  const days = Math.floor(totalMin / 1440);
+  const hours = Math.floor((totalMin % 1440) / 60);
+  const minutes = totalMin % 60;
+  if (days > 0) return `${days} d ${hours} h ${minutes} min`;
+  if (hours > 0) return `${hours} h ${minutes} min`;
+  return `${minutes} min`;
+}
+
+function AccessElapsedClock({ since }: { since: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full border border-primary/30 bg-primary/10 text-primary tabular-nums"
+      title={`Acesso liberado em ${new Date(since).toLocaleString("pt-BR")}`}
+    >
+      <Clock className="h-3 w-3" /> com acesso há {formatElapsed(since, now)}
+    </span>
+  );
+}
+
+// ============ Bolinha de notificação nas abas ============
+const seenStorageKey = (tab: string) => `admindev-seen-${tab}`;
+
+function readSeen(tab: string): string {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(seenStorageKey(tab)) ?? "";
+}
+
+function NotifyDot({ show }: { show: boolean }) {
+  if (!show) return null;
+  return (
+    <span className="ml-1 h-2 w-2 rounded-full bg-destructive shadow-[0_0_6px_var(--color-destructive)] inline-block" />
+  );
+}
+
+
+
 function AdminDevPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
