@@ -66,8 +66,11 @@ function maskCpfCnpj(digitsOnly: string): string {
 function PaymentPage() {
   const { topup, budget, days, name, campaignId } = useSearch({ from: "/_app/payment" });
   const nav = useNavigate();
-  const amount = topup ?? (budget && days ? Math.round(budget * days) : 0);
+  // Campanha: verba de veiculação + taxa de serviço. Recarga de saldo não tem taxa.
+  const pricing = budget && days ? campaignPricing(budget, days) : null;
+  const amount = topup ?? (pricing ? pricing.total : 0);
   const isCampaign = !!campaignId;
+
 
   const createFn = useServerFn(createPaymentRequest);
   const statusFn = useServerFn(getPaymentRequestStatus);
