@@ -639,11 +639,28 @@ function CreateWizard() {
                   <p className="font-semibold">{Math.round(budget * days * 2.6).toLocaleString("pt-BR")}</p>
                 </div>
                 <div className="pt-3">
-                  <p className="text-xs text-muted-foreground">Investimento total</p>
-                  <p className="font-semibold">R$ {(budget * days).toLocaleString("pt-BR")}</p>
+                  <p className="text-xs text-muted-foreground">Total a ser cobrado</p>
+                  <p className="font-semibold">{fmtMoney(pricing.total)}</p>
                 </div>
               </div>
-            </div>
+
+              <div className="rounded-xl border border-white/10 bg-background/30 p-4 space-y-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Orçamento Meta Ads</span>
+                  <span className="tabular-nums font-medium">{fmtMoney(pricing.metaBudget)}</span>
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-muted-foreground">{SERVICE_FEE_LABEL}</span>
+                  <span className="tabular-nums font-medium">{fmtMoney(pricing.serviceFee)}</span>
+                </div>
+                <div className="flex items-center justify-between border-t border-white/10 pt-2">
+                  <span className="font-semibold">
+                    {fundingType === "wallet" ? "Total a ser debitado" : "Total a ser cobrado"}
+                  </span>
+                  <span className="tabular-nums font-bold">{fmtMoney(pricing.total)}</span>
+                </div>
+              </div>
+
 
             {/* Item novo: horário exato de início/fim */}
             <div className="glass rounded-2xl p-5 space-y-3">
