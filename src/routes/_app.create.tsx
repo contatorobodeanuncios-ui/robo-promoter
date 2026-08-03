@@ -729,8 +729,10 @@ function CreateWizard() {
                 >
                   <p className="font-semibold text-sm">Saldo do app</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Usa o saldo pré-pago. Sobra vira crédito para a próxima campanha.
+                    Debita {fmtMoney(pricing.total)} do seu saldo pré-pago. Sobra vira crédito
+                    para a próxima campanha.
                   </p>
+
                 </button>
                 <button
                   type="button"
