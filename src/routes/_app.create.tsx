@@ -19,6 +19,8 @@ import { reachRange, fmtRange } from "@/lib/mock-data";
 import { analyzeCreative, type CreativeAnalysis } from "@/lib/ai-analysis.functions";
 import { getCreativeUploadPath, getMaintenanceMode } from "@/lib/data.functions";
 import { useAppStore } from "@/lib/store";
+import { campaignPricing, SERVICE_FEE_LABEL } from "@/lib/pricing";
+
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_app/create")({
@@ -72,6 +74,10 @@ function CreateWizard() {
   const [budget, setBudget] = useState(15);
   const [days, setDays] = useState(7);
   const [fundingType, setFundingType] = useState<"wallet" | "pix_dedicated">("wallet");
+  // Verba de veiculação + taxa (mesma regra para PIX e saldo do app).
+  const pricing = campaignPricing(budget, days);
+  const fmtMoney = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
   const [launching, setLaunching] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   // Item novo: horário exato de início/fim escolhido pelo cliente (opcional).
@@ -244,7 +250,7 @@ function CreateWizard() {
       });
       if (result.paid) {
         toast.success("Anúncio pago com saldo do app!", {
-          description: `R$ ${result.totalCost} debitados. Robô em análise.`,
+          description: `${fmtMoney(result.totalCost)} debitados (${fmtMoney(result.metaBudget)} de veiculação + ${fmtMoney(result.serviceFee)} de taxa). Robô em análise.`,
         });
         nav({ to: "/dashboard" });
       } else {
@@ -255,10 +261,11 @@ function CreateWizard() {
           {
             description:
               fundingType === "pix_dedicated"
-                ? `R$ ${result.totalCost.toFixed(2)} vão diretamente para o anúncio (sem reembolso).`
-                : `Faltam R$ ${result.remainingDue.toFixed(2)} para ativar a campanha.`,
+                ? `${fmtMoney(result.metaBudget)} vão diretamente para o anúncio (sem reembolso). Total do PIX: ${fmtMoney(result.totalCost)}.`
+                : `Faltam ${fmtMoney(result.remainingDue)} para ativar a campanha.`,
           },
         );
+
         nav({
           to: "/payment",
           search: { budget, days, name: headline || "Nova campanha", campaignId: result.campaign.id },
@@ -633,11 +640,31 @@ function CreateWizard() {
                   <p className="font-semibold">{Math.round(budget * days * 2.6).toLocaleString("pt-BR")}</p>
                 </div>
                 <div className="pt-3">
-                  <p className="text-xs text-muted-foreground">Investimento total</p>
-                  <p className="font-semibold">R$ {(budget * days).toLocaleString("pt-BR")}</p>
+                  <p className="text-xs text-muted-foreground">Total a ser cobrado</p>
+                  <p className="font-semibold">{fmtMoney(pricing.total)}</p>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-background/30 p-4 space-y-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Orçamento Meta Ads</span>
+                  <span className="tabular-nums font-medium">{fmtMoney(pricing.metaBudget)}</span>
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-muted-foreground">{SERVICE_FEE_LABEL}</span>
+                  <span className="tabular-nums font-medium">{fmtMoney(pricing.serviceFee)}</span>
+                </div>
+                <div className="flex items-center justify-between border-t border-white/10 pt-2">
+                  <span className="font-semibold">
+                    {fundingType === "wallet" ? "Total a ser debitado" : "Total a ser cobrado"}
+                  </span>
+                  <span className="tabular-nums font-bold">{fmtMoney(pricing.total)}</span>
                 </div>
               </div>
             </div>
+
+
+
 
             {/* Item novo: horário exato de início/fim */}
             <div className="glass rounded-2xl p-5 space-y-3">
@@ -703,8 +730,10 @@ function CreateWizard() {
                 >
                   <p className="font-semibold text-sm">Saldo do app</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Usa o saldo pré-pago. Sobra vira crédito para a próxima campanha.
+                    Debita {fmtMoney(pricing.total)} do seu saldo pré-pago. Sobra vira crédito
+                    para a próxima campanha.
                   </p>
+
                 </button>
                 <button
                   type="button"
@@ -713,8 +742,10 @@ function CreateWizard() {
                 >
                   <p className="font-semibold text-sm">PIX dedicado (100% Meta Ads)</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    O valor vai <strong>direto</strong> para esta campanha. Não entra no saldo.
+                    PIX de {fmtMoney(pricing.total)}: {fmtMoney(pricing.metaBudget)} vão
+                    <strong> direto</strong> para esta campanha. Não entra no saldo.
                   </p>
+
                 </button>
               </div>
               {fundingType === "pix_dedicated" && (

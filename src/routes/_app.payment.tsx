@@ -14,6 +14,8 @@ import {
   getBillingProfile,
   setBillingCpfCnpj,
 } from "@/lib/payment.functions";
+import { campaignPricing, SERVICE_FEE_LABEL } from "@/lib/pricing";
+
 
 const search = z.object({
   topup: z.coerce.number().int().min(20).optional(),
@@ -66,8 +68,11 @@ function maskCpfCnpj(digitsOnly: string): string {
 function PaymentPage() {
   const { topup, budget, days, name, campaignId } = useSearch({ from: "/_app/payment" });
   const nav = useNavigate();
-  const amount = topup ?? (budget && days ? Math.round(budget * days) : 0);
+  // Campanha: verba de veiculação + taxa de serviço. Recarga de saldo não tem taxa.
+  const pricing = budget && days ? campaignPricing(budget, days) : null;
+  const amount = topup ?? (pricing ? pricing.total : 0);
   const isCampaign = !!campaignId;
+
 
   const createFn = useServerFn(createPaymentRequest);
   const statusFn = useServerFn(getPaymentRequestStatus);
@@ -193,9 +198,29 @@ function PaymentPage() {
 
       <div className="glass-strong rounded-2xl p-6 space-y-6">
         <div className="text-center">
-          <p className="text-xs text-muted-foreground uppercase tracking-wider">Valor</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider">
+            {pricing ? "Total a ser cobrado" : "Valor"}
+          </p>
           <p className="text-4xl font-bold text-gradient tabular-nums">{fmtBRL(amount)}</p>
         </div>
+
+        {pricing && !topup && (
+          <div className="rounded-xl border border-white/10 bg-background/30 p-4 space-y-2 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Orçamento Meta Ads</span>
+              <span className="tabular-nums font-medium">{fmtBRL(pricing.metaBudget)}</span>
+            </div>
+            <div className="flex items-start justify-between gap-3">
+              <span className="text-muted-foreground">{SERVICE_FEE_LABEL}</span>
+              <span className="tabular-nums font-medium">{fmtBRL(pricing.serviceFee)}</span>
+            </div>
+            <div className="flex items-center justify-between border-t border-white/10 pt-2">
+              <span className="font-semibold">Total a ser cobrado</span>
+              <span className="tabular-nums font-bold">{fmtBRL(pricing.total)}</span>
+            </div>
+          </div>
+        )}
+
 
         {cpfDigits && stage !== "needsCpf" && (
           <button
