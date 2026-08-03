@@ -269,7 +269,8 @@ export const createCampaign = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<CreateCampaignResult> => {
     await assertNotInMaintenance();
     const { supabase, userId } = context;
-    const totalCost = Math.round(data.budget * data.days);
+    // Orçamento que vai para a Meta + taxa de serviço (mesma regra no PIX e no saldo).
+    const { metaBudget, serviceFee, total: totalCost } = campaignPricing(data.budget, data.days);
     const isPix = data.funding_type === "pix_dedicated";
     const safe = {
       name: data.name,
@@ -289,8 +290,10 @@ export const createCampaign = createServerFn({ method: "POST" })
       cpc: 0,
       status: isPix ? ("aguardando_vinculo_meta" as const) : ("analyzing" as const),
       funding_type: data.funding_type,
-      pix_total_budget: isPix ? totalCost : null,
+      // pix_total_budget é só a verba de veiculação (sem taxa).
+      pix_total_budget: isPix ? metaBudget : null,
       pix_remaining_budget: isPix ? 0 : null,
+      service_fee: serviceFee,
       scheduled_start_at: data.scheduled_start_at ?? null,
       scheduled_end_at: data.scheduled_end_at ?? null,
       media_type: data.media_type,
@@ -310,6 +313,8 @@ export const createCampaign = createServerFn({ method: "POST" })
         paid: false,
         needsPayment: true,
         totalCost,
+        metaBudget,
+        serviceFee,
         remainingDue: totalCost,
       };
     }
@@ -323,9 +328,13 @@ export const createCampaign = createServerFn({ method: "POST" })
     const balance = Number(prof?.balance ?? 0);
 
     if (balance >= totalCost) {
-      const next = balance - totalCost;
+      const next = round2(balance - totalCost);
       await admin.from("profiles").update({ balance: next }).eq("id", userId);
-      await admin.from("campaigns").update({ total_paid: totalCost }).eq("id", row.id);
+      // total_paid guarda o total debitado (verba + taxa); service_fee isola a taxa.
+      await admin
+        .from("campaigns")
+        .update({ total_paid: totalCost, service_fee: serviceFee } as never)
+        .eq("id", row.id);
       // Toda campanha precisa aparecer em "Solicitações de pagamento", mesmo
       // quando foi paga com saldo do app — aqui o registro já nasce como pago.
       await admin.from("payment_requests").insert({
@@ -334,7 +343,7 @@ export const createCampaign = createServerFn({ method: "POST" })
         status: "paid",
         type: "campaign_budget",
         campaign_id: row.id,
-        note: "Pago com saldo do app",
+        note: `Pago com saldo do app (veiculação R$ ${metaBudget.toFixed(2)} + taxa R$ ${serviceFee.toFixed(2)})`,
         approved_at: new Date().toISOString(),
       } as never);
       const fresh = { ...(row as unknown as DbCampaign), total_paid: totalCost };
@@ -343,6 +352,8 @@ export const createCampaign = createServerFn({ method: "POST" })
         paid: true,
         needsPayment: false,
         totalCost,
+        metaBudget,
+        serviceFee,
         remainingDue: 0,
       };
     }
@@ -353,8 +364,11 @@ export const createCampaign = createServerFn({ method: "POST" })
       paid: false,
       needsPayment: true,
       totalCost,
-      remainingDue: totalCost - balance,
+      metaBudget,
+      serviceFee,
+      remainingDue: round2(totalCost - balance),
     };
+
   });
 
 const updateInput = z.object({
