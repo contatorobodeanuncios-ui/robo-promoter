@@ -240,8 +240,11 @@ export interface CreateCampaignResult {
   paid: boolean;
   needsPayment: boolean;
   totalCost: number;
+  metaBudget: number;
+  serviceFee: number;
   remainingDue: number;
 }
+
 
 // Verifica o modo de manutenção antes de criar campanha — item novo.
 async function assertNotInMaintenance() {
