@@ -741,8 +741,10 @@ function CreateWizard() {
                 >
                   <p className="font-semibold text-sm">PIX dedicado (100% Meta Ads)</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    O valor vai <strong>direto</strong> para esta campanha. Não entra no saldo.
+                    PIX de {fmtMoney(pricing.total)}: {fmtMoney(pricing.metaBudget)} vão
+                    <strong> direto</strong> para esta campanha. Não entra no saldo.
                   </p>
+
                 </button>
               </div>
               {fundingType === "pix_dedicated" && (
