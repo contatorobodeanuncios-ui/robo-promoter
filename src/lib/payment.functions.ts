@@ -378,20 +378,26 @@ async function creditApprovedPayment(params: {
   if (isCampaign && params.campaignId) {
     const { data: camp } = await admin
       .from("campaigns")
-      .select("id, pix_remaining_budget, pix_total_budget")
+      .select("id, pix_remaining_budget, pix_total_budget, budget, days")
       .eq("id", params.campaignId)
       .maybeSingle();
+    // O valor pago inclui a taxa de serviço. Só a verba de veiculação vai
+    // para o orçamento da campanha; o restante fica registrado como taxa.
+    const pricing = campaignPricing(Number(camp?.budget ?? 0), Number(camp?.days ?? 0));
+    const metaBudget = pricing.metaBudget > 0 ? pricing.metaBudget : round2(params.amount / 1.15);
+    const serviceFee = round2(Math.max(0, params.amount - metaBudget));
     const currentRemaining = Number(camp?.pix_remaining_budget ?? 0);
-    const currentTotal = Number(camp?.pix_total_budget ?? 0);
     await admin
       .from("campaigns")
       .update({
-        pix_remaining_budget: currentRemaining + params.amount,
-        pix_total_budget: currentTotal > 0 ? currentTotal : params.amount,
+        pix_remaining_budget: round2(currentRemaining + metaBudget),
+        pix_total_budget: metaBudget,
+        service_fee: serviceFee,
         total_paid: params.amount,
         status: "rodando",
       } as never)
       .eq("id", params.campaignId);
+
   } else {
     const { data: profile } = await admin
       .from("profiles")
