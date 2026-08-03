@@ -411,7 +411,9 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
     z.object({
-      amount: z.number().int().min(20).max(100000),
+      // Aceita centavos: o total da campanha inclui a taxa de serviço.
+      amount: z.number().min(20).max(100000),
+
       campaignId: z.string().uuid().optional(),
       billingType: z.enum(["PIX", "CREDIT_CARD"]).default("PIX"),
       card: cardInputSchema.optional(),
