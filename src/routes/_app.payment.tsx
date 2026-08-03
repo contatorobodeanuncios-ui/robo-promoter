@@ -14,6 +14,8 @@ import {
   getBillingProfile,
   setBillingCpfCnpj,
 } from "@/lib/payment.functions";
+import { campaignPricing, SERVICE_FEE_LABEL } from "@/lib/pricing";
+
 
 const search = z.object({
   topup: z.coerce.number().int().min(20).optional(),
