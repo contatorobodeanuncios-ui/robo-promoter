@@ -660,6 +660,9 @@ function CreateWizard() {
                   <span className="tabular-nums font-bold">{fmtMoney(pricing.total)}</span>
                 </div>
               </div>
+            </div>
+
+
 
 
             {/* Item novo: horário exato de início/fim */}
