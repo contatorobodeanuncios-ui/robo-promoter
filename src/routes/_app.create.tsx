@@ -19,6 +19,8 @@ import { reachRange, fmtRange } from "@/lib/mock-data";
 import { analyzeCreative, type CreativeAnalysis } from "@/lib/ai-analysis.functions";
 import { getCreativeUploadPath, getMaintenanceMode } from "@/lib/data.functions";
 import { useAppStore } from "@/lib/store";
+import { campaignPricing, SERVICE_FEE_LABEL } from "@/lib/pricing";
+
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_app/create")({
