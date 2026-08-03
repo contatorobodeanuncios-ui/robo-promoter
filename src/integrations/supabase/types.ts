@@ -338,6 +338,7 @@ export type Database = {
           revenue: number
           scheduled_end_at: string | null
           scheduled_start_at: string | null
+          service_fee: number
           spent: number
           started_at: string | null
           started_running_at: string | null
@@ -389,6 +390,7 @@ export type Database = {
           revenue?: number
           scheduled_end_at?: string | null
           scheduled_start_at?: string | null
+          service_fee?: number
           spent?: number
           started_at?: string | null
           started_running_at?: string | null
@@ -440,6 +442,7 @@ export type Database = {
           revenue?: number
           scheduled_end_at?: string | null
           scheduled_start_at?: string | null
+          service_fee?: number
           spent?: number
           started_at?: string | null
           started_running_at?: string | null
