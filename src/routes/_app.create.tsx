@@ -74,6 +74,10 @@ function CreateWizard() {
   const [budget, setBudget] = useState(15);
   const [days, setDays] = useState(7);
   const [fundingType, setFundingType] = useState<"wallet" | "pix_dedicated">("wallet");
+  // Verba de veiculação + taxa (mesma regra para PIX e saldo do app).
+  const pricing = campaignPricing(budget, days);
+  const fmtMoney = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
   const [launching, setLaunching] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   // Item novo: horário exato de início/fim escolhido pelo cliente (opcional).
