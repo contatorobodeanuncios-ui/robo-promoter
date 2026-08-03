@@ -250,7 +250,7 @@ function CreateWizard() {
       });
       if (result.paid) {
         toast.success("Anúncio pago com saldo do app!", {
-          description: `R$ ${result.totalCost} debitados. Robô em análise.`,
+          description: `${fmtMoney(result.totalCost)} debitados (${fmtMoney(result.metaBudget)} de veiculação + ${fmtMoney(result.serviceFee)} de taxa). Robô em análise.`,
         });
         nav({ to: "/dashboard" });
       } else {
@@ -261,10 +261,11 @@ function CreateWizard() {
           {
             description:
               fundingType === "pix_dedicated"
-                ? `R$ ${result.totalCost.toFixed(2)} vão diretamente para o anúncio (sem reembolso).`
-                : `Faltam R$ ${result.remainingDue.toFixed(2)} para ativar a campanha.`,
+                ? `${fmtMoney(result.metaBudget)} vão diretamente para o anúncio (sem reembolso). Total do PIX: ${fmtMoney(result.totalCost)}.`
+                : `Faltam ${fmtMoney(result.remainingDue)} para ativar a campanha.`,
           },
         );
+
         nav({
           to: "/payment",
           search: { budget, days, name: headline || "Nova campanha", campaignId: result.campaign.id },
