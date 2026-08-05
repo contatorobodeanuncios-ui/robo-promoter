@@ -79,7 +79,9 @@ function ExecPage() {
 
   const chartData = d
     ? [
-        { name: "Receita", value: d.revenue, color: "#10b981" },
+        { name: "Orçamento Meta", value: d.meta_budget, color: "#6366f1" },
+        { name: "Lucro plataforma", value: d.platform_profit, color: "#e6b422" },
+        { name: "Receita bruta", value: d.revenue, color: "#10b981" },
         { name: "Gasto (Ads)", value: d.total_spent, color: "#ef4444" },
         { name: "Ticket médio", value: d.avg_ticket, color: "#38bdf8" },
       ]
@@ -112,7 +114,21 @@ function ExecPage() {
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Card icon={DollarSign} tone="positive" label="Receita" value={fmtBRL(d.revenue)} sub={`Ticket médio ${fmtBRL(d.avg_ticket)}`} />
+            <Card
+              icon={PieChart}
+              tone="info"
+              label="Orçamento Meta (anúncios)"
+              value={fmtBRL(d.meta_budget)}
+              sub="dinheiro destinado à veiculação"
+            />
+            <Card
+              icon={DollarSign}
+              tone="positive"
+              label="Lucro da plataforma"
+              value={fmtBRL(d.platform_profit)}
+              sub={`Serviço ${fmtBRL(d.service_fees)} · Plataforma ${fmtBRL(d.platform_fees)}`}
+            />
+            <Card icon={DollarSign} tone="positive" label="Receita bruta" value={fmtBRL(d.revenue)} sub={`Ticket médio ${fmtBRL(d.avg_ticket)}`} />
             <Card icon={TrendingUp} tone="info" label="Conversão" value={`${(d.conversion_rate * 100).toFixed(1)}%`} sub="aprovados / total" />
             <Card icon={Users} label="Usuários" value={String(d.total_users)} sub={`${d.active_users} aprovados`} />
             <Card icon={Zap} tone="positive" label="Campanhas rodando" value={String(d.campaigns_running)} />
