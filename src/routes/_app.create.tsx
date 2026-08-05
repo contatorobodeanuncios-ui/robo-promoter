@@ -251,7 +251,7 @@ function CreateWizard() {
       });
       if (result.paid) {
         toast.success("Anúncio pago com saldo do app!", {
-          description: `${fmtMoney(result.totalCost)} debitados (${fmtMoney(result.metaBudget)} de veiculação + ${fmtMoney(result.serviceFee)} de taxa). Robô em análise.`,
+          description: `${fmtMoney(result.totalCost)} debitados (${fmtMoney(result.metaBudget)} de veiculação + ${fmtMoney(result.serviceFee)} de taxas). Robô em análise.`,
         });
         nav({ to: "/dashboard" });
       } else {

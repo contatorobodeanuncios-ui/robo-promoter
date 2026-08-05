@@ -15,6 +15,7 @@ import {
   setBillingCpfCnpj,
 } from "@/lib/payment.functions";
 import { campaignPricing } from "@/lib/pricing";
+import { useAppStore } from "@/lib/store";
 
 
 const search = z.object({
