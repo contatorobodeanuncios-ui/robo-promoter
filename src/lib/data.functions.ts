@@ -386,7 +386,7 @@ export const createCampaign = createServerFn({ method: "POST" })
         needsPayment: false,
         totalCost,
         metaBudget,
-        serviceFee,
+        serviceFee: feesTotal,
         remainingDue: 0,
       };
     }
@@ -398,7 +398,7 @@ export const createCampaign = createServerFn({ method: "POST" })
       needsPayment: true,
       totalCost,
       metaBudget,
-      serviceFee,
+      serviceFee: feesTotal,
       remainingDue: round2(totalCost - balance),
     };
 
