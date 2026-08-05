@@ -63,7 +63,7 @@ import {
 } from "@/lib/payment.functions";
 import { adminListConversations } from "@/lib/support.functions";
 import { supabase } from "@/integrations/supabase/client";
-import { Shield, Zap, Hand, Eye, X, Rocket, Loader2, Link2, Check, Ban, CreditCard, AlertTriangle, Trash2, PowerOff, UserPlus, Copy, Settings, Users, Megaphone, Wallet, Pencil, UserCheck, KeyRound, Sparkles, History, ThumbsUp, ThumbsDown, HelpCircle, RefreshCw, Download, Clock, Archive, ArchiveRestore } from "lucide-react";
+import { Shield, Zap, Hand, Eye, X, Rocket, Loader2, Link2, Check, Ban, CreditCard, AlertTriangle, Trash2, PowerOff, UserPlus, Copy, Settings, Users, Megaphone, Wallet, Pencil, UserCheck, KeyRound, Sparkles, History, ThumbsUp, ThumbsDown, HelpCircle, RefreshCw, Download, Clock, Archive, ArchiveRestore, Search, Crown, Timer } from "lucide-react";
 
 export const Route = createFileRoute("/_app/admindev")({
   ssr: false,
@@ -1558,6 +1558,85 @@ function AutoApproveToggle() {
   );
 }
 
+// ============ Nível do usuário: FREE / PRO / TESTE PRO ============
+function PlanButtons({
+  userId,
+  plan,
+  trialDays,
+  trialStartedAt,
+}: {
+  userId: string;
+  plan: "free" | "pro" | "trial_pro";
+  trialDays: number | null;
+  trialStartedAt: string | null;
+}) {
+  const qc = useQueryClient();
+  const fn = useServerFn(adminSetUserPlan);
+  const mut = useMutation({
+    mutationFn: (v: { plan: "free" | "pro" | "trial_pro"; trial_days?: number }) =>
+      fn({ data: { user_id: userId, ...v } }),
+    onSuccess: (_r, v) => {
+      qc.invalidateQueries({ queryKey: ["admin-access-requests"] });
+      qc.invalidateQueries({ queryKey: ["admin-all-clients"] });
+      toast.success(
+        v.plan === "free" ? "Usuário definido como FREE" : v.plan === "pro" ? "Usuário definido como PRO" : "Teste PRO liberado",
+      );
+    },
+    onError: (e) => toast.error(String(e)),
+  });
+
+  const daysLeft = (() => {
+    if (plan !== "trial_pro" || !trialStartedAt || !trialDays) return 0;
+    const end = new Date(trialStartedAt).getTime() + trialDays * 86_400_000;
+    return Math.max(0, Math.ceil((end - Date.now()) / 86_400_000));
+  })();
+
+  const base = "text-[11px] font-semibold px-3 py-1 rounded-full border transition disabled:opacity-50";
+  const off = "border-white/15 text-muted-foreground hover:border-white/30";
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      <button
+        type="button"
+        disabled={mut.isPending}
+        onClick={() => mut.mutate({ plan: "free" })}
+        className={`${base} ${plan === "free" ? "border-sky-400/60 bg-sky-500/20 text-sky-200" : off}`}
+      >
+        FREE
+      </button>
+      <button
+        type="button"
+        disabled={mut.isPending}
+        onClick={() => mut.mutate({ plan: "pro" })}
+        className={`${base} ${plan === "pro" ? "border-[#e6b422]/70 bg-[#e6b422]/20 text-[#f2d377]" : off}`}
+      >
+        <span className="inline-flex items-center gap-1">
+          <Crown className="h-3 w-3" /> PRO
+        </span>
+      </button>
+      <button
+        type="button"
+        disabled={mut.isPending}
+        onClick={() => {
+          const raw = window.prompt("Liberar TESTE PRO por quantos dias?", String(trialDays ?? 7));
+          if (raw === null) return;
+          const n = Math.floor(Number(raw));
+          if (!Number.isFinite(n) || n < 1 || n > 365) {
+            toast.error("Informe um número de dias entre 1 e 365");
+            return;
+          }
+          mut.mutate({ plan: "trial_pro", trial_days: n });
+        }}
+        className={`${base} ${plan === "trial_pro" ? "border-[#e6b422]/70 bg-[#e6b422]/20 text-[#f2d377]" : off}`}
+      >
+        <span className="inline-flex items-center gap-1">
+          <Timer className="h-3 w-3" /> {plan === "trial_pro" ? `TESTE PRO · ${daysLeft}d` : "Liberar Teste"}
+        </span>
+      </button>
+    </div>
+  );
+}
+
 function AccessRequestsSection() {
   const qc = useQueryClient();
   const listFn = useServerFn(adminListAccessRequests);
@@ -1583,7 +1662,11 @@ function AccessRequestsSection() {
       toast.info("Solicitação recusada");
     },
   });
+  const search = useAdminSearch();
   const pending = (q.data ?? []).filter((r) => r.status === "pending");
+  const rows = (q.data ?? []).filter((r) =>
+    matchesSearch(search, [r.display_name, r.email, r.user_id, r.phone]),
+  );
   return (
     <section className="glass-strong rounded-2xl overflow-hidden border border-primary/20">
       <div className="p-5 border-b border-white/5 flex items-center justify-between">
@@ -1598,11 +1681,11 @@ function AccessRequestsSection() {
       </div>
       {q.isLoading ? (
         <div className="p-8 text-center text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin mx-auto" /></div>
-      ) : !(q.data ?? []).length ? (
+      ) : !rows.length ? (
         <div className="p-8 text-center text-sm text-muted-foreground">Nenhuma solicitação registrada.</div>
       ) : (
         <div className="divide-y divide-white/5">
-          {(q.data ?? []).map((r) => (
+          {rows.map((r) => (
             <div key={r.id} className="p-4 flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="font-medium">{r.display_name ?? "(sem nome)"}</p>
@@ -1616,6 +1699,14 @@ function AccessRequestsSection() {
                     <AccessElapsedClock since={r.reviewed_at} />
                   </div>
                 )}
+                <div className="mt-2">
+                  <PlanButtons
+                    userId={r.user_id}
+                    plan={r.plan}
+                    trialDays={r.trial_days}
+                    trialStartedAt={r.trial_started_at ?? r.reviewed_at}
+                  />
+                </div>
               </div>
 
               <div className="flex items-center gap-2">
@@ -1670,8 +1761,11 @@ function AllClientsSection({
     onError: (e) => toast.error("Falha ao atualizar status", { description: String(e) }),
   });
 
+  const search = useAdminSearch();
   const all = clientsQuery.data ?? [];
-  const filtered = all.filter((c) => (filter === "active" ? c.status !== "banned" : c.status === "banned"));
+  const filtered = all
+    .filter((c) => (filter === "active" ? c.status !== "banned" : c.status === "banned"))
+    .filter((c) => matchesSearch(search, [c.display_name, c.email, c.phone, c.id, c.balance]));
 
   return (
     <section className="glass-strong rounded-2xl overflow-hidden">
@@ -1702,6 +1796,7 @@ function AllClientsSection({
                 <th className="px-4 py-3">Nome</th>
                 <th className="px-4 py-3">E-mail</th>
                 <th className="px-4 py-3">Telefone</th>
+                <th className="px-4 py-3">Nível</th>
                 <th className="px-4 py-3 text-right">Saldo</th>
                 <th className="px-4 py-3">Cliente desde</th>
                 <th className="px-4 py-3">Status</th>
@@ -1714,6 +1809,14 @@ function AllClientsSection({
                   <td className="px-4 py-3 font-medium">{c.display_name ?? "—"}</td>
                   <td className="px-4 py-3 text-[11px] text-muted-foreground">{c.email ?? c.id.slice(0, 8)}</td>
                   <td className="px-4 py-3 text-[11px] text-muted-foreground">{c.phone ?? "—"}</td>
+                  <td className="px-4 py-3">
+                    <PlanButtons
+                      userId={c.id}
+                      plan={c.plan}
+                      trialDays={c.trial_days}
+                      trialStartedAt={c.trial_started_at}
+                    />
+                  </td>
                   <td className="px-4 py-3 text-right tabular-nums font-semibold">{fmtBRL(c.balance)}</td>
                   <td className="px-4 py-3 text-[11px] text-muted-foreground">{new Date(c.created_at).toLocaleDateString("pt-BR")}</td>
                   <td className="px-4 py-3">
