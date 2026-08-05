@@ -26,6 +26,7 @@ import {
   adminListWipeEvents,
   getMetaMetricsHealth,
   adminExportCampaignsCSV,
+  adminSetUserPlan,
   adminListAccessRequests,
   getAutoApproveAccess,
   setAutoApproveAccess,
