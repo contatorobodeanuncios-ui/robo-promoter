@@ -9,7 +9,6 @@ import { useUserDisplayName } from "@/components/app/AppShell";
 import { useAppStore, computeSummary } from "@/lib/store";
 import { PushNotificationBanner } from "@/components/app/PushNotificationBanner";
 import { toast } from "sonner";
-import { KIWIFY_PRO_CHECKOUT } from "@/lib/pricing";
 import { PlanBanner } from "@/components/app/PlanBanner";
 
 
