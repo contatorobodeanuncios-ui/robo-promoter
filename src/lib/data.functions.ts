@@ -283,8 +283,25 @@ export const createCampaign = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<CreateCampaignResult> => {
     await assertNotInMaintenance();
     const { supabase, userId } = context;
-    // Orçamento que vai para a Meta + taxa de serviço (mesma regra no PIX e no saldo).
-    const { metaBudget, serviceFee, total: totalCost } = campaignPricing(data.budget, data.days);
+    const admin = await getAdmin();
+    // Nível do usuário define se há taxa de plataforma (FREE) ou não (PRO/TESTE PRO).
+    const { data: planProf } = await admin
+      .from("profiles")
+      .select("plan, trial_days, trial_started_at")
+      .eq("id", userId)
+      .maybeSingle();
+    const plan = effectivePlan(
+      (planProf ?? {}) as { plan?: string | null; trial_days?: number | null; trial_started_at?: string | null },
+    );
+    // Orçamento que vai para a Meta + taxas (mesma regra no PIX e no saldo).
+    const {
+      metaBudget,
+      serviceFee,
+      platformFee,
+      feesTotal,
+      total: totalCost,
+    } = campaignPricing(data.budget, data.days, plan);
+
     const isPix = data.funding_type === "pix_dedicated";
     const safe = {
       name: data.name,
