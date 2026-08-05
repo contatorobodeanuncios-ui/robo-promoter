@@ -14,7 +14,7 @@ import {
   getBillingProfile,
   setBillingCpfCnpj,
 } from "@/lib/payment.functions";
-import { campaignPricing, SERVICE_FEE_LABEL } from "@/lib/pricing";
+import { campaignPricing } from "@/lib/pricing";
 
 
 const search = z.object({
@@ -69,7 +69,8 @@ function PaymentPage() {
   const { topup, budget, days, name, campaignId } = useSearch({ from: "/_app/payment" });
   const nav = useNavigate();
   // Campanha: verba de veiculação + taxa de serviço. Recarga de saldo não tem taxa.
-  const pricing = budget && days ? campaignPricing(budget, days) : null;
+  const plan = useAppStore((s) => s.plan);
+  const pricing = budget && days ? campaignPricing(budget, days, plan) : null;
   const amount = topup ?? (pricing ? pricing.total : 0);
   const isCampaign = !!campaignId;
 
@@ -211,8 +212,8 @@ function PaymentPage() {
               <span className="tabular-nums font-medium">{fmtBRL(pricing.metaBudget)}</span>
             </div>
             <div className="flex items-start justify-between gap-3">
-              <span className="text-muted-foreground">{SERVICE_FEE_LABEL}</span>
-              <span className="tabular-nums font-medium">{fmtBRL(pricing.serviceFee)}</span>
+              <span className="text-muted-foreground">{pricing.feeLabel}</span>
+              <span className="tabular-nums font-medium">{fmtBRL(pricing.feesTotal)}</span>
             </div>
             <div className="flex items-center justify-between border-t border-white/10 pt-2">
               <span className="font-semibold">Total a ser cobrado</span>
