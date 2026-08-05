@@ -728,6 +728,11 @@ export interface PaymentRequestRow {
   status: "pending" | "approved" | "rejected" | "paid";
   asaas_link: string | null;
   created_at: string;
+  /** destino do dinheiro: campanha direta ou recarga de saldo */
+  type: "campaign_budget" | "balance_topup" | null;
+  campaign_id: string | null;
+  client_email: string | null;
+  client_phone: string | null;
 }
 
 export const adminListPayments = createServerFn({ method: "GET" })
@@ -744,17 +749,21 @@ export const adminListPayments = createServerFn({ method: "GET" })
     const userIds = Array.from(new Set((data ?? []).map((r) => r.user_id)));
     const { data: profiles } = await admin
       .from("profiles")
-      .select("id, display_name")
+      .select("id, display_name, email, phone")
       .in("id", userIds.length ? userIds : ["00000000-0000-0000-0000-000000000000"]);
-    const names = new Map((profiles ?? []).map((p) => [p.id, p.display_name]));
+    const byId = new Map((profiles ?? []).map((p) => [p.id, p]));
     return (data ?? []).map((r) => ({
       id: r.id,
       user_id: r.user_id,
-      client_name: names.get(r.user_id) ?? null,
+      client_name: byId.get(r.user_id)?.display_name ?? null,
+      client_email: byId.get(r.user_id)?.email ?? null,
+      client_phone: byId.get(r.user_id)?.phone ?? null,
       amount: Number(r.amount),
       status: r.status,
       asaas_link: r.asaas_link,
       created_at: r.created_at,
+      type: (r.type ?? null) as "campaign_budget" | "balance_topup" | null,
+      campaign_id: r.campaign_id ?? null,
     }));
   });
 
