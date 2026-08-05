@@ -176,15 +176,27 @@ export const getAppData = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
     const [{ data: profile }, { data: campaigns }] = await Promise.all([
-      supabase.from("profiles").select("balance, display_name").eq("id", userId).maybeSingle(),
+      supabase
+        .from("profiles")
+        .select("balance, display_name, plan, trial_days, trial_started_at")
+        .eq("id", userId)
+        .maybeSingle(),
       supabase.from("campaigns").select("*").order("created_at", { ascending: false }),
     ]);
+    const p = (profile ?? {}) as {
+      plan?: string | null;
+      trial_days?: number | null;
+      trial_started_at?: string | null;
+    };
     return {
       balance: profile?.balance ? Number(profile.balance) : 0,
       displayName: profile?.display_name ?? null,
+      plan: effectivePlan(p),
+      trialDaysLeft: trialDaysLeft(p),
       campaigns: (campaigns ?? []).map((c) => mapCampaign(c as unknown as DbCampaign)),
     };
   });
+
 
 // Limites alinhados aos tetos REAIS do próprio Facebook (não um teto artificial
 // do app): imagem até 30MB (spec oficial de anúncio Meta), texto principal até
