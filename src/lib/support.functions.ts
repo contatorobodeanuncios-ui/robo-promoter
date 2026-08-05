@@ -355,6 +355,12 @@ export interface ExecStats {
   campaigns_running: number;
   total_spent: number;
   revenue: number;
+  /** soma dos orçamentos que vão para a Meta (dinheiro de anúncio) */
+  meta_budget: number;
+  /** lucro da plataforma: taxas de serviço + taxa de plataforma */
+  platform_profit: number;
+  service_fees: number;
+  platform_fees: number;
   conversion_rate: number;
   avg_ticket: number;
   open_support: number;
@@ -391,12 +397,29 @@ export const getExecDashboard = createServerFn({ method: "POST" })
         sb.from("profiles").select("*", { count: "exact", head: true }),
         sb.from("profiles").select("*", { count: "exact", head: true }).eq("status", "approved"),
         sb.from("campaigns").select("*", { count: "exact", head: true }).in("status", ["running", "rodando"]),
-        sb.from("campaigns").select("spent, revenue").gte("created_at", fromIso).lte("created_at", toIso),
+        sb
+          .from("campaigns")
+          .select("spent, revenue, budget, days, service_fee, platform_fee")
+          .gte("created_at", fromIso)
+          .lte("created_at", toIso),
         sb.from("payment_requests").select("amount, status").gte("created_at", fromIso).lte("created_at", toIso),
         sb.from("support_conversations").select("*", { count: "exact", head: true }).eq("status", "aberto"),
       ]);
 
-    const spent = (campaignsRes.data ?? []).reduce((s, c) => s + Number(c.spent ?? 0), 0);
+    const camps = (campaignsRes.data ?? []) as Array<{
+      spent?: number | null;
+      budget?: number | null;
+      days?: number | null;
+      service_fee?: number | null;
+      platform_fee?: number | null;
+    }>;
+    const spent = camps.reduce((s, c) => s + Number(c.spent ?? 0), 0);
+    const metaBudgetSum = camps.reduce(
+      (s, c) => s + Number(c.budget ?? 0) * Number(c.days ?? 0),
+      0,
+    );
+    const serviceFees = camps.reduce((s, c) => s + Number(c.service_fee ?? 0), 0);
+    const platformFees = camps.reduce((s, c) => s + Number(c.platform_fee ?? 0), 0);
     const approved = (paymentsRes.data ?? []).filter((p) => p.status === "approved" || p.status === "paid");
     const revenue = approved.reduce((s, p) => s + Number(p.amount ?? 0), 0);
     const total = (paymentsRes.data ?? []).length;
@@ -409,6 +432,10 @@ export const getExecDashboard = createServerFn({ method: "POST" })
       campaigns_running: running ?? 0,
       total_spent: spent,
       revenue,
+      meta_budget: Math.round(metaBudgetSum * 100) / 100,
+      service_fees: Math.round(serviceFees * 100) / 100,
+      platform_fees: Math.round(platformFees * 100) / 100,
+      platform_profit: Math.round((serviceFees + platformFees) * 100) / 100,
       conversion_rate: convRate,
       avg_ticket: avgTicket,
       open_support: supportRes.count ?? 0,
