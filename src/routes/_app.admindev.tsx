@@ -1,7 +1,7 @@
 import { createFileRoute, redirect, useNavigate, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -200,6 +200,27 @@ function NotifyDot({ show }: { show: boolean }) {
 
 
 
+// ============ Busca global do admin ============
+const AdminSearchContext = createContext("");
+const useAdminSearch = () => useContext(AdminSearchContext);
+
+/** Casa o termo digitado com qualquer campo relevante (nome, id, e-mail, telefone, valor). */
+function matchesSearch(term: string, fields: Array<string | number | null | undefined>): boolean {
+  const q = term.trim().toLowerCase();
+  if (!q) return true;
+  const digits = q.replace(/\D/g, "");
+  return fields.some((f) => {
+    if (f === null || f === undefined) return false;
+    const raw = String(f).toLowerCase();
+    if (raw.includes(q)) return true;
+    if (digits.length >= 3) {
+      const fd = raw.replace(/\D/g, "");
+      if (fd && fd.includes(digits)) return true;
+    }
+    return false;
+  });
+}
+
 function AdminDevPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -305,6 +326,7 @@ function AdminDevPage() {
   };
 
   const [tab, setTab] = useState("access");
+  const [search, setSearch] = useState("");
   const [seen, setSeen] = useState<Record<string, string>>({});
   useEffect(() => {
     setSeen(
@@ -354,9 +376,20 @@ function AdminDevPage() {
     awaiting_payment: allCampaigns.filter((c) => c.archived_reason === "awaiting_payment").length,
     deleted: allCampaigns.filter((c) => c.archived_reason === "deleted").length,
   };
-  const visibleCampaigns = allCampaigns.filter((c) =>
-    campaignView === "active" ? !c.archived_reason : c.archived_reason === campaignView,
-  );
+  const visibleCampaigns = allCampaigns
+    .filter((c) => (campaignView === "active" ? !c.archived_reason : c.archived_reason === campaignView))
+    .filter((c) =>
+      matchesSearch(search, [
+        c.client_name,
+        c.client_email,
+        c.user_id,
+        c.id,
+        c.name,
+        c.budget,
+        c.total_paid,
+        c.meta_campaign_id,
+      ]),
+    );
 
 
   const [preview, setPreview] = useState<AdminCampaignRow | null>(null);
@@ -497,6 +530,17 @@ function AdminDevPage() {
         </nav>
       </header>
 
+      <div className="relative">
+        <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar por nome, ID, telefone, e-mail ou valor..."
+          className="w-full rounded-xl bg-white/[0.03] border border-white/10 pl-9 pr-3 py-2.5 text-sm outline-none focus:border-primary/50"
+        />
+      </div>
+
+      <AdminSearchContext.Provider value={search}>
       <Tabs value={tab} onValueChange={setTab} className="w-full">
         <TabsList className="flex flex-wrap h-auto gap-1 bg-transparent p-0 justify-start">
           <TabsTrigger value="access" className="gap-1.5">
@@ -552,6 +596,7 @@ function AdminDevPage() {
                   <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-white/5">
                     <tr>
                       <th className="px-4 py-3">Cliente</th>
+                      <th className="px-4 py-3">Destino</th>
                       <th className="px-4 py-3 text-right">Valor</th>
                       <th className="px-4 py-3">Status</th>
                       <th className="px-4 py-3">Link Asaas</th>
@@ -559,11 +604,34 @@ function AdminDevPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {paymentsQuery.data.map((p) => (
+                    {paymentsQuery.data
+                      .filter((p) =>
+                        matchesSearch(search, [
+                          p.client_name,
+                          p.client_email,
+                          p.client_phone,
+                          p.user_id,
+                          p.id,
+                          p.amount,
+                          p.amount.toFixed(2).replace(".", ","),
+                        ]),
+                      )
+                      .map((p) => (
                       <tr key={p.id} className="border-b border-white/5">
                         <td className="px-4 py-3">
                           <p className="font-medium">{p.client_name ?? "—"}</p>
                           <p className="text-[11px] text-muted-foreground font-mono">{p.user_id.slice(0, 8)}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`text-[11px] px-2 py-1 rounded-full border whitespace-nowrap ${
+                              p.type === "balance_topup"
+                                ? "border-sky-400/40 text-sky-300 bg-sky-400/10"
+                                : "border-primary/40 text-primary bg-primary/10"
+                            }`}
+                          >
+                            {p.type === "balance_topup" ? "Saldo no App" : "Campanha"}
+                          </span>
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums font-semibold">{fmtBRL(p.amount)}</td>
                         <td className="px-4 py-3">
@@ -1111,6 +1179,7 @@ function AdminDevPage() {
           <MetaAuditSection />
         </TabsContent>
       </Tabs>
+      </AdminSearchContext.Provider>
 
       {preview && <FbPreview campaign={preview} onClose={() => setPreview(null)} />}
       {metricsTarget && <EditMetricsDialog campaign={metricsTarget} onClose={() => setMetricsTarget(null)} />}
