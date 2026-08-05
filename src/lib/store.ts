@@ -8,6 +8,7 @@ import {
   type CampaignRow,
   type CreateCampaignResult,
 } from "./data.functions";
+import type { UserPlan } from "./pricing";
 
 export type Campaign = CampaignRow;
 
@@ -15,6 +16,8 @@ const APP_DATA_KEY = ["app-data"] as const;
 
 interface AppState {
   balance: number;
+  plan: UserPlan;
+  trialDaysLeft: number;
   campaigns: Campaign[];
   displayName: string | null;
   addCampaign: (
@@ -54,6 +57,8 @@ export function useAppData(): AppState & { isLoading: boolean } {
 
   return {
     balance: data?.balance ?? 0,
+    plan: (data?.plan ?? "free") as UserPlan,
+    trialDaysLeft: data?.trialDaysLeft ?? 0,
     campaigns: data?.campaigns ?? [],
     displayName: data?.displayName ?? null,
     isLoading,

@@ -332,6 +332,7 @@ export type Database = {
           paused_at: string | null
           pix_remaining_budget: number | null
           pix_total_budget: number | null
+          platform_fee: number
           radius: number
           reach: number
           results: number
@@ -384,6 +385,7 @@ export type Database = {
           paused_at?: string | null
           pix_remaining_budget?: number | null
           pix_total_budget?: number | null
+          platform_fee?: number
           radius?: number
           reach?: number
           results?: number
@@ -436,6 +438,7 @@ export type Database = {
           paused_at?: string | null
           pix_remaining_budget?: number | null
           pix_total_budget?: number | null
+          platform_fee?: number
           radius?: number
           reach?: number
           results?: number
@@ -638,8 +641,11 @@ export type Database = {
           last_active_at: string | null
           notification_prefs: Json
           phone: string | null
+          plan: string
           status: string
           terms_accepted_at: string | null
+          trial_days: number | null
+          trial_started_at: string | null
           updated_at: string
         }
         Insert: {
@@ -654,8 +660,11 @@ export type Database = {
           last_active_at?: string | null
           notification_prefs?: Json
           phone?: string | null
+          plan?: string
           status?: string
           terms_accepted_at?: string | null
+          trial_days?: number | null
+          trial_started_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -670,8 +679,11 @@ export type Database = {
           last_active_at?: string | null
           notification_prefs?: Json
           phone?: string | null
+          plan?: string
           status?: string
           terms_accepted_at?: string | null
+          trial_days?: number | null
+          trial_started_at?: string | null
           updated_at?: string
         }
         Relationships: []

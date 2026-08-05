@@ -1,7 +1,7 @@
 import { createFileRoute, redirect, useNavigate, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,7 @@ import {
   adminListWipeEvents,
   getMetaMetricsHealth,
   adminExportCampaignsCSV,
+  adminSetUserPlan,
   adminListAccessRequests,
   getAutoApproveAccess,
   setAutoApproveAccess,
@@ -63,7 +64,7 @@ import {
 } from "@/lib/payment.functions";
 import { adminListConversations } from "@/lib/support.functions";
 import { supabase } from "@/integrations/supabase/client";
-import { Shield, Zap, Hand, Eye, X, Rocket, Loader2, Link2, Check, Ban, CreditCard, AlertTriangle, Trash2, PowerOff, UserPlus, Copy, Settings, Users, Megaphone, Wallet, Pencil, UserCheck, KeyRound, Sparkles, History, ThumbsUp, ThumbsDown, HelpCircle, RefreshCw, Download, Clock, Archive, ArchiveRestore } from "lucide-react";
+import { Shield, Zap, Hand, Eye, X, Rocket, Loader2, Link2, Check, Ban, CreditCard, AlertTriangle, Trash2, PowerOff, UserPlus, Copy, Settings, Users, Megaphone, Wallet, Pencil, UserCheck, KeyRound, Sparkles, History, ThumbsUp, ThumbsDown, HelpCircle, RefreshCw, Download, Clock, Archive, ArchiveRestore, Search, Crown, Timer } from "lucide-react";
 
 export const Route = createFileRoute("/_app/admindev")({
   ssr: false,
@@ -200,6 +201,27 @@ function NotifyDot({ show }: { show: boolean }) {
 
 
 
+// ============ Busca global do admin ============
+const AdminSearchContext = createContext("");
+const useAdminSearch = () => useContext(AdminSearchContext);
+
+/** Casa o termo digitado com qualquer campo relevante (nome, id, e-mail, telefone, valor). */
+function matchesSearch(term: string, fields: Array<string | number | null | undefined>): boolean {
+  const q = term.trim().toLowerCase();
+  if (!q) return true;
+  const digits = q.replace(/\D/g, "");
+  return fields.some((f) => {
+    if (f === null || f === undefined) return false;
+    const raw = String(f).toLowerCase();
+    if (raw.includes(q)) return true;
+    if (digits.length >= 3) {
+      const fd = raw.replace(/\D/g, "");
+      if (fd && fd.includes(digits)) return true;
+    }
+    return false;
+  });
+}
+
 function AdminDevPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -305,6 +327,7 @@ function AdminDevPage() {
   };
 
   const [tab, setTab] = useState("access");
+  const [search, setSearch] = useState("");
   const [seen, setSeen] = useState<Record<string, string>>({});
   useEffect(() => {
     setSeen(
@@ -354,9 +377,20 @@ function AdminDevPage() {
     awaiting_payment: allCampaigns.filter((c) => c.archived_reason === "awaiting_payment").length,
     deleted: allCampaigns.filter((c) => c.archived_reason === "deleted").length,
   };
-  const visibleCampaigns = allCampaigns.filter((c) =>
-    campaignView === "active" ? !c.archived_reason : c.archived_reason === campaignView,
-  );
+  const visibleCampaigns = allCampaigns
+    .filter((c) => (campaignView === "active" ? !c.archived_reason : c.archived_reason === campaignView))
+    .filter((c) =>
+      matchesSearch(search, [
+        c.client_name,
+        c.client_email,
+        c.user_id,
+        c.id,
+        c.name,
+        c.budget,
+        c.total_paid,
+        c.meta_campaign_id,
+      ]),
+    );
 
 
   const [preview, setPreview] = useState<AdminCampaignRow | null>(null);
@@ -497,6 +531,17 @@ function AdminDevPage() {
         </nav>
       </header>
 
+      <div className="relative">
+        <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar por nome, ID, telefone, e-mail ou valor..."
+          className="w-full rounded-xl bg-white/[0.03] border border-white/10 pl-9 pr-3 py-2.5 text-sm outline-none focus:border-primary/50"
+        />
+      </div>
+
+      <AdminSearchContext.Provider value={search}>
       <Tabs value={tab} onValueChange={setTab} className="w-full">
         <TabsList className="flex flex-wrap h-auto gap-1 bg-transparent p-0 justify-start">
           <TabsTrigger value="access" className="gap-1.5">
@@ -552,6 +597,7 @@ function AdminDevPage() {
                   <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-white/5">
                     <tr>
                       <th className="px-4 py-3">Cliente</th>
+                      <th className="px-4 py-3">Destino</th>
                       <th className="px-4 py-3 text-right">Valor</th>
                       <th className="px-4 py-3">Status</th>
                       <th className="px-4 py-3">Link Asaas</th>
@@ -559,11 +605,34 @@ function AdminDevPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {paymentsQuery.data.map((p) => (
+                    {paymentsQuery.data
+                      .filter((p) =>
+                        matchesSearch(search, [
+                          p.client_name,
+                          p.client_email,
+                          p.client_phone,
+                          p.user_id,
+                          p.id,
+                          p.amount,
+                          p.amount.toFixed(2).replace(".", ","),
+                        ]),
+                      )
+                      .map((p) => (
                       <tr key={p.id} className="border-b border-white/5">
                         <td className="px-4 py-3">
                           <p className="font-medium">{p.client_name ?? "—"}</p>
                           <p className="text-[11px] text-muted-foreground font-mono">{p.user_id.slice(0, 8)}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`text-[11px] px-2 py-1 rounded-full border whitespace-nowrap ${
+                              p.type === "balance_topup"
+                                ? "border-sky-400/40 text-sky-300 bg-sky-400/10"
+                                : "border-primary/40 text-primary bg-primary/10"
+                            }`}
+                          >
+                            {p.type === "balance_topup" ? "Saldo no App" : "Campanha"}
+                          </span>
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums font-semibold">{fmtBRL(p.amount)}</td>
                         <td className="px-4 py-3">
@@ -1111,6 +1180,7 @@ function AdminDevPage() {
           <MetaAuditSection />
         </TabsContent>
       </Tabs>
+      </AdminSearchContext.Provider>
 
       {preview && <FbPreview campaign={preview} onClose={() => setPreview(null)} />}
       {metricsTarget && <EditMetricsDialog campaign={metricsTarget} onClose={() => setMetricsTarget(null)} />}
@@ -1489,6 +1559,85 @@ function AutoApproveToggle() {
   );
 }
 
+// ============ Nível do usuário: FREE / PRO / TESTE PRO ============
+function PlanButtons({
+  userId,
+  plan,
+  trialDays,
+  trialStartedAt,
+}: {
+  userId: string;
+  plan: "free" | "pro" | "trial_pro";
+  trialDays: number | null;
+  trialStartedAt: string | null;
+}) {
+  const qc = useQueryClient();
+  const fn = useServerFn(adminSetUserPlan);
+  const mut = useMutation({
+    mutationFn: (v: { plan: "free" | "pro" | "trial_pro"; trial_days?: number }) =>
+      fn({ data: { user_id: userId, ...v } }),
+    onSuccess: (_r, v) => {
+      qc.invalidateQueries({ queryKey: ["admin-access-requests"] });
+      qc.invalidateQueries({ queryKey: ["admin-all-clients"] });
+      toast.success(
+        v.plan === "free" ? "Usuário definido como FREE" : v.plan === "pro" ? "Usuário definido como PRO" : "Teste PRO liberado",
+      );
+    },
+    onError: (e) => toast.error(String(e)),
+  });
+
+  const daysLeft = (() => {
+    if (plan !== "trial_pro" || !trialStartedAt || !trialDays) return 0;
+    const end = new Date(trialStartedAt).getTime() + trialDays * 86_400_000;
+    return Math.max(0, Math.ceil((end - Date.now()) / 86_400_000));
+  })();
+
+  const base = "text-[11px] font-semibold px-3 py-1 rounded-full border transition disabled:opacity-50";
+  const off = "border-white/15 text-muted-foreground hover:border-white/30";
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      <button
+        type="button"
+        disabled={mut.isPending}
+        onClick={() => mut.mutate({ plan: "free" })}
+        className={`${base} ${plan === "free" ? "border-sky-400/60 bg-sky-500/20 text-sky-200" : off}`}
+      >
+        FREE
+      </button>
+      <button
+        type="button"
+        disabled={mut.isPending}
+        onClick={() => mut.mutate({ plan: "pro" })}
+        className={`${base} ${plan === "pro" ? "border-[#e6b422]/70 bg-[#e6b422]/20 text-[#f2d377]" : off}`}
+      >
+        <span className="inline-flex items-center gap-1">
+          <Crown className="h-3 w-3" /> PRO
+        </span>
+      </button>
+      <button
+        type="button"
+        disabled={mut.isPending}
+        onClick={() => {
+          const raw = window.prompt("Liberar TESTE PRO por quantos dias?", String(trialDays ?? 7));
+          if (raw === null) return;
+          const n = Math.floor(Number(raw));
+          if (!Number.isFinite(n) || n < 1 || n > 365) {
+            toast.error("Informe um número de dias entre 1 e 365");
+            return;
+          }
+          mut.mutate({ plan: "trial_pro", trial_days: n });
+        }}
+        className={`${base} ${plan === "trial_pro" ? "border-[#e6b422]/70 bg-[#e6b422]/20 text-[#f2d377]" : off}`}
+      >
+        <span className="inline-flex items-center gap-1">
+          <Timer className="h-3 w-3" /> {plan === "trial_pro" ? `TESTE PRO · ${daysLeft}d` : "Liberar Teste"}
+        </span>
+      </button>
+    </div>
+  );
+}
+
 function AccessRequestsSection() {
   const qc = useQueryClient();
   const listFn = useServerFn(adminListAccessRequests);
@@ -1514,7 +1663,11 @@ function AccessRequestsSection() {
       toast.info("Solicitação recusada");
     },
   });
+  const search = useAdminSearch();
   const pending = (q.data ?? []).filter((r) => r.status === "pending");
+  const rows = (q.data ?? []).filter((r) =>
+    matchesSearch(search, [r.display_name, r.email, r.user_id, r.phone]),
+  );
   return (
     <section className="glass-strong rounded-2xl overflow-hidden border border-primary/20">
       <div className="p-5 border-b border-white/5 flex items-center justify-between">
@@ -1529,11 +1682,11 @@ function AccessRequestsSection() {
       </div>
       {q.isLoading ? (
         <div className="p-8 text-center text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin mx-auto" /></div>
-      ) : !(q.data ?? []).length ? (
+      ) : !rows.length ? (
         <div className="p-8 text-center text-sm text-muted-foreground">Nenhuma solicitação registrada.</div>
       ) : (
         <div className="divide-y divide-white/5">
-          {(q.data ?? []).map((r) => (
+          {rows.map((r) => (
             <div key={r.id} className="p-4 flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="font-medium">{r.display_name ?? "(sem nome)"}</p>
@@ -1547,6 +1700,14 @@ function AccessRequestsSection() {
                     <AccessElapsedClock since={r.reviewed_at} />
                   </div>
                 )}
+                <div className="mt-2">
+                  <PlanButtons
+                    userId={r.user_id}
+                    plan={r.plan}
+                    trialDays={r.trial_days}
+                    trialStartedAt={r.trial_started_at ?? r.reviewed_at}
+                  />
+                </div>
               </div>
 
               <div className="flex items-center gap-2">
@@ -1601,8 +1762,11 @@ function AllClientsSection({
     onError: (e) => toast.error("Falha ao atualizar status", { description: String(e) }),
   });
 
+  const search = useAdminSearch();
   const all = clientsQuery.data ?? [];
-  const filtered = all.filter((c) => (filter === "active" ? c.status !== "banned" : c.status === "banned"));
+  const filtered = all
+    .filter((c) => (filter === "active" ? c.status !== "banned" : c.status === "banned"))
+    .filter((c) => matchesSearch(search, [c.display_name, c.email, c.phone, c.id, c.balance]));
 
   return (
     <section className="glass-strong rounded-2xl overflow-hidden">
@@ -1633,6 +1797,7 @@ function AllClientsSection({
                 <th className="px-4 py-3">Nome</th>
                 <th className="px-4 py-3">E-mail</th>
                 <th className="px-4 py-3">Telefone</th>
+                <th className="px-4 py-3">Nível</th>
                 <th className="px-4 py-3 text-right">Saldo</th>
                 <th className="px-4 py-3">Cliente desde</th>
                 <th className="px-4 py-3">Status</th>
@@ -1645,6 +1810,14 @@ function AllClientsSection({
                   <td className="px-4 py-3 font-medium">{c.display_name ?? "—"}</td>
                   <td className="px-4 py-3 text-[11px] text-muted-foreground">{c.email ?? c.id.slice(0, 8)}</td>
                   <td className="px-4 py-3 text-[11px] text-muted-foreground">{c.phone ?? "—"}</td>
+                  <td className="px-4 py-3">
+                    <PlanButtons
+                      userId={c.id}
+                      plan={c.plan}
+                      trialDays={c.trial_days}
+                      trialStartedAt={c.trial_started_at}
+                    />
+                  </td>
                   <td className="px-4 py-3 text-right tabular-nums font-semibold">{fmtBRL(c.balance)}</td>
                   <td className="px-4 py-3 text-[11px] text-muted-foreground">{new Date(c.created_at).toLocaleDateString("pt-BR")}</td>
                   <td className="px-4 py-3">

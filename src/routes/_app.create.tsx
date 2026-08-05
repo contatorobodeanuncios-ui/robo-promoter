@@ -19,7 +19,7 @@ import { reachRange, fmtRange } from "@/lib/mock-data";
 import { analyzeCreative, type CreativeAnalysis } from "@/lib/ai-analysis.functions";
 import { getCreativeUploadPath, getMaintenanceMode } from "@/lib/data.functions";
 import { useAppStore } from "@/lib/store";
-import { campaignPricing, SERVICE_FEE_LABEL } from "@/lib/pricing";
+import { campaignPricing } from "@/lib/pricing";
 
 import { supabase } from "@/integrations/supabase/client";
 
@@ -75,7 +75,8 @@ function CreateWizard() {
   const [days, setDays] = useState(7);
   const [fundingType, setFundingType] = useState<"wallet" | "pix_dedicated">("wallet");
   // Verba de veiculação + taxa (mesma regra para PIX e saldo do app).
-  const pricing = campaignPricing(budget, days);
+  const plan = useAppStore((s) => s.plan);
+  const pricing = campaignPricing(budget, days, plan);
   const fmtMoney = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
   const [launching, setLaunching] = useState(false);
@@ -250,7 +251,7 @@ function CreateWizard() {
       });
       if (result.paid) {
         toast.success("Anúncio pago com saldo do app!", {
-          description: `${fmtMoney(result.totalCost)} debitados (${fmtMoney(result.metaBudget)} de veiculação + ${fmtMoney(result.serviceFee)} de taxa). Robô em análise.`,
+          description: `${fmtMoney(result.totalCost)} debitados (${fmtMoney(result.metaBudget)} de veiculação + ${fmtMoney(result.serviceFee)} de taxas). Robô em análise.`,
         });
         nav({ to: "/dashboard" });
       } else {
@@ -651,8 +652,8 @@ function CreateWizard() {
                   <span className="tabular-nums font-medium">{fmtMoney(pricing.metaBudget)}</span>
                 </div>
                 <div className="flex items-start justify-between gap-3">
-                  <span className="text-muted-foreground">{SERVICE_FEE_LABEL}</span>
-                  <span className="tabular-nums font-medium">{fmtMoney(pricing.serviceFee)}</span>
+                  <span className="text-muted-foreground">{pricing.feeLabel}</span>
+                  <span className="tabular-nums font-medium">{fmtMoney(pricing.feesTotal)}</span>
                 </div>
                 <div className="flex items-center justify-between border-t border-white/10 pt-2">
                   <span className="font-semibold">

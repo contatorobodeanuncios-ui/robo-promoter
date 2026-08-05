@@ -667,6 +667,11 @@ export interface AccessRequestRow {
   reason: string | null;
   created_at: string;
   reviewed_at: string | null;
+  /** nível do usuário, vindo do perfil */
+  plan: "free" | "pro" | "trial_pro";
+  trial_days: number | null;
+  trial_started_at: string | null;
+  phone: string | null;
 }
 
 export const adminListAccessRequests = createServerFn({ method: "GET" })
@@ -680,7 +685,70 @@ export const adminListAccessRequests = createServerFn({ method: "GET" })
       .order("created_at", { ascending: false })
       .limit(500);
     if (error) throw new Error(error.message);
-    return (data ?? []) as AccessRequestRow[];
+    const rows = (data ?? []) as Array<Record<string, unknown>>;
+    const ids = Array.from(new Set(rows.map((r) => String(r.user_id))));
+    const { data: profiles } = await admin
+      .from("profiles")
+      .select("id, plan, trial_days, trial_started_at, phone")
+      .in("id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]);
+    const byId = new Map(
+      (profiles ?? []).map((p) => [
+        p.id,
+        p as unknown as {
+          plan?: string | null;
+          trial_days?: number | null;
+          trial_started_at?: string | null;
+          phone?: string | null;
+        },
+      ]),
+    );
+    return rows.map((r) => {
+      const prof = byId.get(String(r.user_id));
+      return {
+        ...(r as unknown as AccessRequestRow),
+        plan: ((prof?.plan ?? "free") as AccessRequestRow["plan"]),
+        trial_days: prof?.trial_days ?? null,
+        trial_started_at: prof?.trial_started_at ?? null,
+        phone: prof?.phone ?? null,
+      };
+    });
+  });
+
+// ============ Nível do usuário: Free / Pro / Teste Pro ============
+export const adminSetUserPlan = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        user_id: z.string().uuid(),
+        plan: z.enum(["free", "pro", "trial_pro"]),
+        trial_days: z.number().int().min(1).max(365).optional(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const patch: Record<string, unknown> = { plan: data.plan };
+    if (data.plan === "trial_pro") {
+      patch.trial_days = data.trial_days ?? 7;
+      patch.trial_started_at = new Date().toISOString();
+    } else {
+      patch.trial_days = null;
+      patch.trial_started_at = null;
+    }
+    const { error } = await admin
+      .from("profiles")
+      .upsert({ id: data.user_id, ...patch } as never, { onConflict: "id" });
+    if (error) throw new Error(error.message);
+    await admin.from("admin_audit_log").insert({
+      admin_email: (context.claims as { email?: string })?.email ?? "",
+      action: "user_set_plan",
+      target_type: "user",
+      target_id: data.user_id,
+      details: patch as never,
+    } as never);
+    return { ok: true, plan: data.plan };
   });
 
 export const adminApproveAccessRequest = createServerFn({ method: "POST" })
@@ -773,6 +841,9 @@ export interface AdminClientRow {
   balance: number;
   status: string;
   created_at: string;
+  plan: "free" | "pro" | "trial_pro";
+  trial_days: number | null;
+  trial_started_at: string | null;
 }
 
 export const adminListAllClients = createServerFn({ method: "GET" })
@@ -782,7 +853,7 @@ export const adminListAllClients = createServerFn({ method: "GET" })
     const admin = await getSupabaseAdmin();
     const { data, error } = await admin
       .from("profiles")
-      .select("id, display_name, email, phone, balance, status, created_at")
+      .select("id, display_name, email, phone, balance, status, created_at, plan, trial_days, trial_started_at")
       .order("created_at", { ascending: false })
       .limit(1000);
     if (error) throw new Error(error.message);
@@ -794,6 +865,9 @@ export const adminListAllClients = createServerFn({ method: "GET" })
       balance: Number(r.balance ?? 0),
       status: r.status ?? "approved",
       created_at: r.created_at,
+      plan: ((r as unknown as { plan?: string }).plan ?? "free") as AdminClientRow["plan"],
+      trial_days: (r as unknown as { trial_days?: number | null }).trial_days ?? null,
+      trial_started_at: (r as unknown as { trial_started_at?: string | null }).trial_started_at ?? null,
     }));
   });
 
@@ -852,7 +926,7 @@ export const adminGetClientContext = createServerFn({ method: "GET" })
     const admin = await getSupabaseAdmin();
     const { data: p } = await admin
       .from("profiles")
-      .select("id, display_name, email, phone, balance, status, created_at")
+      .select("id, display_name, email, phone, balance, status, created_at, plan, trial_days, trial_started_at")
       .eq("id", data.user_id)
       .maybeSingle();
     const { data: camps } = await admin

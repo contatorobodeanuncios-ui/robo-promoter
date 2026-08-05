@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { Json } from "@/integrations/supabase/types";
-import { campaignPricing, round2 } from "@/lib/pricing";
+import { campaignPricing, round2, effectivePlan, trialDaysLeft } from "@/lib/pricing";
 
 
 async function getAdmin() {
@@ -176,15 +176,27 @@ export const getAppData = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
     const [{ data: profile }, { data: campaigns }] = await Promise.all([
-      supabase.from("profiles").select("balance, display_name").eq("id", userId).maybeSingle(),
+      supabase
+        .from("profiles")
+        .select("balance, display_name, plan, trial_days, trial_started_at")
+        .eq("id", userId)
+        .maybeSingle(),
       supabase.from("campaigns").select("*").order("created_at", { ascending: false }),
     ]);
+    const p = (profile ?? {}) as {
+      plan?: string | null;
+      trial_days?: number | null;
+      trial_started_at?: string | null;
+    };
     return {
       balance: profile?.balance ? Number(profile.balance) : 0,
       displayName: profile?.display_name ?? null,
+      plan: effectivePlan(p),
+      trialDaysLeft: trialDaysLeft(p),
       campaigns: (campaigns ?? []).map((c) => mapCampaign(c as unknown as DbCampaign)),
     };
   });
+
 
 // Limites alinhados aos tetos REAIS do próprio Facebook (não um teto artificial
 // do app): imagem até 30MB (spec oficial de anúncio Meta), texto principal até
@@ -271,8 +283,25 @@ export const createCampaign = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<CreateCampaignResult> => {
     await assertNotInMaintenance();
     const { supabase, userId } = context;
-    // Orçamento que vai para a Meta + taxa de serviço (mesma regra no PIX e no saldo).
-    const { metaBudget, serviceFee, total: totalCost } = campaignPricing(data.budget, data.days);
+    const admin = await getAdmin();
+    // Nível do usuário define se há taxa de plataforma (FREE) ou não (PRO/TESTE PRO).
+    const { data: planProf } = await admin
+      .from("profiles")
+      .select("plan, trial_days, trial_started_at")
+      .eq("id", userId)
+      .maybeSingle();
+    const plan = effectivePlan(
+      (planProf ?? {}) as { plan?: string | null; trial_days?: number | null; trial_started_at?: string | null },
+    );
+    // Orçamento que vai para a Meta + taxas (mesma regra no PIX e no saldo).
+    const {
+      metaBudget,
+      serviceFee,
+      platformFee,
+      feesTotal,
+      total: totalCost,
+    } = campaignPricing(data.budget, data.days, plan);
+
     const isPix = data.funding_type === "pix_dedicated";
     const safe = {
       name: data.name,
@@ -296,6 +325,8 @@ export const createCampaign = createServerFn({ method: "POST" })
       pix_total_budget: isPix ? metaBudget : null,
       pix_remaining_budget: isPix ? 0 : null,
       service_fee: serviceFee,
+      platform_fee: platformFee,
+
       scheduled_start_at: data.scheduled_start_at ?? null,
       scheduled_end_at: data.scheduled_end_at ?? null,
       media_type: data.media_type,
@@ -316,12 +347,11 @@ export const createCampaign = createServerFn({ method: "POST" })
         needsPayment: true,
         totalCost,
         metaBudget,
-        serviceFee,
+        serviceFee: feesTotal,
         remainingDue: totalCost,
       };
     }
 
-    const admin = await getAdmin();
     const { data: prof } = await admin
       .from("profiles")
       .select("balance")
@@ -332,10 +362,10 @@ export const createCampaign = createServerFn({ method: "POST" })
     if (balance >= totalCost) {
       const next = round2(balance - totalCost);
       await admin.from("profiles").update({ balance: next }).eq("id", userId);
-      // total_paid guarda o total debitado (verba + taxa); service_fee isola a taxa.
+      // total_paid guarda o total debitado (verba + taxas); service_fee/platform_fee isolam as taxas.
       await admin
         .from("campaigns")
-        .update({ total_paid: totalCost, service_fee: serviceFee } as never)
+        .update({ total_paid: totalCost, service_fee: serviceFee, platform_fee: platformFee } as never)
         .eq("id", row.id);
       // Toda campanha precisa aparecer em "Solicitações de pagamento", mesmo
       // quando foi paga com saldo do app — aqui o registro já nasce como pago.
@@ -345,17 +375,18 @@ export const createCampaign = createServerFn({ method: "POST" })
         status: "paid",
         type: "campaign_budget",
         campaign_id: row.id,
-        note: `Pago com saldo do app (veiculação R$ ${metaBudget.toFixed(2)} + taxa R$ ${serviceFee.toFixed(2)})`,
+        note: `Pago com saldo do app (veiculação R$ ${metaBudget.toFixed(2)} + taxas R$ ${feesTotal.toFixed(2)})`,
         approved_at: new Date().toISOString(),
       } as never);
       const fresh = { ...(row as unknown as DbCampaign), total_paid: totalCost };
+
       return {
         campaign: mapCampaign(fresh),
         paid: true,
         needsPayment: false,
         totalCost,
         metaBudget,
-        serviceFee,
+        serviceFee: feesTotal,
         remainingDue: 0,
       };
     }
@@ -367,7 +398,7 @@ export const createCampaign = createServerFn({ method: "POST" })
       needsPayment: true,
       totalCost,
       metaBudget,
-      serviceFee,
+      serviceFee: feesTotal,
       remainingDue: round2(totalCost - balance),
     };
 

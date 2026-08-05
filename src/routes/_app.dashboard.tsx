@@ -9,6 +9,7 @@ import { useUserDisplayName } from "@/components/app/AppShell";
 import { useAppStore, computeSummary } from "@/lib/store";
 import { PushNotificationBanner } from "@/components/app/PushNotificationBanner";
 import { toast } from "sonner";
+import { PlanBanner } from "@/components/app/PlanBanner";
 
 
 export const Route = createFileRoute("/_app/dashboard")({
@@ -65,6 +66,8 @@ function Dashboard() {
           </Button>
         </Link>
       </header>
+
+      <PlanBanner />
 
       <PushNotificationBanner />
 
