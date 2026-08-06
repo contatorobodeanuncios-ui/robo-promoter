@@ -71,9 +71,10 @@ export const Route = createFileRoute("/api/public/hooks/trial-expiry-notify")({
               notification_prefs: {
                 ...prefs,
                 trial_notified: [...already, milestone],
-              } as unknown as Record<string, unknown>,
+              } as unknown as Record<string, boolean>,
             })
             .eq("id", u.id);
+
           notified++;
         }
 

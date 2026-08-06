@@ -29,6 +29,7 @@ import { Route as AppAdminExecRouteImport } from './routes/_app.admin-exec'
 import { Route as AppAdminAuditRouteImport } from './routes/_app.admin-audit'
 import { Route as ApiPublicAsaasWebhookRouteImport } from './routes/api/public/asaas-webhook'
 import { Route as AppCampaignIdRouteImport } from './routes/_app.campaign.$id'
+import { Route as ApiPublicHooksTrialExpiryNotifyRouteImport } from './routes/api/public/hooks/trial-expiry-notify'
 import { Route as ApiPublicHooksSendPushDailyRouteImport } from './routes/api/public/hooks/send-push-daily'
 import { Route as ApiPublicHooksMetaMetricsSyncRouteImport } from './routes/api/public/hooks/meta-metrics-sync'
 import { Route as ApiPublicHooksAiReviewCronRouteImport } from './routes/api/public/hooks/ai-review-cron'
@@ -133,6 +134,12 @@ const AppCampaignIdRoute = AppCampaignIdRouteImport.update({
   path: '/campaign/$id',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiPublicHooksTrialExpiryNotifyRoute =
+  ApiPublicHooksTrialExpiryNotifyRouteImport.update({
+    id: '/api/public/hooks/trial-expiry-notify',
+    path: '/api/public/hooks/trial-expiry-notify',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksSendPushDailyRoute =
   ApiPublicHooksSendPushDailyRouteImport.update({
     id: '/api/public/hooks/send-push-daily',
@@ -181,6 +188,7 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/ai-review-cron': typeof ApiPublicHooksAiReviewCronRoute
   '/api/public/hooks/meta-metrics-sync': typeof ApiPublicHooksMetaMetricsSyncRoute
   '/api/public/hooks/send-push-daily': typeof ApiPublicHooksSendPushDailyRoute
+  '/api/public/hooks/trial-expiry-notify': typeof ApiPublicHooksTrialExpiryNotifyRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -206,6 +214,7 @@ export interface FileRoutesByTo {
   '/api/public/hooks/ai-review-cron': typeof ApiPublicHooksAiReviewCronRoute
   '/api/public/hooks/meta-metrics-sync': typeof ApiPublicHooksMetaMetricsSyncRoute
   '/api/public/hooks/send-push-daily': typeof ApiPublicHooksSendPushDailyRoute
+  '/api/public/hooks/trial-expiry-notify': typeof ApiPublicHooksTrialExpiryNotifyRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -233,6 +242,7 @@ export interface FileRoutesById {
   '/api/public/hooks/ai-review-cron': typeof ApiPublicHooksAiReviewCronRoute
   '/api/public/hooks/meta-metrics-sync': typeof ApiPublicHooksMetaMetricsSyncRoute
   '/api/public/hooks/send-push-daily': typeof ApiPublicHooksSendPushDailyRoute
+  '/api/public/hooks/trial-expiry-notify': typeof ApiPublicHooksTrialExpiryNotifyRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -260,6 +270,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/ai-review-cron'
     | '/api/public/hooks/meta-metrics-sync'
     | '/api/public/hooks/send-push-daily'
+    | '/api/public/hooks/trial-expiry-notify'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -285,6 +296,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/ai-review-cron'
     | '/api/public/hooks/meta-metrics-sync'
     | '/api/public/hooks/send-push-daily'
+    | '/api/public/hooks/trial-expiry-notify'
   id:
     | '__root__'
     | '/'
@@ -311,6 +323,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/ai-review-cron'
     | '/api/public/hooks/meta-metrics-sync'
     | '/api/public/hooks/send-push-daily'
+    | '/api/public/hooks/trial-expiry-notify'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -328,6 +341,7 @@ export interface RootRouteChildren {
   ApiPublicHooksAiReviewCronRoute: typeof ApiPublicHooksAiReviewCronRoute
   ApiPublicHooksMetaMetricsSyncRoute: typeof ApiPublicHooksMetaMetricsSyncRoute
   ApiPublicHooksSendPushDailyRoute: typeof ApiPublicHooksSendPushDailyRoute
+  ApiPublicHooksTrialExpiryNotifyRoute: typeof ApiPublicHooksTrialExpiryNotifyRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -472,6 +486,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCampaignIdRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/public/hooks/trial-expiry-notify': {
+      id: '/api/public/hooks/trial-expiry-notify'
+      path: '/api/public/hooks/trial-expiry-notify'
+      fullPath: '/api/public/hooks/trial-expiry-notify'
+      preLoaderRoute: typeof ApiPublicHooksTrialExpiryNotifyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/send-push-daily': {
       id: '/api/public/hooks/send-push-daily'
       path: '/api/public/hooks/send-push-daily'
@@ -546,6 +567,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksAiReviewCronRoute: ApiPublicHooksAiReviewCronRoute,
   ApiPublicHooksMetaMetricsSyncRoute: ApiPublicHooksMetaMetricsSyncRoute,
   ApiPublicHooksSendPushDailyRoute: ApiPublicHooksSendPushDailyRoute,
+  ApiPublicHooksTrialExpiryNotifyRoute: ApiPublicHooksTrialExpiryNotifyRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
