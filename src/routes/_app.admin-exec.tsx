@@ -2,7 +2,7 @@ import { createFileRoute, redirect, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { ArrowLeft, TrendingUp, Users, Zap, DollarSign, PieChart, MessageCircle } from "lucide-react";
+import { ArrowLeft, TrendingUp, Users, Zap, DollarSign, PieChart, MessageCircle, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getExecDashboard } from "@/lib/support.functions";
 import {
@@ -81,11 +81,13 @@ function ExecPage() {
     ? [
         { name: "Orçamento Meta", value: d.meta_budget, color: "#6366f1" },
         { name: "Lucro plataforma", value: d.platform_profit, color: "#e6b422" },
-        { name: "Receita bruta", value: d.revenue, color: "#10b981" },
+        { name: "Receita real", value: d.revenue, color: "#10b981" },
+        { name: "Aguardando pgto", value: d.pending_revenue, color: "#f59e0b" },
         { name: "Gasto (Ads)", value: d.total_spent, color: "#ef4444" },
         { name: "Ticket médio", value: d.avg_ticket, color: "#38bdf8" },
       ]
     : [];
+
 
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-4">
