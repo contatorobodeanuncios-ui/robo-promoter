@@ -354,10 +354,14 @@ export interface ExecStats {
   total_users: number;
   campaigns_running: number;
   total_spent: number;
+  /** receita REAL: apenas pagamentos aprovados/pagos */
   revenue: number;
-  /** soma dos orçamentos que vão para a Meta (dinheiro de anúncio) */
+  /** valores ainda não confirmados (pix gerado, aguardando aprovação) */
+  pending_revenue: number;
+  pending_count: number;
+  /** soma dos orçamentos que vão para a Meta (apenas campanhas pagas) */
   meta_budget: number;
-  /** lucro da plataforma: taxas de serviço + taxa de plataforma */
+  /** lucro da plataforma: taxas de serviço + taxa de plataforma (apenas pagas) */
   platform_profit: number;
   service_fees: number;
   platform_fees: number;
@@ -367,6 +371,7 @@ export interface ExecStats {
   period_from: string;
   period_to: string;
 }
+
 
 export const getExecDashboard = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
