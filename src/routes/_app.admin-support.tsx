@@ -39,6 +39,38 @@ function kindFromMime(mime: string): SupportAttachment["kind"] {
   return "file";
 }
 
+function Avatar({ name }: { name: string }) {
+  const initials = name.trim().slice(0, 2).toUpperCase();
+  return (
+    <div className="h-8 w-8 shrink-0 rounded-full bg-gradient-to-br from-primary/60 to-accent/60 flex items-center justify-center text-[11px] font-bold text-primary-foreground">
+      {initials}
+    </div>
+  );
+}
+
+function dayLabel(iso: string) {
+  const d = new Date(iso);
+  const today = new Date();
+  const yest = new Date(today.getTime() - 86400000);
+  if (d.toDateString() === today.toDateString()) return "Hoje";
+  if (d.toDateString() === yest.toDateString()) return "Ontem";
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function relativeTime(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return "agora";
+  if (min < 60) return `há ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `há ${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `há ${d}d`;
+  return new Date(iso).toLocaleDateString("pt-BR");
+}
+
+
+
 function SupportAdminPage() {
   const qc = useQueryClient();
   const listFn = useServerFn(adminListConversations);
@@ -54,6 +86,8 @@ function SupportAdminPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [text, setText] = useState("");
   const [clientFilter, setClientFilter] = useState("");
+  const [convFilter, setConvFilter] = useState("");
+
   const [uploading, setUploading] = useState(false);
   const [pendingAttachment, setPendingAttachment] = useState<SupportAttachment | null>(null);
   const [recording, setRecording] = useState(false);
