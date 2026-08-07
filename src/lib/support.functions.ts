@@ -354,10 +354,14 @@ export interface ExecStats {
   total_users: number;
   campaigns_running: number;
   total_spent: number;
+  /** receita REAL: apenas pagamentos aprovados/pagos */
   revenue: number;
-  /** soma dos orçamentos que vão para a Meta (dinheiro de anúncio) */
+  /** valores ainda não confirmados (pix gerado, aguardando aprovação) */
+  pending_revenue: number;
+  pending_count: number;
+  /** soma dos orçamentos que vão para a Meta (apenas campanhas pagas) */
   meta_budget: number;
-  /** lucro da plataforma: taxas de serviço + taxa de plataforma */
+  /** lucro da plataforma: taxas de serviço + taxa de plataforma (apenas pagas) */
   platform_profit: number;
   service_fees: number;
   platform_fees: number;
@@ -367,6 +371,7 @@ export interface ExecStats {
   period_from: string;
   period_to: string;
 }
+
 
 export const getExecDashboard = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -399,30 +404,36 @@ export const getExecDashboard = createServerFn({ method: "POST" })
         sb.from("campaigns").select("*", { count: "exact", head: true }).in("status", ["running", "rodando"]),
         sb
           .from("campaigns")
-          .select("spent, revenue, budget, days, service_fee, platform_fee")
+          .select("spent, revenue, budget, days, service_fee, platform_fee, total_paid")
           .gte("created_at", fromIso)
           .lte("created_at", toIso),
         sb.from("payment_requests").select("amount, status").gte("created_at", fromIso).lte("created_at", toIso),
         sb.from("support_conversations").select("*", { count: "exact", head: true }).eq("status", "aberto"),
       ]);
 
-    const camps = (campaignsRes.data ?? []) as Array<{
+    const allCamps = (campaignsRes.data ?? []) as Array<{
       spent?: number | null;
       budget?: number | null;
       days?: number | null;
       service_fee?: number | null;
       platform_fee?: number | null;
+      total_paid?: number | null;
     }>;
-    const spent = camps.reduce((s, c) => s + Number(c.spent ?? 0), 0);
+    // Somente campanhas efetivamente pagas entram nas finanças reais
+    const camps = allCamps.filter((c) => Number(c.total_paid ?? 0) > 0);
+    const spent = allCamps.reduce((s, c) => s + Number(c.spent ?? 0), 0);
     const metaBudgetSum = camps.reduce(
       (s, c) => s + Number(c.budget ?? 0) * Number(c.days ?? 0),
       0,
     );
     const serviceFees = camps.reduce((s, c) => s + Number(c.service_fee ?? 0), 0);
     const platformFees = camps.reduce((s, c) => s + Number(c.platform_fee ?? 0), 0);
-    const approved = (paymentsRes.data ?? []).filter((p) => p.status === "approved" || p.status === "paid");
+    const payments = paymentsRes.data ?? [];
+    const approved = payments.filter((p) => p.status === "approved" || p.status === "paid");
+    const pending = payments.filter((p) => p.status === "pending");
     const revenue = approved.reduce((s, p) => s + Number(p.amount ?? 0), 0);
-    const total = (paymentsRes.data ?? []).length;
+    const pendingRevenue = pending.reduce((s, p) => s + Number(p.amount ?? 0), 0);
+    const total = payments.length;
     const convRate = total > 0 ? approved.length / total : 0;
     const avgTicket = approved.length > 0 ? revenue / approved.length : 0;
 
@@ -432,6 +443,8 @@ export const getExecDashboard = createServerFn({ method: "POST" })
       campaigns_running: running ?? 0,
       total_spent: spent,
       revenue,
+      pending_revenue: Math.round(pendingRevenue * 100) / 100,
+      pending_count: pending.length,
       meta_budget: Math.round(metaBudgetSum * 100) / 100,
       service_fees: Math.round(serviceFees * 100) / 100,
       platform_fees: Math.round(platformFees * 100) / 100,
@@ -442,4 +455,5 @@ export const getExecDashboard = createServerFn({ method: "POST" })
       period_from: fromIso,
       period_to: toIso,
     };
+
   });

@@ -2,7 +2,7 @@ import { createFileRoute, redirect, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { ArrowLeft, TrendingUp, Users, Zap, DollarSign, PieChart, MessageCircle } from "lucide-react";
+import { ArrowLeft, TrendingUp, Users, Zap, DollarSign, PieChart, MessageCircle, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getExecDashboard } from "@/lib/support.functions";
 import {
@@ -81,11 +81,13 @@ function ExecPage() {
     ? [
         { name: "Orçamento Meta", value: d.meta_budget, color: "#6366f1" },
         { name: "Lucro plataforma", value: d.platform_profit, color: "#e6b422" },
-        { name: "Receita bruta", value: d.revenue, color: "#10b981" },
+        { name: "Receita real", value: d.revenue, color: "#10b981" },
+        { name: "Aguardando pgto", value: d.pending_revenue, color: "#f59e0b" },
         { name: "Gasto (Ads)", value: d.total_spent, color: "#ef4444" },
         { name: "Ticket médio", value: d.avg_ticket, color: "#38bdf8" },
       ]
     : [];
+
 
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-4">
@@ -119,7 +121,7 @@ function ExecPage() {
               tone="info"
               label="Orçamento Meta (anúncios)"
               value={fmtBRL(d.meta_budget)}
-              sub="dinheiro destinado à veiculação"
+              sub="apenas campanhas pagas"
             />
             <Card
               icon={DollarSign}
@@ -128,13 +130,20 @@ function ExecPage() {
               value={fmtBRL(d.platform_profit)}
               sub={`Serviço ${fmtBRL(d.service_fees)} · Plataforma ${fmtBRL(d.platform_fees)}`}
             />
-            <Card icon={DollarSign} tone="positive" label="Receita bruta" value={fmtBRL(d.revenue)} sub={`Ticket médio ${fmtBRL(d.avg_ticket)}`} />
-            <Card icon={TrendingUp} tone="info" label="Conversão" value={`${(d.conversion_rate * 100).toFixed(1)}%`} sub="aprovados / total" />
+            <Card icon={DollarSign} tone="positive" label="Receita real (aprovada)" value={fmtBRL(d.revenue)} sub={`Ticket médio ${fmtBRL(d.avg_ticket)}`} />
+            <Card
+              icon={Clock}
+              label="Aguardando pagamento"
+              value={fmtBRL(d.pending_revenue)}
+              sub={`${d.pending_count} cobrança${d.pending_count === 1 ? "" : "s"} não confirmada${d.pending_count === 1 ? "" : "s"}`}
+            />
+            <Card icon={TrendingUp} tone="info" label="Conversão" value={`${(d.conversion_rate * 100).toFixed(1)}%`} sub="pagos / total gerado" />
             <Card icon={Users} label="Usuários" value={String(d.total_users)} sub={`${d.active_users} aprovados`} />
             <Card icon={Zap} tone="positive" label="Campanhas rodando" value={String(d.campaigns_running)} />
             <Card icon={PieChart} tone="negative" label="Gasto em anúncios" value={fmtBRL(d.total_spent)} />
             <Card icon={MessageCircle} label="Suporte aberto" value={String(d.open_support)} />
           </div>
+
 
           <div className="glass rounded-2xl p-4 border border-white/10">
             <p className="text-xs uppercase tracking-wider text-muted-foreground mb-3">

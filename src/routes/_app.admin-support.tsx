@@ -39,6 +39,38 @@ function kindFromMime(mime: string): SupportAttachment["kind"] {
   return "file";
 }
 
+function Avatar({ name }: { name: string }) {
+  const initials = name.trim().slice(0, 2).toUpperCase();
+  return (
+    <div className="h-8 w-8 shrink-0 rounded-full bg-gradient-to-br from-primary/60 to-accent/60 flex items-center justify-center text-[11px] font-bold text-primary-foreground">
+      {initials}
+    </div>
+  );
+}
+
+function dayLabel(iso: string) {
+  const d = new Date(iso);
+  const today = new Date();
+  const yest = new Date(today.getTime() - 86400000);
+  if (d.toDateString() === today.toDateString()) return "Hoje";
+  if (d.toDateString() === yest.toDateString()) return "Ontem";
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function relativeTime(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return "agora";
+  if (min < 60) return `há ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `há ${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `há ${d}d`;
+  return new Date(iso).toLocaleDateString("pt-BR");
+}
+
+
+
 function SupportAdminPage() {
   const qc = useQueryClient();
   const listFn = useServerFn(adminListConversations);
@@ -54,6 +86,8 @@ function SupportAdminPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [text, setText] = useState("");
   const [clientFilter, setClientFilter] = useState("");
+  const [convFilter, setConvFilter] = useState("");
+
   const [uploading, setUploading] = useState(false);
   const [pendingAttachment, setPendingAttachment] = useState<SupportAttachment | null>(null);
   const [recording, setRecording] = useState(false);
@@ -208,6 +242,18 @@ function SupportAdminPage() {
     );
   });
 
+  const filteredConvs = (convs.data ?? []).filter((c) => {
+    const q = convFilter.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      (c.user_name ?? "").toLowerCase().includes(q) ||
+      (c.user_email ?? "").toLowerCase().includes(q) ||
+      (c.last_message ?? "").toLowerCase().includes(q)
+    );
+  });
+
+
+
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-4">
       <div className="flex items-center gap-3">
@@ -272,49 +318,72 @@ function SupportAdminPage() {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-[300px,1fr] gap-4 h-[70vh]">
-          <div className="glass rounded-xl overflow-y-auto">
-            {convs.isLoading ? (
-              <div className="p-4 text-sm text-muted-foreground">Carregando...</div>
-            ) : (convs.data ?? []).length === 0 ? (
-              <div className="p-4 text-sm text-muted-foreground">Nenhuma conversa.</div>
-            ) : (
-              (convs.data ?? []).map((c: SupportConversationRow) => (
-                <button
-                  key={c.id}
-                  onClick={() => setSelected(c.id)}
-                  className={`w-full text-left p-3 border-b border-white/5 hover:bg-white/5 transition ${
-                    selected === c.id ? "bg-white/10" : ""
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-medium truncate">
-                      {c.user_name ?? c.user_email ?? c.user_id.slice(0, 8)}
+        <div className="grid grid-cols-1 md:grid-cols-[300px,1fr] gap-4 h-[72vh]">
+          <div className="glass rounded-xl flex flex-col overflow-hidden">
+            <div className="p-2 border-b border-white/10">
+              <Input
+                placeholder="Buscar conversa..."
+                value={convFilter}
+                onChange={(e) => setConvFilter(e.target.value)}
+                className="h-8 text-xs"
+              />
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {convs.isLoading ? (
+                <div className="p-4 text-sm text-muted-foreground">Carregando...</div>
+              ) : filteredConvs.length === 0 ? (
+                <div className="p-4 text-sm text-muted-foreground">Nenhuma conversa.</div>
+              ) : (
+                filteredConvs.map((c: SupportConversationRow) => (
+                  <button
+                    key={c.id}
+                    onClick={() => setSelected(c.id)}
+                    className={`w-full text-left p-3 border-b border-white/5 hover:bg-white/5 transition flex gap-2.5 ${
+                      selected === c.id ? "bg-white/10" : ""
+                    }`}
+                  >
+                    <Avatar name={c.user_name ?? c.user_email ?? c.user_id} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-sm font-medium truncate">
+                          {c.user_name ?? c.user_email ?? c.user_id.slice(0, 8)}
+                        </div>
+                        {c.unread_by_admin && <span className="h-2 w-2 rounded-full bg-primary shrink-0" />}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground truncate mt-0.5">
+                        {c.last_message ?? "—"}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground mt-1">
+                        {c.last_message_at ? relativeTime(c.last_message_at) : ""}
+                        {c.status === "closed" && " · encerrada"}
+                      </div>
                     </div>
-                    {c.unread_by_admin && <span className="h-2 w-2 rounded-full bg-primary" />}
-                  </div>
-                  <div className="text-[11px] text-muted-foreground truncate mt-0.5">
-                    {c.last_message ?? "—"}
-                  </div>
-                  <div className="text-[10px] text-muted-foreground mt-1">
-                    {c.last_message_at ? new Date(c.last_message_at).toLocaleString("pt-BR") : ""}
-                    {c.status === "closed" && " · encerrada"}
-                  </div>
-                </button>
-              ))
-            )}
+                  </button>
+                ))
+              )}
+            </div>
           </div>
 
-          <div className="glass rounded-xl flex flex-col">
+          <div className="glass rounded-xl flex flex-col min-h-0">
             {!selected ? (
               <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
                 Selecione uma conversa
               </div>
             ) : (
               <>
-                <div className="p-3 border-b border-white/10 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-semibold">Conversa</div>
+                <div className="p-3 border-b border-white/10 space-y-2 shrink-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Avatar name={clientCtx.data?.display_name ?? clientCtx.data?.email ?? "Cliente"} />
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold truncate">
+                          {clientCtx.data?.display_name ?? "Conversa"}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground truncate">
+                          {clientCtx.data?.email ?? ""}
+                        </div>
+                      </div>
+                    </div>
                     <Button size="sm" variant="ghost" onClick={() => closeMut.mutate()}>
                       <X className="h-4 w-4 mr-1" /> Encerrar
                     </Button>
@@ -322,8 +391,6 @@ function SupportAdminPage() {
                   {clientCtx.data && (
                     <div className="rounded-lg bg-white/5 p-3 text-xs space-y-1">
                       <div className="flex flex-wrap gap-x-4 gap-y-1">
-                        <span><span className="text-muted-foreground">Nome:</span> <b>{clientCtx.data.display_name ?? "—"}</b></span>
-                        <span><span className="text-muted-foreground">Email:</span> {clientCtx.data.email ?? "—"}</span>
                         <span><span className="text-muted-foreground">Código:</span> <code className="text-primary">{clientCtx.data.code}</code></span>
                         <span><span className="text-muted-foreground">Saldo:</span> R$ {clientCtx.data.balance.toFixed(2)}</span>
                       </div>
@@ -344,23 +411,54 @@ function SupportAdminPage() {
                     </div>
                   )}
                 </div>
-                <div ref={listRef} className="flex-1 overflow-y-auto p-3 space-y-2">
-                  {(msgs.data ?? []).map((m) => (
-                    <div
-                      key={m.id}
-                      className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm space-y-2 ${
-                        m.sender === "admin"
-                          ? "ml-auto bg-primary text-primary-foreground"
-                          : "bg-white/5"
-                      }`}
-                    >
-                      {m.content && <p>{m.content}</p>}
-                      {m.attachments.map((a, i) => (
-                        <AdminAttachmentView key={i} attachment={a} />
-                      ))}
-                    </div>
-                  ))}
+                <div ref={listRef} className="flex-1 min-h-0 overflow-y-auto p-3 space-y-1.5">
+                  {msgs.isLoading ? (
+                    <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+                  ) : (msgs.data ?? []).length === 0 ? (
+                    <div className="text-xs text-muted-foreground text-center py-8">Nenhuma mensagem ainda.</div>
+                  ) : (
+                    (msgs.data ?? []).map((m, i, arr) => {
+                      const isAdmin = m.sender === "admin";
+                      const prev = i > 0 ? arr[i - 1] : null;
+                      const showDay =
+                        !prev || new Date(prev.created_at).toDateString() !== new Date(m.created_at).toDateString();
+                      return (
+                        <div key={m.id}>
+                          {showDay && (
+                            <div className="flex justify-center my-3">
+                              <span className="text-[10px] uppercase tracking-wide px-2.5 py-1 rounded-full bg-white/5 text-muted-foreground">
+                                {dayLabel(m.created_at)}
+                              </span>
+                            </div>
+                          )}
+                          <div className={`flex ${isAdmin ? "justify-end" : "justify-start"}`}>
+                            <div className="max-w-[75%]">
+                              <div
+                                className={`rounded-2xl px-3 py-2 text-sm space-y-2 ${
+                                  isAdmin
+                                    ? "bg-primary text-primary-foreground rounded-br-sm"
+                                    : "bg-white/5 rounded-bl-sm"
+                                }`}
+                              >
+                                {m.content && <p className="whitespace-pre-wrap break-words">{m.content}</p>}
+                                {m.attachments.map((a, k) => (
+                                  <AdminAttachmentView key={k} attachment={a} />
+                                ))}
+                              </div>
+                              <div
+                                className={`text-[10px] text-muted-foreground mt-0.5 ${isAdmin ? "text-right" : "text-left"}`}
+                              >
+                                {isAdmin ? "Você" : "Cliente"} ·{" "}
+                                {new Date(m.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
+
 
                 {pendingAttachment && (
                   <div className="px-3 py-2 border-t border-white/10 flex items-center justify-between gap-2 text-xs">
