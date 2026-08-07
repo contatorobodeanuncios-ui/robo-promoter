@@ -242,6 +242,18 @@ function SupportAdminPage() {
     );
   });
 
+  const filteredConvs = (convs.data ?? []).filter((c) => {
+    const q = convFilter.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      (c.user_name ?? "").toLowerCase().includes(q) ||
+      (c.user_email ?? "").toLowerCase().includes(q) ||
+      (c.last_message ?? "").toLowerCase().includes(q)
+    );
+  });
+
+
+
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-4">
       <div className="flex items-center gap-3">
