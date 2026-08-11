@@ -19,7 +19,7 @@ import { reachRange, fmtRange } from "@/lib/mock-data";
 import { analyzeCreative, type CreativeAnalysis } from "@/lib/ai-analysis.functions";
 import { getCreativeUploadPath, getMaintenanceMode } from "@/lib/data.functions";
 import { useAppStore } from "@/lib/store";
-import { campaignPricing } from "@/lib/pricing";
+import { campaignPricing, mediaBudgetForViews, viewsRangeForMedia } from "@/lib/pricing";
 
 import { supabase } from "@/integrations/supabase/client";
 
@@ -76,7 +76,14 @@ function CreateWizard() {
   const [fundingType, setFundingType] = useState<"wallet" | "pix_dedicated">("wallet");
   // Verba de veiculação + taxa (mesma regra para PIX e saldo do app).
   const plan = useAppStore((s) => s.plan);
-  const pricing = campaignPricing(budget, days, plan);
+  // Plano CRÉDITOS: o cliente escolhe dias (1 crédito = 1 dia) + potência de
+  // visualizações. O preço do pacote já embute tudo — nenhuma taxa é exibida.
+  const isCredits = plan === "credits";
+  const [views, setViews] = useState(5000);
+  const creditsDaily = Math.max(1, Math.round(mediaBudgetForViews(views) / days));
+  const effBudget = isCredits ? creditsDaily : budget;
+  const pricing = campaignPricing(effBudget, days, plan);
+  const creditsViews = viewsRangeForMedia(pricing.metaBudget);
   const fmtMoney = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
   const [launching, setLaunching] = useState(false);
@@ -227,13 +234,13 @@ function CreateWizard() {
         copy: body,
         headline,
         link,
-        budget,
+        budget: effBudget,
         days,
         city,
         neighborhood,
         radius: Number(radius) || 1,
         funding_type: fundingType,
-        pix_total_budget: fundingType === "pix_dedicated" ? budget * days : 0,
+        pix_total_budget: fundingType === "pix_dedicated" ? effBudget * days : 0,
         pix_remaining_budget: 0,
         reach: 0,
         results: 0,
@@ -248,6 +255,7 @@ function CreateWizard() {
         created_at: new Date().toISOString(),
         scheduled_start_at: scheduledStartIso,
         scheduled_end_at: scheduledEndIso,
+        credits_total: isCredits ? days : null,
       });
       if (result.paid) {
         toast.success("Anúncio pago com saldo do app!", {
@@ -269,7 +277,7 @@ function CreateWizard() {
 
         nav({
           to: "/payment",
-          search: { budget, days, name: headline || "Nova campanha", campaignId: result.campaign.id },
+          search: { budget: effBudget, days, name: headline || "Nova campanha", campaignId: result.campaign.id },
         });
       }
     } catch (e) {
