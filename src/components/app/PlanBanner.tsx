@@ -1,4 +1,4 @@
-import { Crown, Sparkles, Timer } from "lucide-react";
+import { Coins, Crown, Sparkles, Timer } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { KIWIFY_PRO_CHECKOUT } from "@/lib/pricing";
 
@@ -20,6 +20,21 @@ export function PlanBanner() {
   const plan = useAppStore((s) => s.plan);
   const daysLeft = useAppStore((s) => s.trialDaysLeft);
 
+  if (plan === "credits") {
+    return (
+      <div className="glass rounded-2xl px-5 py-4 border border-violet-400/40 bg-violet-500/5 flex flex-wrap items-center gap-3">
+        <Coins className="h-5 w-5 text-violet-300" />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">Você está no plano CRÉDITOS</p>
+          <p className="text-xs text-muted-foreground">
+            Compre pacotes de dias + visualizações. 1 crédito = 24h do robô rodando seu anúncio,
+            sem honorários de gestor e sem taxas extras.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (plan === "pro") {
     return (
       <div className="glass rounded-2xl px-5 py-4 border border-[#e6b422]/40 bg-[#e6b422]/5 flex flex-wrap items-center gap-3">
@@ -28,6 +43,7 @@ export function PlanBanner() {
       </div>
     );
   }
+
 
   if (plan === "trial_pro") {
     return (

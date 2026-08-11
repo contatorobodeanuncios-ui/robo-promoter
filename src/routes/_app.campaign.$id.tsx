@@ -1,9 +1,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useAppStore } from "@/lib/store";
+import { creditsState } from "@/lib/pricing";
 import { toast } from "sonner";
 import {
   ArrowLeft, Eye, MousePointerClick, Percent, DollarSign, Sparkles,
-  ThumbsUp, MessageCircle, Share2, MoreHorizontal, Info, CreditCard,
+  ThumbsUp, MessageCircle, Share2, MoreHorizontal, Info, CreditCard, Coins,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SafeImage } from "@/components/app/SafeImage";
@@ -51,6 +52,8 @@ function CampaignDetail() {
   // verdade do Facebook, não o status atual da campanha.
   const hasRealMetrics = c.clicks > 0 || c.impressions > 0 || c.spent > 0;
   const na = "não disponível";
+  // Plano Créditos: 1 crédito = 24h de veiculação, consumido gradualmente.
+  const credits = creditsState(c);
 
   const togglePause = () => {
     const next = c.status === "paused" ? "running" : "paused";
@@ -63,7 +66,14 @@ function CampaignDetail() {
     { label: "Cliques", value: hasRealMetrics ? c.clicks.toLocaleString("pt-BR") : na, icon: MousePointerClick, dim: !hasRealMetrics },
     { label: "CTR", value: hasRealMetrics ? `${c.ctr.toFixed(2)}%` : na, icon: Percent, dim: !hasRealMetrics },
     { label: "CPC", value: hasRealMetrics && c.cpc ? fmtBRL(c.cpc) : na, icon: DollarSign, dim: !hasRealMetrics || !c.cpc },
-    { label: "Gasto (Facebook)", value: hasRealMetrics ? fmtBRL(c.spent) : na, icon: DollarSign, dim: !hasRealMetrics },
+    c.credits_total
+      ? {
+          label: "Créditos restantes",
+          value: `${credits.remaining.toFixed(1)} de ${credits.total}`,
+          icon: Coins,
+          dim: false,
+        }
+      : { label: "Gasto (Facebook)", value: hasRealMetrics ? fmtBRL(c.spent) : na, icon: DollarSign, dim: !hasRealMetrics },
     { label: "CPM", value: hasRealMetrics && c.cpm ? fmtBRL(c.cpm) : na, icon: DollarSign, dim: !hasRealMetrics || !c.cpm },
     { label: "Frequência", value: hasRealMetrics && c.frequency ? c.frequency.toFixed(2) : na, icon: Percent, dim: !hasRealMetrics || !c.frequency },
     { label: "Custo por resultado", value: hasRealMetrics && c.cost_per_result ? fmtBRL(c.cost_per_result) : na, icon: DollarSign, dim: !hasRealMetrics || !c.cost_per_result },

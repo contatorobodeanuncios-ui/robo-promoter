@@ -19,7 +19,7 @@ import { reachRange, fmtRange } from "@/lib/mock-data";
 import { analyzeCreative, type CreativeAnalysis } from "@/lib/ai-analysis.functions";
 import { getCreativeUploadPath, getMaintenanceMode } from "@/lib/data.functions";
 import { useAppStore } from "@/lib/store";
-import { campaignPricing } from "@/lib/pricing";
+import { campaignPricing, mediaBudgetForViews, viewsRangeForMedia } from "@/lib/pricing";
 
 import { supabase } from "@/integrations/supabase/client";
 
@@ -76,7 +76,14 @@ function CreateWizard() {
   const [fundingType, setFundingType] = useState<"wallet" | "pix_dedicated">("wallet");
   // Verba de veiculação + taxa (mesma regra para PIX e saldo do app).
   const plan = useAppStore((s) => s.plan);
-  const pricing = campaignPricing(budget, days, plan);
+  // Plano CRÉDITOS: o cliente escolhe dias (1 crédito = 1 dia) + potência de
+  // visualizações. O preço do pacote já embute tudo — nenhuma taxa é exibida.
+  const isCredits = plan === "credits";
+  const [views, setViews] = useState(5000);
+  const creditsDaily = Math.max(1, Math.round(mediaBudgetForViews(views) / days));
+  const effBudget = isCredits ? creditsDaily : budget;
+  const pricing = campaignPricing(effBudget, days, plan);
+  const creditsViews = viewsRangeForMedia(pricing.metaBudget);
   const fmtMoney = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
   const [launching, setLaunching] = useState(false);
@@ -227,13 +234,13 @@ function CreateWizard() {
         copy: body,
         headline,
         link,
-        budget,
+        budget: effBudget,
         days,
         city,
         neighborhood,
         radius: Number(radius) || 1,
         funding_type: fundingType,
-        pix_total_budget: fundingType === "pix_dedicated" ? budget * days : 0,
+        pix_total_budget: fundingType === "pix_dedicated" ? effBudget * days : 0,
         pix_remaining_budget: 0,
         reach: 0,
         results: 0,
@@ -248,10 +255,13 @@ function CreateWizard() {
         created_at: new Date().toISOString(),
         scheduled_start_at: scheduledStartIso,
         scheduled_end_at: scheduledEndIso,
+        credits_total: isCredits ? days : null,
       });
       if (result.paid) {
         toast.success("Anúncio pago com saldo do app!", {
-          description: `${fmtMoney(result.totalCost)} debitados (${fmtMoney(result.metaBudget)} de veiculação + ${fmtMoney(result.serviceFee)} de taxas). Robô em análise.`,
+          description: isCredits
+            ? `${fmtMoney(result.totalCost)} debitados. ${days} créditos liberados — robô em análise.`
+            : `${fmtMoney(result.totalCost)} debitados (${fmtMoney(result.metaBudget)} de veiculação + ${fmtMoney(result.serviceFee)} de taxas). Robô em análise.`,
         });
         nav({ to: "/dashboard" });
       } else {
@@ -262,14 +272,16 @@ function CreateWizard() {
           {
             description:
               fundingType === "pix_dedicated"
-                ? `${fmtMoney(result.metaBudget)} vão diretamente para o anúncio (sem reembolso). Total do PIX: ${fmtMoney(result.totalCost)}.`
+                ? isCredits
+                  ? `Total do pacote: ${fmtMoney(result.totalCost)} — ${days} créditos.`
+                  : `${fmtMoney(result.metaBudget)} vão diretamente para o anúncio (sem reembolso). Total do PIX: ${fmtMoney(result.totalCost)}.`
                 : `Faltam ${fmtMoney(result.remainingDue)} para ativar a campanha.`,
           },
         );
 
         nav({
           to: "/payment",
-          search: { budget, days, name: headline || "Nova campanha", campaignId: result.campaign.id },
+          search: { budget: effBudget, days, name: headline || "Nova campanha", campaignId: result.campaign.id },
         });
       }
     } catch (e) {
@@ -605,64 +617,134 @@ function CreateWizard() {
         {step === 4 && (
           <div className="space-y-6 max-w-xl">
             <div>
-              <h2 className="text-xl font-semibold">Orçamento e lançamento</h2>
-              <p className="text-sm text-muted-foreground">Mínimo de R$ 7/dia e 7 dias de veiculação — tempo que o robô precisa para otimizar.</p>
+              <h2 className="text-xl font-semibold">
+                {isCredits ? "Pacote de créditos e lançamento" : "Orçamento e lançamento"}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {isCredits
+                  ? "Escolha quantos dias o robô vai rodar (1 crédito = 24h no ar) e a potência de visualizações. Sem honorários de gestor e sem taxas extras."
+                  : "Mínimo de R$ 7/dia e 7 dias de veiculação — tempo que o robô precisa para otimizar."}
+              </p>
             </div>
 
-            <div className="glass rounded-2xl p-6 space-y-5">
-              <div className="text-center">
-                <p className="text-xs text-muted-foreground uppercase tracking-wider">Orçamento diário</p>
-                <p className="text-5xl font-bold tabular-nums mt-1">
-                  R$ <span className="text-gradient">{budget}</span>
-                </p>
-                <p className="text-[11px] text-muted-foreground mt-1">Mínimo: R$ 7,00 / dia</p>
-              </div>
-              <Slider value={[budget]} min={7} max={300} step={1} onValueChange={(v) => setBudget(v[0])} />
-
-              <div className="space-y-2 pt-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">Duração do anúncio</Label>
-                  <span className="text-sm font-semibold tabular-nums">{days} dias</span>
-                </div>
-                <Slider value={[days]} min={7} max={60} step={1} onValueChange={(v) => setDays(v[0])} />
-                <p className="text-[11px] text-muted-foreground">Mínimo de 7 dias — período necessário para o robô aprender e otimizar a campanha.</p>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3 pt-4 text-center border-t border-white/5">
-                <div className="pt-3">
-                  <p className="text-xs text-muted-foreground">Público alcançado</p>
-                  <p className="font-semibold text-gradient text-sm">
-                    {fmtRange(reachRange(budget, days))}
+            {isCredits ? (
+              <div className="glass rounded-2xl p-6 space-y-5">
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider">Pacote</p>
+                  <p className="text-5xl font-bold tabular-nums mt-1">
+                    <span className="text-gradient">{fmtMoney(pricing.total)}</span>
                   </p>
-                  <p className="text-[10px] text-muted-foreground">faixa estimada</p>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    {days} crédito{days === 1 ? "" : "s"} · robô rodando por {days} dia{days === 1 ? "" : "s"}
+                  </p>
                 </div>
-                <div className="pt-3">
-                  <p className="text-xs text-muted-foreground">Cliques esperados</p>
-                  <p className="font-semibold">{Math.round(budget * days * 2.6).toLocaleString("pt-BR")}</p>
-                </div>
-                <div className="pt-3">
-                  <p className="text-xs text-muted-foreground">Total a ser cobrado</p>
-                  <p className="font-semibold">{fmtMoney(pricing.total)}</p>
-                </div>
-              </div>
 
-              <div className="rounded-xl border border-white/10 bg-background/30 p-4 space-y-2 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Orçamento Meta Ads</span>
-                  <span className="tabular-nums font-medium">{fmtMoney(pricing.metaBudget)}</span>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Potência de visualizações</Label>
+                    <span className="text-sm font-semibold tabular-nums">
+                      {views.toLocaleString("pt-BR")}
+                    </span>
+                  </div>
+                  <Slider
+                    value={[views]}
+                    min={2500}
+                    max={200000}
+                    step={500}
+                    onValueChange={(v) => setViews(v[0])}
+                  />
                 </div>
-                <div className="flex items-start justify-between gap-3">
-                  <span className="text-muted-foreground">{pricing.feeLabel}</span>
-                  <span className="tabular-nums font-medium">{fmtMoney(pricing.feesTotal)}</span>
+
+                <div className="space-y-2 pt-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Créditos (dias no ar)</Label>
+                    <span className="text-sm font-semibold tabular-nums">
+                      {days} crédito{days === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  <Slider value={[days]} min={7} max={60} step={1} onValueChange={(v) => setDays(v[0])} />
+                  <p className="text-[11px] text-muted-foreground">
+                    Mínimo de 7 dias — período necessário para o robô aprender e otimizar.
+                  </p>
                 </div>
-                <div className="flex items-center justify-between border-t border-white/10 pt-2">
-                  <span className="font-semibold">
-                    {fundingType === "wallet" ? "Total a ser debitado" : "Total a ser cobrado"}
-                  </span>
-                  <span className="tabular-nums font-bold">{fmtMoney(pricing.total)}</span>
+
+                <div className="grid grid-cols-3 gap-3 pt-4 text-center border-t border-white/5">
+                  <div className="pt-3">
+                    <p className="text-xs text-muted-foreground">Visualizações estimadas</p>
+                    <p className="font-semibold text-gradient text-sm">
+                      {creditsViews.min.toLocaleString("pt-BR")} a {creditsViews.max.toLocaleString("pt-BR")}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">faixa estimada</p>
+                  </div>
+                  <div className="pt-3">
+                    <p className="text-xs text-muted-foreground">Créditos</p>
+                    <p className="font-semibold">{days}</p>
+                    <p className="text-[10px] text-muted-foreground">1 crédito = 24h</p>
+                  </div>
+                  <div className="pt-3">
+                    <p className="text-xs text-muted-foreground">Valor do pacote</p>
+                    <p className="font-semibold">{fmtMoney(pricing.total)}</p>
+                    <p className="text-[10px] text-muted-foreground">tudo incluso</p>
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="glass rounded-2xl p-6 space-y-5">
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider">Orçamento diário</p>
+                  <p className="text-5xl font-bold tabular-nums mt-1">
+                    R$ <span className="text-gradient">{budget}</span>
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-1">Mínimo: R$ 7,00 / dia</p>
+                </div>
+                <Slider value={[budget]} min={7} max={300} step={1} onValueChange={(v) => setBudget(v[0])} />
+
+                <div className="space-y-2 pt-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Duração do anúncio</Label>
+                    <span className="text-sm font-semibold tabular-nums">{days} dias</span>
+                  </div>
+                  <Slider value={[days]} min={7} max={60} step={1} onValueChange={(v) => setDays(v[0])} />
+                  <p className="text-[11px] text-muted-foreground">Mínimo de 7 dias — período necessário para o robô aprender e otimizar a campanha.</p>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3 pt-4 text-center border-t border-white/5">
+                  <div className="pt-3">
+                    <p className="text-xs text-muted-foreground">Público alcançado</p>
+                    <p className="font-semibold text-gradient text-sm">
+                      {fmtRange(reachRange(budget, days))}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">faixa estimada</p>
+                  </div>
+                  <div className="pt-3">
+                    <p className="text-xs text-muted-foreground">Cliques esperados</p>
+                    <p className="font-semibold">{Math.round(budget * days * 2.6).toLocaleString("pt-BR")}</p>
+                  </div>
+                  <div className="pt-3">
+                    <p className="text-xs text-muted-foreground">Total a ser cobrado</p>
+                    <p className="font-semibold">{fmtMoney(pricing.total)}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-white/10 bg-background/30 p-4 space-y-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Orçamento Meta Ads</span>
+                    <span className="tabular-nums font-medium">{fmtMoney(pricing.metaBudget)}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-muted-foreground">{pricing.feeLabel}</span>
+                    <span className="tabular-nums font-medium">{fmtMoney(pricing.feesTotal)}</span>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-white/10 pt-2">
+                    <span className="font-semibold">
+                      {fundingType === "wallet" ? "Total a ser debitado" : "Total a ser cobrado"}
+                    </span>
+                    <span className="tabular-nums font-bold">{fmtMoney(pricing.total)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
 
 
 
@@ -696,9 +778,22 @@ function CreateWizard() {
             <div className="glass rounded-xl p-3 flex items-start gap-2 text-xs text-muted-foreground">
               <Sparkles className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
               <span>
-                Com R$ {budget}/dia por {days} dias o anúncio deve impactar entre{" "}
-                <span className="text-foreground font-semibold">{fmtRange(reachRange(budget, days))}</span>{" "}
-                pessoas em {neighborhood || "sua região"}{city ? `, ${city}` : ""} (raio de {radius} km).
+                {isCredits ? (
+                  <>
+                    Com {days} crédito{days === 1 ? "" : "s"} o robô roda por {days} dia
+                    {days === 1 ? "" : "s"} e deve gerar entre{" "}
+                    <span className="text-foreground font-semibold">
+                      {creditsViews.min.toLocaleString("pt-BR")} e {creditsViews.max.toLocaleString("pt-BR")}
+                    </span>{" "}
+                    visualizações em {neighborhood || "sua região"}{city ? `, ${city}` : ""} (raio de {radius} km).
+                  </>
+                ) : (
+                  <>
+                    Com R$ {budget}/dia por {days} dias o anúncio deve impactar entre{" "}
+                    <span className="text-foreground font-semibold">{fmtRange(reachRange(budget, days))}</span>{" "}
+                    pessoas em {neighborhood || "sua região"}{city ? `, ${city}` : ""} (raio de {radius} km).
+                  </>
+                )}
               </span>
             </div>
 
@@ -707,7 +802,9 @@ function CreateWizard() {
                 <CalendarDays className="h-4 w-4 text-primary shrink-0" />
                 <div className="text-xs">
                   <p className="text-muted-foreground">Duração</p>
-                  <p className="font-semibold">{days} dias · R$ {budget}/dia</p>
+                  <p className="font-semibold">
+                    {isCredits ? `${days} dias · ${days} créditos` : `${days} dias · R$ ${budget}/dia`}
+                  </p>
                 </div>
               </div>
               <div className="glass rounded-xl p-3 flex items-center gap-3">
@@ -731,8 +828,8 @@ function CreateWizard() {
                 >
                   <p className="font-semibold text-sm">Saldo do app</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Debita {fmtMoney(pricing.total)} do seu saldo pré-pago. Sobra vira crédito
-                    para a próxima campanha.
+                    Debita {fmtMoney(pricing.total)} do seu saldo pré-pago.
+                    {isCredits ? " Valor do pacote, tudo incluso." : " Sobra vira crédito para a próxima campanha."}
                   </p>
 
                 </button>
@@ -741,10 +838,21 @@ function CreateWizard() {
                   onClick={() => setFundingType("pix_dedicated")}
                   className={`text-left rounded-xl p-4 border transition-all ${fundingType === "pix_dedicated" ? "border-primary/70 bg-primary/5 border-glow" : "border-white/10 hover:border-white/20"}`}
                 >
-                  <p className="font-semibold text-sm">PIX dedicado (100% Meta Ads)</p>
+                  <p className="font-semibold text-sm">
+                    {isCredits ? "PIX do pacote" : "PIX dedicado (100% Meta Ads)"}
+                  </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    PIX de {fmtMoney(pricing.total)}: {fmtMoney(pricing.metaBudget)} vão
-                    <strong> direto</strong> para esta campanha. Não entra no saldo.
+                    {isCredits ? (
+                      <>
+                        PIX de {fmtMoney(pricing.total)} para liberar os {days} créditos desta
+                        campanha. Não entra no saldo.
+                      </>
+                    ) : (
+                      <>
+                        PIX de {fmtMoney(pricing.total)}: {fmtMoney(pricing.metaBudget)} vão
+                        <strong> direto</strong> para esta campanha. Não entra no saldo.
+                      </>
+                    )}
                   </p>
 
                 </button>

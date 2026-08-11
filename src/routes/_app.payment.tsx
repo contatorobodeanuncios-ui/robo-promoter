@@ -206,7 +206,23 @@ function PaymentPage() {
           <p className="text-4xl font-bold text-gradient tabular-nums">{fmtBRL(amount)}</p>
         </div>
 
-        {pricing && !topup && (
+        {pricing && !topup && plan === "credits" && (
+          <div className="rounded-xl border border-white/10 bg-background/30 p-4 space-y-2 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Créditos do pacote</span>
+              <span className="tabular-nums font-medium">{days} crédito{days === 1 ? "" : "s"}</span>
+            </div>
+            <div className="flex items-center justify-between border-t border-white/10 pt-2">
+              <span className="font-semibold">Valor do pacote</span>
+              <span className="tabular-nums font-bold">{fmtBRL(pricing.total)}</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Tudo incluso — sem honorários de gestor e sem taxas extras.
+            </p>
+          </div>
+        )}
+
+        {pricing && !topup && plan !== "credits" && (
           <div className="rounded-xl border border-white/10 bg-background/30 p-4 space-y-2 text-sm">
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Orçamento Meta Ads</span>
@@ -222,6 +238,7 @@ function PaymentPage() {
             </div>
           </div>
         )}
+
 
 
         {cpfDigits && stage !== "needsCpf" && (

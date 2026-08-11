@@ -1567,20 +1567,26 @@ function PlanButtons({
   trialStartedAt,
 }: {
   userId: string;
-  plan: "free" | "pro" | "trial_pro";
+  plan: "free" | "pro" | "trial_pro" | "credits";
   trialDays: number | null;
   trialStartedAt: string | null;
 }) {
   const qc = useQueryClient();
   const fn = useServerFn(adminSetUserPlan);
   const mut = useMutation({
-    mutationFn: (v: { plan: "free" | "pro" | "trial_pro"; trial_days?: number }) =>
+    mutationFn: (v: { plan: "free" | "pro" | "trial_pro" | "credits"; trial_days?: number }) =>
       fn({ data: { user_id: userId, ...v } }),
     onSuccess: (_r, v) => {
       qc.invalidateQueries({ queryKey: ["admin-access-requests"] });
       qc.invalidateQueries({ queryKey: ["admin-all-clients"] });
       toast.success(
-        v.plan === "free" ? "Usuário definido como FREE" : v.plan === "pro" ? "Usuário definido como PRO" : "Teste PRO liberado",
+        v.plan === "free"
+          ? "Usuário definido como FREE"
+          : v.plan === "pro"
+            ? "Usuário definido como PRO"
+            : v.plan === "credits"
+              ? "Usuário definido como CRÉDITOS"
+              : "Teste PRO liberado",
       );
     },
     onError: (e) => toast.error(String(e)),
@@ -1597,6 +1603,14 @@ function PlanButtons({
 
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
+      <button
+        type="button"
+        disabled={mut.isPending}
+        onClick={() => mut.mutate({ plan: "credits" })}
+        className={`${base} ${plan === "credits" ? "border-violet-400/60 bg-violet-500/20 text-violet-200" : off}`}
+      >
+        CRÉDITOS
+      </button>
       <button
         type="button"
         disabled={mut.isPending}
