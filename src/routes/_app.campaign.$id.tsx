@@ -1,9 +1,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useAppStore } from "@/lib/store";
+import { creditsState } from "@/lib/pricing";
 import { toast } from "sonner";
 import {
   ArrowLeft, Eye, MousePointerClick, Percent, DollarSign, Sparkles,
-  ThumbsUp, MessageCircle, Share2, MoreHorizontal, Info, CreditCard,
+  ThumbsUp, MessageCircle, Share2, MoreHorizontal, Info, CreditCard, Coins,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SafeImage } from "@/components/app/SafeImage";

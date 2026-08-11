@@ -7,6 +7,7 @@ import { RobotMascot } from "@/components/app/RobotMascot";
 import { SafeImage } from "@/components/app/SafeImage";
 import { useUserDisplayName } from "@/components/app/AppShell";
 import { useAppStore, computeSummary } from "@/lib/store";
+import { creditsState } from "@/lib/pricing";
 import { PushNotificationBanner } from "@/components/app/PushNotificationBanner";
 import { toast } from "sonner";
 import { PlanBanner } from "@/components/app/PlanBanner";
