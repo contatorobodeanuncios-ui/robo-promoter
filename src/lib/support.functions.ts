@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { CREDITS_BANK_FIXED_COST, CREDITS_TAX_RATE } from "@/lib/pricing";
 
 const ADMIN_EMAIL = "prototipospremium@gmail.com";
 

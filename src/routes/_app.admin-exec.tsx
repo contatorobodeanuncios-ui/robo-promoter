@@ -2,7 +2,7 @@ import { createFileRoute, redirect, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { ArrowLeft, TrendingUp, Users, Zap, DollarSign, PieChart, MessageCircle, Clock } from "lucide-react";
+import { ArrowLeft, TrendingUp, Users, Zap, DollarSign, PieChart, MessageCircle, Clock, Coins } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getExecDashboard } from "@/lib/support.functions";
 import {
@@ -85,6 +85,7 @@ function ExecPage() {
         { name: "Aguardando pgto", value: d.pending_revenue, color: "#f59e0b" },
         { name: "Gasto (Ads)", value: d.total_spent, color: "#ef4444" },
         { name: "Ticket médio", value: d.avg_ticket, color: "#38bdf8" },
+        { name: "Créditos (lucro)", value: d.credits_profit, color: "#a78bfa" },
       ]
     : [];
 
@@ -142,6 +143,20 @@ function ExecPage() {
             <Card icon={Zap} tone="positive" label="Campanhas rodando" value={String(d.campaigns_running)} />
             <Card icon={PieChart} tone="negative" label="Gasto em anúncios" value={fmtBRL(d.total_spent)} />
             <Card icon={MessageCircle} label="Suporte aberto" value={String(d.open_support)} />
+            <Card
+              icon={Coins}
+              tone="info"
+              label="Créditos — faturamento"
+              value={fmtBRL(d.credits_gross)}
+              sub={`${d.credits_campaigns} pacote${d.credits_campaigns === 1 ? "" : "s"} pago${d.credits_campaigns === 1 ? "" : "s"}`}
+            />
+            <Card
+              icon={Coins}
+              tone="positive"
+              label="Créditos — lucro líquido"
+              value={fmtBRL(d.credits_profit)}
+              sub={`Mídia ${fmtBRL(d.credits_media)} · Custos ${fmtBRL(d.credits_costs)}`}
+            />
           </div>
 
 
