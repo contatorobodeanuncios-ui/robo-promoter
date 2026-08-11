@@ -71,6 +71,8 @@ export interface CampaignRow {
   scheduled_end_at: string | null;
   media_type: CampaignMediaType;
   media: CampaignMediaItem[];
+  /** Plano Créditos: total de créditos do pacote (1 crédito = 24h de veiculação). */
+  credits_total: number | null;
 }
 
 
@@ -111,6 +113,7 @@ interface DbCampaign {
   scheduled_end_at?: string | null;
   media_type?: string | null;
   media?: unknown;
+  credits_total?: number | null;
 }
 
 const num = (v: string | number | null | undefined) => (v == null ? 0 : Number(v));
@@ -167,6 +170,7 @@ const mapCampaign = (r: DbCampaign): CampaignRow => ({
   scheduled_end_at: r.scheduled_end_at ?? null,
   media_type: (r.media_type ?? "image") as CampaignMediaType,
   media: parseMedia(r.media),
+  credits_total: r.credits_total ?? null,
 });
 
 
@@ -246,6 +250,8 @@ const campaignInput = z.object({
     )
     .max(30)
     .default([]),
+  // Plano Créditos: quantidade de créditos do pacote (1 crédito = 1 dia).
+  credits_total: z.number().int().min(0).max(365).nullable().optional(),
 });
 
 
@@ -331,6 +337,8 @@ export const createCampaign = createServerFn({ method: "POST" })
       scheduled_end_at: data.scheduled_end_at ?? null,
       media_type: data.media_type,
       media: data.media as unknown as Json,
+      // No plano Créditos o pacote vira créditos (1 crédito = 1 dia).
+      credits_total: plan === "credits" ? data.days : null,
 
     };
     const { data: row, error } = await supabase
