@@ -613,64 +613,134 @@ function CreateWizard() {
         {step === 4 && (
           <div className="space-y-6 max-w-xl">
             <div>
-              <h2 className="text-xl font-semibold">Orçamento e lançamento</h2>
-              <p className="text-sm text-muted-foreground">Mínimo de R$ 7/dia e 7 dias de veiculação — tempo que o robô precisa para otimizar.</p>
+              <h2 className="text-xl font-semibold">
+                {isCredits ? "Pacote de créditos e lançamento" : "Orçamento e lançamento"}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {isCredits
+                  ? "Escolha quantos dias o robô vai rodar (1 crédito = 24h no ar) e a potência de visualizações. Sem honorários de gestor e sem taxas extras."
+                  : "Mínimo de R$ 7/dia e 7 dias de veiculação — tempo que o robô precisa para otimizar."}
+              </p>
             </div>
 
-            <div className="glass rounded-2xl p-6 space-y-5">
-              <div className="text-center">
-                <p className="text-xs text-muted-foreground uppercase tracking-wider">Orçamento diário</p>
-                <p className="text-5xl font-bold tabular-nums mt-1">
-                  R$ <span className="text-gradient">{budget}</span>
-                </p>
-                <p className="text-[11px] text-muted-foreground mt-1">Mínimo: R$ 7,00 / dia</p>
-              </div>
-              <Slider value={[budget]} min={7} max={300} step={1} onValueChange={(v) => setBudget(v[0])} />
-
-              <div className="space-y-2 pt-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">Duração do anúncio</Label>
-                  <span className="text-sm font-semibold tabular-nums">{days} dias</span>
-                </div>
-                <Slider value={[days]} min={7} max={60} step={1} onValueChange={(v) => setDays(v[0])} />
-                <p className="text-[11px] text-muted-foreground">Mínimo de 7 dias — período necessário para o robô aprender e otimizar a campanha.</p>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3 pt-4 text-center border-t border-white/5">
-                <div className="pt-3">
-                  <p className="text-xs text-muted-foreground">Público alcançado</p>
-                  <p className="font-semibold text-gradient text-sm">
-                    {fmtRange(reachRange(budget, days))}
+            {isCredits ? (
+              <div className="glass rounded-2xl p-6 space-y-5">
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider">Pacote</p>
+                  <p className="text-5xl font-bold tabular-nums mt-1">
+                    <span className="text-gradient">{fmtMoney(pricing.total)}</span>
                   </p>
-                  <p className="text-[10px] text-muted-foreground">faixa estimada</p>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    {days} crédito{days === 1 ? "" : "s"} · robô rodando por {days} dia{days === 1 ? "" : "s"}
+                  </p>
                 </div>
-                <div className="pt-3">
-                  <p className="text-xs text-muted-foreground">Cliques esperados</p>
-                  <p className="font-semibold">{Math.round(budget * days * 2.6).toLocaleString("pt-BR")}</p>
-                </div>
-                <div className="pt-3">
-                  <p className="text-xs text-muted-foreground">Total a ser cobrado</p>
-                  <p className="font-semibold">{fmtMoney(pricing.total)}</p>
-                </div>
-              </div>
 
-              <div className="rounded-xl border border-white/10 bg-background/30 p-4 space-y-2 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Orçamento Meta Ads</span>
-                  <span className="tabular-nums font-medium">{fmtMoney(pricing.metaBudget)}</span>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Potência de visualizações</Label>
+                    <span className="text-sm font-semibold tabular-nums">
+                      {views.toLocaleString("pt-BR")}
+                    </span>
+                  </div>
+                  <Slider
+                    value={[views]}
+                    min={2500}
+                    max={200000}
+                    step={500}
+                    onValueChange={(v) => setViews(v[0])}
+                  />
                 </div>
-                <div className="flex items-start justify-between gap-3">
-                  <span className="text-muted-foreground">{pricing.feeLabel}</span>
-                  <span className="tabular-nums font-medium">{fmtMoney(pricing.feesTotal)}</span>
+
+                <div className="space-y-2 pt-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Créditos (dias no ar)</Label>
+                    <span className="text-sm font-semibold tabular-nums">
+                      {days} crédito{days === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  <Slider value={[days]} min={7} max={60} step={1} onValueChange={(v) => setDays(v[0])} />
+                  <p className="text-[11px] text-muted-foreground">
+                    Mínimo de 7 dias — período necessário para o robô aprender e otimizar.
+                  </p>
                 </div>
-                <div className="flex items-center justify-between border-t border-white/10 pt-2">
-                  <span className="font-semibold">
-                    {fundingType === "wallet" ? "Total a ser debitado" : "Total a ser cobrado"}
-                  </span>
-                  <span className="tabular-nums font-bold">{fmtMoney(pricing.total)}</span>
+
+                <div className="grid grid-cols-3 gap-3 pt-4 text-center border-t border-white/5">
+                  <div className="pt-3">
+                    <p className="text-xs text-muted-foreground">Visualizações estimadas</p>
+                    <p className="font-semibold text-gradient text-sm">
+                      {creditsViews.min.toLocaleString("pt-BR")} a {creditsViews.max.toLocaleString("pt-BR")}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">faixa estimada</p>
+                  </div>
+                  <div className="pt-3">
+                    <p className="text-xs text-muted-foreground">Créditos</p>
+                    <p className="font-semibold">{days}</p>
+                    <p className="text-[10px] text-muted-foreground">1 crédito = 24h</p>
+                  </div>
+                  <div className="pt-3">
+                    <p className="text-xs text-muted-foreground">Valor do pacote</p>
+                    <p className="font-semibold">{fmtMoney(pricing.total)}</p>
+                    <p className="text-[10px] text-muted-foreground">tudo incluso</p>
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="glass rounded-2xl p-6 space-y-5">
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider">Orçamento diário</p>
+                  <p className="text-5xl font-bold tabular-nums mt-1">
+                    R$ <span className="text-gradient">{budget}</span>
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-1">Mínimo: R$ 7,00 / dia</p>
+                </div>
+                <Slider value={[budget]} min={7} max={300} step={1} onValueChange={(v) => setBudget(v[0])} />
+
+                <div className="space-y-2 pt-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Duração do anúncio</Label>
+                    <span className="text-sm font-semibold tabular-nums">{days} dias</span>
+                  </div>
+                  <Slider value={[days]} min={7} max={60} step={1} onValueChange={(v) => setDays(v[0])} />
+                  <p className="text-[11px] text-muted-foreground">Mínimo de 7 dias — período necessário para o robô aprender e otimizar a campanha.</p>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3 pt-4 text-center border-t border-white/5">
+                  <div className="pt-3">
+                    <p className="text-xs text-muted-foreground">Público alcançado</p>
+                    <p className="font-semibold text-gradient text-sm">
+                      {fmtRange(reachRange(budget, days))}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">faixa estimada</p>
+                  </div>
+                  <div className="pt-3">
+                    <p className="text-xs text-muted-foreground">Cliques esperados</p>
+                    <p className="font-semibold">{Math.round(budget * days * 2.6).toLocaleString("pt-BR")}</p>
+                  </div>
+                  <div className="pt-3">
+                    <p className="text-xs text-muted-foreground">Total a ser cobrado</p>
+                    <p className="font-semibold">{fmtMoney(pricing.total)}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-white/10 bg-background/30 p-4 space-y-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Orçamento Meta Ads</span>
+                    <span className="tabular-nums font-medium">{fmtMoney(pricing.metaBudget)}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-muted-foreground">{pricing.feeLabel}</span>
+                    <span className="tabular-nums font-medium">{fmtMoney(pricing.feesTotal)}</span>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-white/10 pt-2">
+                    <span className="font-semibold">
+                      {fundingType === "wallet" ? "Total a ser debitado" : "Total a ser cobrado"}
+                    </span>
+                    <span className="tabular-nums font-bold">{fmtMoney(pricing.total)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
 
 
 
