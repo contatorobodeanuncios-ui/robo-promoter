@@ -365,6 +365,15 @@ export interface ExecStats {
   platform_profit: number;
   service_fees: number;
   platform_fees: number;
+  /** Plano Créditos: faturamento bruto dos pacotes pagos no período */
+  credits_gross: number;
+  /** Plano Créditos: verba real enviada à Meta */
+  credits_media: number;
+  /** Plano Créditos: custos internos (taxas bancárias fixas + imposto sobre a verba) */
+  credits_costs: number;
+  /** Plano Créditos: lucro líquido dos pacotes */
+  credits_profit: number;
+  credits_campaigns: number;
   conversion_rate: number;
   avg_ticket: number;
   open_support: number;
@@ -404,7 +413,7 @@ export const getExecDashboard = createServerFn({ method: "POST" })
         sb.from("campaigns").select("*", { count: "exact", head: true }).in("status", ["running", "rodando"]),
         sb
           .from("campaigns")
-          .select("spent, revenue, budget, days, service_fee, platform_fee, total_paid")
+          .select("spent, revenue, budget, days, service_fee, platform_fee, total_paid, credits_total")
           .gte("created_at", fromIso)
           .lte("created_at", toIso),
         sb.from("payment_requests").select("amount, status").gte("created_at", fromIso).lte("created_at", toIso),
@@ -418,6 +427,7 @@ export const getExecDashboard = createServerFn({ method: "POST" })
       service_fee?: number | null;
       platform_fee?: number | null;
       total_paid?: number | null;
+      credits_total?: number | null;
     }>;
     // Somente campanhas efetivamente pagas entram nas finanças reais
     const camps = allCamps.filter((c) => Number(c.total_paid ?? 0) > 0);
@@ -428,6 +438,18 @@ export const getExecDashboard = createServerFn({ method: "POST" })
     );
     const serviceFees = camps.reduce((s, c) => s + Number(c.service_fee ?? 0), 0);
     const platformFees = camps.reduce((s, c) => s + Number(c.platform_fee ?? 0), 0);
+    // Plano Créditos: pacote fechado. Metade do valor pago vira verba de mídia,
+    // e os custos internos (banco + imposto sobre a verba) saem do lucro.
+    const creditCamps = camps.filter((c) => Number(c.credits_total ?? 0) > 0);
+    const creditsGross = creditCamps.reduce((s2, c) => s2 + Number(c.total_paid ?? 0), 0);
+    const creditsMedia = creditCamps.reduce(
+      (s2, c) => s2 + Number(c.budget ?? 0) * Number(c.days ?? 0),
+      0,
+    );
+    const creditsCosts =
+      creditCamps.length * CREDITS_BANK_FIXED_COST + creditsMedia * CREDITS_TAX_RATE;
+    const creditsProfit = creditsGross - creditsMedia - creditsCosts;
+
     const payments = paymentsRes.data ?? [];
     const approved = payments.filter((p) => p.status === "approved" || p.status === "paid");
     const pending = payments.filter((p) => p.status === "pending");
@@ -449,6 +471,11 @@ export const getExecDashboard = createServerFn({ method: "POST" })
       service_fees: Math.round(serviceFees * 100) / 100,
       platform_fees: Math.round(platformFees * 100) / 100,
       platform_profit: Math.round((serviceFees + platformFees) * 100) / 100,
+      credits_gross: Math.round(creditsGross * 100) / 100,
+      credits_media: Math.round(creditsMedia * 100) / 100,
+      credits_costs: Math.round(creditsCosts * 100) / 100,
+      credits_profit: Math.round(creditsProfit * 100) / 100,
+      credits_campaigns: creditCamps.length,
       conversion_rate: convRate,
       avg_ticket: avgTicket,
       open_support: supportRes.count ?? 0,
