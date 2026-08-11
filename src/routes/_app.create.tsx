@@ -259,7 +259,9 @@ function CreateWizard() {
       });
       if (result.paid) {
         toast.success("Anúncio pago com saldo do app!", {
-          description: `${fmtMoney(result.totalCost)} debitados (${fmtMoney(result.metaBudget)} de veiculação + ${fmtMoney(result.serviceFee)} de taxas). Robô em análise.`,
+          description: isCredits
+            ? `${fmtMoney(result.totalCost)} debitados. ${days} créditos liberados — robô em análise.`
+            : `${fmtMoney(result.totalCost)} debitados (${fmtMoney(result.metaBudget)} de veiculação + ${fmtMoney(result.serviceFee)} de taxas). Robô em análise.`,
         });
         nav({ to: "/dashboard" });
       } else {
@@ -270,7 +272,9 @@ function CreateWizard() {
           {
             description:
               fundingType === "pix_dedicated"
-                ? `${fmtMoney(result.metaBudget)} vão diretamente para o anúncio (sem reembolso). Total do PIX: ${fmtMoney(result.totalCost)}.`
+                ? isCredits
+                  ? `Total do pacote: ${fmtMoney(result.totalCost)} — ${days} créditos.`
+                  : `${fmtMoney(result.metaBudget)} vão diretamente para o anúncio (sem reembolso). Total do PIX: ${fmtMoney(result.totalCost)}.`
                 : `Faltam ${fmtMoney(result.remainingDue)} para ativar a campanha.`,
           },
         );
@@ -774,9 +778,22 @@ function CreateWizard() {
             <div className="glass rounded-xl p-3 flex items-start gap-2 text-xs text-muted-foreground">
               <Sparkles className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
               <span>
-                Com R$ {budget}/dia por {days} dias o anúncio deve impactar entre{" "}
-                <span className="text-foreground font-semibold">{fmtRange(reachRange(budget, days))}</span>{" "}
-                pessoas em {neighborhood || "sua região"}{city ? `, ${city}` : ""} (raio de {radius} km).
+                {isCredits ? (
+                  <>
+                    Com {days} crédito{days === 1 ? "" : "s"} o robô roda por {days} dia
+                    {days === 1 ? "" : "s"} e deve gerar entre{" "}
+                    <span className="text-foreground font-semibold">
+                      {creditsViews.min.toLocaleString("pt-BR")} e {creditsViews.max.toLocaleString("pt-BR")}
+                    </span>{" "}
+                    visualizações em {neighborhood || "sua região"}{city ? `, ${city}` : ""} (raio de {radius} km).
+                  </>
+                ) : (
+                  <>
+                    Com R$ {budget}/dia por {days} dias o anúncio deve impactar entre{" "}
+                    <span className="text-foreground font-semibold">{fmtRange(reachRange(budget, days))}</span>{" "}
+                    pessoas em {neighborhood || "sua região"}{city ? `, ${city}` : ""} (raio de {radius} km).
+                  </>
+                )}
               </span>
             </div>
 
@@ -785,7 +802,9 @@ function CreateWizard() {
                 <CalendarDays className="h-4 w-4 text-primary shrink-0" />
                 <div className="text-xs">
                   <p className="text-muted-foreground">Duração</p>
-                  <p className="font-semibold">{days} dias · R$ {budget}/dia</p>
+                  <p className="font-semibold">
+                    {isCredits ? `${days} dias · ${days} créditos` : `${days} dias · R$ ${budget}/dia`}
+                  </p>
                 </div>
               </div>
               <div className="glass rounded-xl p-3 flex items-center gap-3">
@@ -809,8 +828,8 @@ function CreateWizard() {
                 >
                   <p className="font-semibold text-sm">Saldo do app</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Debita {fmtMoney(pricing.total)} do seu saldo pré-pago. Sobra vira crédito
-                    para a próxima campanha.
+                    Debita {fmtMoney(pricing.total)} do seu saldo pré-pago.
+                    {isCredits ? " Valor do pacote, tudo incluso." : " Sobra vira crédito para a próxima campanha."}
                   </p>
 
                 </button>
@@ -819,10 +838,21 @@ function CreateWizard() {
                   onClick={() => setFundingType("pix_dedicated")}
                   className={`text-left rounded-xl p-4 border transition-all ${fundingType === "pix_dedicated" ? "border-primary/70 bg-primary/5 border-glow" : "border-white/10 hover:border-white/20"}`}
                 >
-                  <p className="font-semibold text-sm">PIX dedicado (100% Meta Ads)</p>
+                  <p className="font-semibold text-sm">
+                    {isCredits ? "PIX do pacote" : "PIX dedicado (100% Meta Ads)"}
+                  </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    PIX de {fmtMoney(pricing.total)}: {fmtMoney(pricing.metaBudget)} vão
-                    <strong> direto</strong> para esta campanha. Não entra no saldo.
+                    {isCredits ? (
+                      <>
+                        PIX de {fmtMoney(pricing.total)} para liberar os {days} créditos desta
+                        campanha. Não entra no saldo.
+                      </>
+                    ) : (
+                      <>
+                        PIX de {fmtMoney(pricing.total)}: {fmtMoney(pricing.metaBudget)} vão
+                        <strong> direto</strong> para esta campanha. Não entra no saldo.
+                      </>
+                    )}
                   </p>
 
                 </button>
