@@ -668,7 +668,7 @@ export interface AccessRequestRow {
   created_at: string;
   reviewed_at: string | null;
   /** nível do usuário, vindo do perfil */
-  plan: "free" | "pro" | "trial_pro";
+  plan: "free" | "pro" | "trial_pro" | "credits";
   trial_days: number | null;
   trial_started_at: string | null;
   phone: string | null;
@@ -721,7 +721,7 @@ export const adminSetUserPlan = createServerFn({ method: "POST" })
     z
       .object({
         user_id: z.string().uuid(),
-        plan: z.enum(["free", "pro", "trial_pro"]),
+        plan: z.enum(["free", "pro", "trial_pro", "credits"]),
         trial_days: z.number().int().min(1).max(365).optional(),
       })
       .parse(d),
@@ -841,7 +841,7 @@ export interface AdminClientRow {
   balance: number;
   status: string;
   created_at: string;
-  plan: "free" | "pro" | "trial_pro";
+  plan: "free" | "pro" | "trial_pro" | "credits";
   trial_days: number | null;
   trial_started_at: string | null;
 }
