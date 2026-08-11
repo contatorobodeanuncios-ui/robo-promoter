@@ -1,4 +1,4 @@
-import { Crown, Sparkles, Timer } from "lucide-react";
+import { Coins, Crown, Sparkles, Timer } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { KIWIFY_PRO_CHECKOUT } from "@/lib/pricing";
 
