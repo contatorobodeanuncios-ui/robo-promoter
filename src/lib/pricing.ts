@@ -84,6 +84,17 @@ export function campaignPricing(
   plan: UserPlan = "pro",
 ): CampaignPricing {
   const metaBudget = round2(budget * days);
+  // Plano CRÉDITOS: pacote fechado, sem nenhuma taxa exibida ao cliente.
+  if (plan === "credits") {
+    return {
+      metaBudget,
+      serviceFee: 0,
+      platformFee: 0,
+      feesTotal: 0,
+      feeLabel: "",
+      total: creditsPackagePrice(metaBudget),
+    };
+  }
   const serviceFee = round2(metaBudget * SERVICE_FEE_RATE);
   const platformFee = plan === "free" ? round2(metaBudget * PLATFORM_FEE_RATE) : 0;
   const feesTotal = round2(serviceFee + platformFee);
@@ -103,7 +114,8 @@ export function effectivePlan(p: {
   trial_days?: number | null;
   trial_started_at?: string | null;
 }): UserPlan {
-  const plan = (p.plan ?? "free") as UserPlan;
+  const plan = (p.plan ?? "credits") as UserPlan;
+  if (plan === "credits") return "credits";
   if (plan !== "trial_pro") return plan === "pro" ? "pro" : "free";
   if (trialDaysLeft(p) <= 0) return "free";
   return "trial_pro";
