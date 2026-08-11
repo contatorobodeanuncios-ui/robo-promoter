@@ -308,6 +308,7 @@ export type Database = {
           cpc: number
           cpm: number
           created_at: string
+          credits_total: number | null
           ctr: number
           days: number
           ended_at: string | null
@@ -361,6 +362,7 @@ export type Database = {
           cpc?: number
           cpm?: number
           created_at?: string
+          credits_total?: number | null
           ctr?: number
           days?: number
           ended_at?: string | null
@@ -414,6 +416,7 @@ export type Database = {
           cpc?: number
           cpm?: number
           created_at?: string
+          credits_total?: number | null
           ctr?: number
           days?: number
           ended_at?: string | null
