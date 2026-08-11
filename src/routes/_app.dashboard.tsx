@@ -190,7 +190,15 @@ function Dashboard() {
                         <M label="Impr." value={c.impressions ? c.impressions.toLocaleString("pt-BR") : na} has={!!c.impressions} />
                         <M label="CTR" value={c.ctr ? `${c.ctr.toFixed(2)}%` : na} has={!!c.ctr} />
                         <M label="CPC" value={c.cpc ? fmtBRL(c.cpc) : na} has={!!c.cpc} />
-                        <M label="Gasto" value={c.spent ? fmtBRL(c.spent) : na} has={!!c.spent} />
+                        {c.credits_total ? (
+                          <M
+                            label="Créditos"
+                            value={`${creditsState(c).remaining.toFixed(1)} / ${c.credits_total}`}
+                            has
+                          />
+                        ) : (
+                          <M label="Gasto" value={c.spent ? fmtBRL(c.spent) : na} has={!!c.spent} />
+                        )}
                         <M label="CPM" value={c.cpm ? fmtBRL(c.cpm) : na} has={!!c.cpm} />
                         <M label="Freq." value={c.frequency ? c.frequency.toFixed(2) : na} has={!!c.frequency} />
                         <M label="C/Result." value={c.cost_per_result ? fmtBRL(c.cost_per_result) : na} has={!!c.cost_per_result} />
