@@ -112,6 +112,8 @@ export const adminListCampaigns = createServerFn({ method: "GET" })
     const { data: campaigns, error } = await supabaseAdmin
       .from("campaigns")
       .select("*")
+      // Fila de execução: Pro Max (prioridade) primeiro, depois ordem de chegada.
+      .order("queue_priority", { ascending: false })
       .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
     const userIds = Array.from(new Set((campaigns ?? []).map((c) => c.user_id)));
