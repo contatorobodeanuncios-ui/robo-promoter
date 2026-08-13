@@ -754,34 +754,6 @@ function CreateWizard() {
                   </p>
                 </div>
 
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs">Potência de visualizações</Label>
-                    <span className="text-sm font-semibold tabular-nums">
-                      {views.toLocaleString("pt-BR")}
-                    </span>
-                  </div>
-                  <Slider
-                    value={[views]}
-                    min={2500}
-                    max={200000}
-                    step={500}
-                    onValueChange={(v) => setViews(v[0])}
-                  />
-                </div>
-
-                <div className="space-y-2 pt-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs">Créditos (dias no ar)</Label>
-                    <span className="text-sm font-semibold tabular-nums">
-                      {days} crédito{days === 1 ? "" : "s"}
-                    </span>
-                  </div>
-                  <Slider value={[days]} min={7} max={60} step={1} onValueChange={(v) => setDays(v[0])} />
-                  <p className="text-[11px] text-muted-foreground">
-                    Mínimo de 7 dias — período necessário para o robô aprender e otimizar.
-                  </p>
-                </div>
 
                 <div className="grid grid-cols-3 gap-3 pt-4 text-center border-t border-white/5">
                   <div className="pt-3">
@@ -811,16 +783,6 @@ function CreateWizard() {
                     R$ <span className="text-gradient">{budget}</span>
                   </p>
                   <p className="text-[11px] text-muted-foreground mt-1">Mínimo: R$ 7,00 / dia</p>
-                </div>
-                <Slider value={[budget]} min={7} max={300} step={1} onValueChange={(v) => setBudget(v[0])} />
-
-                <div className="space-y-2 pt-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs">Duração do anúncio</Label>
-                    <span className="text-sm font-semibold tabular-nums">{days} dias</span>
-                  </div>
-                  <Slider value={[days]} min={7} max={60} step={1} onValueChange={(v) => setDays(v[0])} />
-                  <p className="text-[11px] text-muted-foreground">Mínimo de 7 dias — período necessário para o robô aprender e otimizar a campanha.</p>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3 pt-4 text-center border-t border-white/5">
