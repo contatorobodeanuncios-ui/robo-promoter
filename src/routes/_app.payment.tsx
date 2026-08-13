@@ -21,6 +21,8 @@ import { useAppStore } from "@/lib/store";
 const search = z.object({
   topup: z.coerce.number().int().min(20).optional(),
   campaignId: z.string().optional(),
+  boostId: z.string().optional(),
+  boostAmount: z.coerce.number().min(1).optional(),
   budget: z.coerce.number().min(1).optional(),
   days: z.coerce.number().min(1).optional(),
   name: z.string().optional(),
@@ -67,12 +69,14 @@ function maskCpfCnpj(digitsOnly: string): string {
 }
 
 function PaymentPage() {
-  const { topup, budget, days, name, campaignId } = useSearch({ from: "/_app/payment" });
+  const { topup, budget, days, name, campaignId, boostId, boostAmount } = useSearch({
+    from: "/_app/payment",
+  });
   const nav = useNavigate();
   // Campanha: verba de veiculação + taxa de serviço. Recarga de saldo não tem taxa.
   const plan = useAppStore((s) => s.plan);
   const pricing = budget && days ? campaignPricing(budget, days, plan) : null;
-  const amount = topup ?? (pricing ? pricing.total : 0);
+  const amount = topup ?? boostAmount ?? (pricing ? pricing.total : 0);
   const isCampaign = !!campaignId;
 
 
@@ -109,7 +113,13 @@ function PaymentPage() {
     setFallback(null);
     try {
       const r = await createFn({
-        data: { amount, campaignId: campaignId || undefined, billingType: bt, card },
+        data: {
+          amount,
+          campaignId: campaignId || undefined,
+          boostId: boostId || undefined,
+          billingType: bt,
+          card,
+        },
       });
       if (rid !== runIdRef.current) return;
       if (r.needsCpf) { setStage("needsCpf"); return; }
@@ -127,7 +137,7 @@ function PaymentPage() {
       setStage("error");
       toast.error("Falha ao gerar cobrança", { description: msg });
     }
-  }, [amount, campaignId, createFn, nav]);
+  }, [amount, campaignId, boostId, createFn, nav]);
 
   const startedRef = useRef(false);
   useEffect(() => {

@@ -5,8 +5,11 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Eye, MousePointerClick, Percent, DollarSign, Sparkles,
   ThumbsUp, MessageCircle, Share2, MoreHorizontal, Info, CreditCard, Coins,
+  Download, Rocket,
 } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { BoostDialog } from "@/components/app/BoostDialog";
 import { SafeImage } from "@/components/app/SafeImage";
 
 export const Route = createFileRoute("/_app/campaign/$id")({
@@ -34,6 +37,9 @@ function CampaignDetail() {
   const { id } = Route.useParams();
   const c = useAppStore((s) => s.campaigns.find((x) => x.id === id));
   const updateCampaign = useAppStore((s) => s.updateCampaign);
+  const plan = useAppStore((s) => s.plan);
+  const isProMax = plan === "pro_max";
+  const [boostOpen, setBoostOpen] = useState(false);
   const nav = useNavigate();
 
   if (!c) {
@@ -94,7 +100,21 @@ function CampaignDetail() {
           <h1 className="text-3xl font-bold tracking-tight mt-1">{c.name}</h1>
           <p className="text-sm text-muted-foreground">{c.headline}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {isProMax && (
+            <>
+              <Button variant="glass" onClick={() => downloadReport(c)}>
+                <Download className="h-4 w-4" /> Baixar Relatório
+              </Button>
+              <Button
+                variant="glass"
+                className="border-[#e6b422]/50 text-[#e6b422]"
+                onClick={() => setBoostOpen(true)}
+              >
+                <Rocket className="h-4 w-4" /> Turbinar Alcance
+              </Button>
+            </>
+          )}
           <Button variant="glass" onClick={togglePause}>{c.status === "paused" ? "Retomar" : "Pausar"}</Button>
         </div>
       </header>
@@ -222,6 +242,65 @@ function CampaignDetail() {
           )}
         </div>
       </div>
+
+      {boostOpen && (
+        <BoostDialog campaignId={c.id} campaignName={c.name} onClose={() => setBoostOpen(false)} />
+      )}
     </div>
   );
+}
+
+/** Relatório de desempenho em CSV (aberto em Excel/Sheets). */
+function downloadReport(c: {
+  name: string;
+  headline: string;
+  status: string;
+  budget: number;
+  days: number;
+  total_paid: number;
+  city: string;
+  neighborhood: string;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  reach: number;
+  results: number;
+  frequency: number;
+  cost_per_result: number;
+  spent: number;
+  revenue: number;
+}) {
+  const rows: [string, string | number][] = [
+    ["Campanha", c.name],
+    ["Titulo", c.headline],
+    ["Status", c.status],
+    ["Cidade", c.city],
+    ["Bairro", c.neighborhood],
+    ["Dias", c.days],
+    ["Orcamento diario", c.budget],
+    ["Valor pago", c.total_paid],
+    ["Impressoes", c.impressions],
+    ["Alcance", c.reach],
+    ["Cliques", c.clicks],
+    ["CTR (%)", c.ctr],
+    ["CPC", c.cpc],
+    ["CPM", c.cpm],
+    ["Frequencia", c.frequency],
+    ["Resultados", c.results],
+    ["Custo por resultado", c.cost_per_result],
+    ["Gasto (Facebook)", c.spent],
+    ["Receita", c.revenue],
+    ["ROI (%)", c.spent > 0 ? (((c.revenue - c.spent) / c.spent) * 100).toFixed(2) : "0"],
+    ["Gerado em", new Date().toLocaleString("pt-BR")],
+  ];
+  const csv = "\uFEFF" + rows.map(([k, v]) => `"${k}";"${String(v).replace(/"/g, '""')}"`).join("\r\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `relatorio-${c.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast.success("Relatório baixado");
 }

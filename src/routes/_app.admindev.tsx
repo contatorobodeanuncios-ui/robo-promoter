@@ -1567,14 +1567,17 @@ function PlanButtons({
   trialStartedAt,
 }: {
   userId: string;
-  plan: "free" | "pro" | "trial_pro" | "credits";
+  plan: "free" | "pro" | "trial_pro" | "credits" | "pro_max";
   trialDays: number | null;
   trialStartedAt: string | null;
 }) {
   const qc = useQueryClient();
   const fn = useServerFn(adminSetUserPlan);
   const mut = useMutation({
-    mutationFn: (v: { plan: "free" | "pro" | "trial_pro" | "credits"; trial_days?: number }) =>
+    mutationFn: (v: {
+      plan: "free" | "pro" | "trial_pro" | "credits" | "pro_max";
+      trial_days?: number;
+    }) =>
       fn({ data: { user_id: userId, ...v } }),
     onSuccess: (_r, v) => {
       qc.invalidateQueries({ queryKey: ["admin-access-requests"] });
@@ -1586,7 +1589,9 @@ function PlanButtons({
             ? "Usuário definido como PRO"
             : v.plan === "credits"
               ? "Usuário definido como CRÉDITOS"
-              : "Teste PRO liberado",
+              : v.plan === "pro_max"
+                ? "Usuário definido como PRO MAX"
+                : "Teste PRO liberado",
       );
     },
     onError: (e) => toast.error(String(e)),
@@ -1627,6 +1632,16 @@ function PlanButtons({
       >
         <span className="inline-flex items-center gap-1">
           <Crown className="h-3 w-3" /> PRO
+        </span>
+      </button>
+      <button
+        type="button"
+        disabled={mut.isPending}
+        onClick={() => mut.mutate({ plan: "pro_max" })}
+        className={`${base} ${plan === "pro_max" ? "border-[#e6b422] bg-gradient-to-r from-[#f7d774] to-[#c9971b] text-[#2b1c00]" : off}`}
+      >
+        <span className="inline-flex items-center gap-1">
+          <Crown className="h-3 w-3" /> PRO MAX
         </span>
       </button>
       <button
