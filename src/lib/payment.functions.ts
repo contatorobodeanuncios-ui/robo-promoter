@@ -809,6 +809,8 @@ export const adminListPayments = createServerFn({ method: "GET" })
     const { data, error } = await admin
       .from("payment_requests")
       .select("*")
+      // Fila de pagamento: prioridade (Pro Max) primeiro, depois ordem de chegada.
+      .order("queue_priority", { ascending: false })
       .order("created_at", { ascending: false })
       .limit(200);
     if (error) throw new Error(error.message);
