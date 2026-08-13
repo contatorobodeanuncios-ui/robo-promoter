@@ -668,7 +668,7 @@ export interface AccessRequestRow {
   created_at: string;
   reviewed_at: string | null;
   /** nível do usuário, vindo do perfil */
-  plan: "free" | "pro" | "trial_pro" | "credits";
+  plan: "free" | "pro" | "trial_pro" | "credits" | "pro_max";
   trial_days: number | null;
   trial_started_at: string | null;
   phone: string | null;
@@ -890,7 +890,7 @@ export interface AdminClientRow {
   balance: number;
   status: string;
   created_at: string;
-  plan: "free" | "pro" | "trial_pro" | "credits";
+  plan: "free" | "pro" | "trial_pro" | "credits" | "pro_max";
   trial_days: number | null;
   trial_started_at: string | null;
 }
