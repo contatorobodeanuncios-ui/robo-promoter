@@ -27,6 +27,7 @@ import {
   getMetaMetricsHealth,
   adminExportCampaignsCSV,
   adminSetUserPlan,
+  adminBulkSetUserPlan,
   adminListAccessRequests,
   getAutoApproveAccess,
   setAutoApproveAccess,
@@ -1797,6 +1798,26 @@ function AllClientsSection({
     .filter((c) => (filter === "active" ? c.status !== "banned" : c.status === "banned"))
     .filter((c) => matchesSearch(search, [c.display_name, c.email, c.phone, c.id, c.balance]));
 
+  // Seleção em massa para mudança de plano.
+  const [selected, setSelected] = useState<string[]>([]);
+  const bulkFn = useServerFn(adminBulkSetUserPlan);
+  const bulkMut = useMutation({
+    mutationFn: (v: {
+      plan: "free" | "pro" | "trial_pro" | "credits" | "pro_max";
+      trial_days?: number;
+    }) => bulkFn({ data: { user_ids: selected, ...v } }),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["admin-all-clients"] });
+      qc.invalidateQueries({ queryKey: ["admin-access-requests"] });
+      setSelected([]);
+      toast.success(`${r.count} usuário(s) atualizados`);
+    },
+    onError: (e) => toast.error(String(e)),
+  });
+  const toggleOne = (id: string) =>
+    setSelected((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  const allSelected = filtered.length > 0 && filtered.every((c) => selected.includes(c.id));
+
   return (
     <section className="glass-strong rounded-2xl overflow-hidden">
       <div className="p-5 border-b border-white/5 flex flex-wrap items-center justify-between gap-3">
@@ -1810,6 +1831,41 @@ function AllClientsSection({
           </Button>
         </div>
       </div>
+      {selected.length > 0 && (
+        <div className="px-5 py-3 border-b border-white/5 bg-primary/5 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">
+            {selected.length} selecionado(s) · mudar plano em massa:
+          </span>
+          {(["credits", "free", "pro", "pro_max"] as const).map((pl) => (
+            <Button
+              key={pl}
+              variant="glass"
+              size="sm"
+              disabled={bulkMut.isPending}
+              onClick={() => bulkMut.mutate({ plan: pl })}
+            >
+              {pl === "credits" ? "CRÉDITOS" : pl === "pro_max" ? "PRO MAX" : pl.toUpperCase()}
+            </Button>
+          ))}
+          <Button
+            variant="glass"
+            size="sm"
+            disabled={bulkMut.isPending}
+            onClick={() => {
+              const raw = window.prompt("Teste PRO por quantos dias?", "7");
+              if (raw === null) return;
+              const n = Math.floor(Number(raw));
+              if (!Number.isFinite(n) || n < 1 || n > 365) return toast.error("Dias inválidos");
+              bulkMut.mutate({ plan: "trial_pro", trial_days: n });
+            }}
+          >
+            TESTE PRO
+          </Button>
+          <Button variant="glass" size="sm" onClick={() => setSelected([])}>
+            Limpar
+          </Button>
+        </div>
+      )}
       {clientsQuery.isLoading ? (
         <div className="p-10 text-center text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin mx-auto" />
@@ -1823,6 +1879,14 @@ function AllClientsSection({
           <table className="w-full text-sm">
             <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-white/5">
               <tr>
+                <th className="px-3 py-3">
+                  <input
+                    type="checkbox"
+                    aria-label="Selecionar todos"
+                    checked={allSelected}
+                    onChange={() => setSelected(allSelected ? [] : filtered.map((c) => c.id))}
+                  />
+                </th>
                 <th className="px-4 py-3">Nome</th>
                 <th className="px-4 py-3">E-mail</th>
                 <th className="px-4 py-3">Telefone</th>
@@ -1835,8 +1899,30 @@ function AllClientsSection({
             </thead>
             <tbody>
               {filtered.map((c) => (
-                <tr key={c.id} className="border-b border-white/5 hover:bg-white/[0.02]">
-                  <td className="px-4 py-3 font-medium">{c.display_name ?? "—"}</td>
+                <tr
+                  key={c.id}
+                  className={`border-b border-white/5 hover:bg-white/[0.02] ${
+                    c.plan === "pro_max" ? "bg-[#e6b422]/10" : ""
+                  }`}
+                >
+                  <td className="px-3 py-3">
+                    <input
+                      type="checkbox"
+                      aria-label={`Selecionar ${c.display_name ?? c.id}`}
+                      checked={selected.includes(c.id)}
+                      onChange={() => toggleOne(c.id)}
+                    />
+                  </td>
+                  <td className="px-4 py-3 font-medium">
+                    <span className="inline-flex items-center gap-2">
+                      {c.display_name ?? "—"}
+                      {c.plan === "pro_max" && (
+                        <span className="rounded-full px-2 py-0.5 text-[9px] font-bold text-[#2b1c00] bg-gradient-to-r from-[#f7d774] to-[#c9971b]">
+                          PRO MAX
+                        </span>
+                      )}
+                    </span>
+                  </td>
                   <td className="px-4 py-3 text-[11px] text-muted-foreground">{c.email ?? c.id.slice(0, 8)}</td>
                   <td className="px-4 py-3 text-[11px] text-muted-foreground">{c.phone ?? "—"}</td>
                   <td className="px-4 py-3">
