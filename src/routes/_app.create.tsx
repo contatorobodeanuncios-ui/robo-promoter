@@ -19,7 +19,8 @@ import { reachRange, fmtRange } from "@/lib/mock-data";
 import { analyzeCreative, type CreativeAnalysis } from "@/lib/ai-analysis.functions";
 import { getCreativeUploadPath, getMaintenanceMode } from "@/lib/data.functions";
 import { useAppStore } from "@/lib/store";
-import { campaignPricing, mediaBudgetForViews, viewsRangeForMedia } from "@/lib/pricing";
+import { campaignPricing, mediaBudgetForViews, viewsRangeForMedia, isCreditsLike, MIN_DAYS, packageViewsForDays, packageClicksForDays } from "@/lib/pricing";
+import { CopyModal } from "@/components/app/CopyModal";
 
 import { supabase } from "@/integrations/supabase/client";
 
@@ -34,10 +35,14 @@ export const Route = createFileRoute("/_app/create")({
 });
 
 const steps = [
-  { n: 1, title: "Criativo", desc: "Upload + análise IA" },
-  { n: 2, title: "Copy & Oferta", desc: "Texto e link" },
-  { n: 3, title: "Público", desc: "Segmentação" },
-  { n: 4, title: "Lançar", desc: "Orçamento e robô" },
+  { n: 1, title: "Boas-vindas", desc: "Como funciona" },
+  { n: 2, title: "Criativo", desc: "Upload + análise IA" },
+  { n: 3, title: "Copy", desc: "Texto e link" },
+  { n: 4, title: "Localização", desc: "Cidade e bairro" },
+  { n: 5, title: "Visualizações", desc: "Alcance desejado" },
+  { n: 6, title: "Duração", desc: `Mínimo ${MIN_DAYS} dias` },
+  { n: 7, title: "Pagamento", desc: "Ativar anúncio" },
+  { n: 8, title: "Confirmação", desc: "Revisão final" },
 ];
 
 // Limite real do Facebook para imagem de anúncio (não é um teto do app).
@@ -73,12 +78,13 @@ function CreateWizard() {
   const [radius, setRadius] = useState("15");
   const [budget, setBudget] = useState(15);
   const [days, setDays] = useState(7);
+  const [copyOpen, setCopyOpen] = useState(false);
   const [fundingType, setFundingType] = useState<"wallet" | "pix_dedicated">("wallet");
   // Verba de veiculação + taxa (mesma regra para PIX e saldo do app).
   const plan = useAppStore((s) => s.plan);
   // Plano CRÉDITOS: o cliente escolhe dias (1 crédito = 1 dia) + potência de
   // visualizações. O preço do pacote já embute tudo — nenhuma taxa é exibida.
-  const isCredits = plan === "credits";
+  const isCredits = isCreditsLike(plan);
   const [views, setViews] = useState(5000);
   const creditsDaily = Math.max(1, Math.round(mediaBudgetForViews(views) / days));
   const effBudget = isCredits ? creditsDaily : budget;
@@ -292,10 +298,13 @@ function CreateWizard() {
   };
 
   const canNext =
-    (step === 1 && files.length > 0 && scanState === "done" && (analysis?.compliant ?? true)) ||
-    (step === 2 && headline && body && link) ||
-    (step === 3 && city.trim() && neighborhood.trim() && Number(radius) > 0) ||
-    step === 4;
+    step === 1 ||
+    (step === 2 && files.length > 0 && scanState === "done" && (analysis?.compliant ?? true)) ||
+    (step === 3 && Boolean(headline && body && link)) ||
+    (step === 4 && Boolean(city.trim() && neighborhood.trim() && Number(radius) > 0)) ||
+    step === 5 ||
+    (step === 6 && days >= MIN_DAYS) ||
+    step === 7;
 
   // Modo de manutenção: bloqueia a criação de novas campanhas pra todo mundo.
   if (maintenanceQ.data?.enabled) {
@@ -324,6 +333,16 @@ function CreateWizard() {
       </header>
 
       {/* Stepper */}
+      <div className="space-y-3">
+        <div className="h-1.5 w-full rounded-full bg-white/5 overflow-hidden">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-primary to-accent transition-all"
+            style={{ width: `${(step / steps.length) * 100}%` }}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">Etapa {step} de {steps.length}</p>
+      </div>
+
       <ol className="grid grid-cols-2 md:grid-cols-4 gap-2">
         {steps.map((s, i) => {
           const active = step === s.n;
@@ -345,7 +364,7 @@ function CreateWizard() {
       </ol>
 
       <div className="glass-strong rounded-2xl p-6 lg:p-8 min-h-[420px]">
-        {step === 1 && (
+        {step === 2 && (
           <div className="space-y-5">
             <div>
               <h2 className="text-xl font-semibold">Envie o criativo</h2>
@@ -499,7 +518,7 @@ function CreateWizard() {
         )}
 
 
-        {step === 2 && (
+        {step === 3 && (
           <div className="space-y-5 max-w-2xl">
             <div>
               <h2 className="text-xl font-semibold">Copy & oferta</h2>
@@ -525,7 +544,7 @@ function CreateWizard() {
           </div>
         )}
 
-        {step === 3 && (
+        {step === 4 && (
           <div className="space-y-5 max-w-2xl">
             <div>
               <h2 className="text-xl font-semibold">Inteligência de público</h2>
@@ -614,7 +633,7 @@ function CreateWizard() {
           </div>
         )}
 
-        {step === 4 && (
+        {step === 7 && (
           <div className="space-y-6 max-w-xl">
             <div>
               <h2 className="text-xl font-semibold">
@@ -880,7 +899,7 @@ function CreateWizard() {
         <Button variant="glass" disabled={step === 1} onClick={() => setStep((s) => s - 1)}>
           <ChevronLeft /> Voltar
         </Button>
-        {step < 4 && (
+        {step < 8 && (
           <Button variant="neon" disabled={!canNext} onClick={() => setStep((s) => s + 1)}>
             Continuar <ChevronRight />
           </Button>
