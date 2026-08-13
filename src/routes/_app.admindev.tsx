@@ -53,6 +53,7 @@ import {
   type AIReviewRow,
 } from "@/lib/admin.functions";
 import { getProMaxLinks, adminSetProMaxLinks } from "@/lib/promax.functions";
+import { internalBreakdown } from "@/lib/pricing";
 import { aiReviewCampaign } from "@/lib/ai-metrics.functions";
 
 import {
@@ -1378,6 +1379,34 @@ function FbPreview({ campaign, onClose }: { campaign: AdminCampaignRow; onClose:
             <Field label="Total a ser veiculado" value={fmtBRL(campaign.budget * campaign.days)} />
             <Field label="Total já pago" value={fmtBRL(campaign.total_paid)} />
           </div>
+          {/* Repartição financeira real — visível apenas para o admin. */}
+          {campaign.total_paid > 0 && (() => {
+            const b = internalBreakdown(campaign.total_paid);
+            return (
+              <div className="rounded-xl border border-[#e6b422]/25 bg-[#e6b422]/5 p-3 space-y-2">
+                <p className="text-[11px] uppercase tracking-wider text-[#e6b422]">
+                  Repartição financeira (interno)
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Valor pago pelo cliente" value={fmtBRL(b.pricePaid)} />
+                  <Field label="Taxas bancárias" value={`- ${fmtBRL(b.bankFees)}`} />
+                  <Field label="Plataforma (50%)" value={fmtBRL(b.platform)} />
+                  <Field label="Meta bruto (50%)" value={fmtBRL(b.metaGross)} />
+                  <Field label="Imposto Facebook (12%)" value={`- ${fmtBRL(b.facebookTax)}`} />
+                  <Field label="Verba real na Meta" value={fmtBRL(b.metaNet)} />
+                </div>
+                {(campaign.extra_paid ?? 0) > 0 && (
+                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-white/5">
+                    <Field label="Turbinar Alcance pago" value={fmtBRL(Number(campaign.extra_paid))} />
+                    <Field
+                      label="Visualizações extras"
+                      value={Number(campaign.extra_views ?? 0).toLocaleString("pt-BR")}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           {campaign.funding_type === "pix_dedicated" && (
             <div className="grid grid-cols-2 gap-3">
               <Field label="PIX total" value={fmtBRL(campaign.pix_total_budget)} />
