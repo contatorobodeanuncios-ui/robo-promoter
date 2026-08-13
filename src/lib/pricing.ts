@@ -7,7 +7,74 @@
 export const SERVICE_FEE_RATE = 0.15;
 export const PLATFORM_FEE_RATE = 0.16;
 
-export type UserPlan = "free" | "pro" | "trial_pro" | "credits";
+export type UserPlan = "free" | "pro" | "trial_pro" | "credits" | "pro_max";
+
+/** Planos que usam a lógica de créditos (pacote fechado, 1 crédito = 24h). */
+export const isCreditsLike = (p: UserPlan) => p === "credits" || p === "pro_max";
+
+// ===== Precificação por dias (pacote de veiculação) =====
+// preco = 18 * dias + 3 · visualizações 500–633/dia · CTR 3%–4%
+export const MIN_DAYS = 3;
+export const RECOMMENDED_DAYS = 7;
+export const VIEWS_PER_DAY_MIN = 500;
+export const VIEWS_PER_DAY_MAX = 633;
+export const CTR_MIN = 0.03;
+export const CTR_MAX = 0.04;
+/** Taxas de banco fixas descontadas do valor pago (uso interno). */
+export const BANK_FIXED_COST = 1.99 + 0.99;
+/** Imposto do Facebook sobre a parte da Meta (uso interno). */
+export const FACEBOOK_TAX_RATE = 0.12;
+
+export function packagePriceForDays(days: number) {
+  return round2(18 * Math.max(MIN_DAYS, days) + 3);
+}
+
+export function packageViewsForDays(days: number) {
+  const d = Math.max(MIN_DAYS, days);
+  return { min: VIEWS_PER_DAY_MIN * d, max: VIEWS_PER_DAY_MAX * d };
+}
+
+export function packageClicksForDays(days: number) {
+  const v = packageViewsForDays(days);
+  return { min: Math.round(v.min * CTR_MIN), max: Math.round(v.max * CTR_MAX) };
+}
+
+/**
+ * Repartição interna (NUNCA exibida ao cliente):
+ * paga - taxas de banco → 50/50 plataforma / Meta → 12% de imposto do Facebook.
+ */
+export function internalBreakdown(pricePaid: number) {
+  const afterBank = round2(Math.max(0, pricePaid - BANK_FIXED_COST));
+  const platform = round2(afterBank / 2);
+  const metaGross = round2(afterBank / 2);
+  const facebookTax = round2(metaGross * FACEBOOK_TAX_RATE);
+  const metaNet = round2(metaGross - facebookTax);
+  return {
+    pricePaid: round2(pricePaid),
+    bankFees: BANK_FIXED_COST,
+    platform,
+    metaGross,
+    facebookTax,
+    metaNet,
+  };
+}
+
+/** Orçamento real que vai para a campanha na Meta (uso interno/admin). */
+export const campaignMediaBudget = (pricePaid: number) => internalBreakdown(pricePaid).metaNet;
+
+/** Pacotes fechados de Turbinar Alcance (add-on Pro Max). */
+export const BOOST_PACKAGES: { views: number; price: number }[] = [
+  { views: 1200, price: 45 },
+  { views: 2500, price: 87 },
+  { views: 3600, price: 133 },
+  { views: 4700, price: 175 },
+  { views: 5700, price: 220 },
+  { views: 6800, price: 270 },
+  { views: 7800, price: 310 },
+  { views: 8900, price: 350 },
+  { views: 10000, price: 400 },
+];
+
 
 // ===== Plano CRÉDITOS =====
 // O cliente compra dias + potência de visualizações. Não existe taxa visível:
@@ -84,15 +151,16 @@ export function campaignPricing(
   plan: UserPlan = "pro",
 ): CampaignPricing {
   const metaBudget = round2(budget * days);
-  // Plano CRÉDITOS: pacote fechado, sem nenhuma taxa exibida ao cliente.
-  if (plan === "credits") {
+  // Planos CRÉDITOS e PRO MAX: pacote fechado por dias, sem taxa exibida.
+  if (isCreditsLike(plan)) {
+    const total = packagePriceForDays(days);
     return {
-      metaBudget,
+      metaBudget: campaignMediaBudget(total),
       serviceFee: 0,
       platformFee: 0,
       feesTotal: 0,
       feeLabel: "",
-      total: creditsPackagePrice(metaBudget),
+      total,
     };
   }
   const serviceFee = round2(metaBudget * SERVICE_FEE_RATE);
@@ -116,6 +184,7 @@ export function effectivePlan(p: {
 }): UserPlan {
   const plan = (p.plan ?? "credits") as UserPlan;
   if (plan === "credits") return "credits";
+  if (plan === "pro_max") return "pro_max";
   if (plan !== "trial_pro") return plan === "pro" ? "pro" : "free";
   if (trialDaysLeft(p) <= 0) return "free";
   return "trial_pro";

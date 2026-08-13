@@ -250,6 +250,60 @@ export type Database = {
           },
         ]
       }
+      campaign_boosts: {
+        Row: {
+          amount: number
+          campaign_id: string
+          created_at: string
+          id: string
+          media_budget: number
+          paid_at: string | null
+          payment_request_id: string | null
+          status: string
+          user_id: string
+          views: number
+        }
+        Insert: {
+          amount: number
+          campaign_id: string
+          created_at?: string
+          id?: string
+          media_budget?: number
+          paid_at?: string | null
+          payment_request_id?: string | null
+          status?: string
+          user_id: string
+          views: number
+        }
+        Update: {
+          amount?: number
+          campaign_id?: string
+          created_at?: string
+          id?: string
+          media_budget?: number
+          paid_at?: string | null
+          payment_request_id?: string | null
+          status?: string
+          user_id?: string
+          views?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_boosts_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_boosts_payment_request_id_fkey"
+            columns: ["payment_request_id"]
+            isOneToOne: false
+            referencedRelation: "payment_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaign_meta_link_audit: {
         Row: {
           campaign_id: string
@@ -312,6 +366,8 @@ export type Database = {
           ctr: number
           days: number
           ended_at: string | null
+          extra_paid: number
+          extra_views: number
           frequency: number
           funding_type: string
           headline: string
@@ -334,6 +390,8 @@ export type Database = {
           pix_remaining_budget: number | null
           pix_total_budget: number | null
           platform_fee: number
+          queue_priority: number
+          queued_at: string
           radius: number
           reach: number
           results: number
@@ -366,6 +424,8 @@ export type Database = {
           ctr?: number
           days?: number
           ended_at?: string | null
+          extra_paid?: number
+          extra_views?: number
           frequency?: number
           funding_type?: string
           headline?: string
@@ -388,6 +448,8 @@ export type Database = {
           pix_remaining_budget?: number | null
           pix_total_budget?: number | null
           platform_fee?: number
+          queue_priority?: number
+          queued_at?: string
           radius?: number
           reach?: number
           results?: number
@@ -420,6 +482,8 @@ export type Database = {
           ctr?: number
           days?: number
           ended_at?: string | null
+          extra_paid?: number
+          extra_views?: number
           frequency?: number
           funding_type?: string
           headline?: string
@@ -442,6 +506,8 @@ export type Database = {
           pix_remaining_budget?: number | null
           pix_total_budget?: number | null
           platform_fee?: number
+          queue_priority?: number
+          queued_at?: string
           radius?: number
           reach?: number
           results?: number
@@ -533,6 +599,7 @@ export type Database = {
           id: string
           last_error: string | null
           note: string | null
+          queue_priority: number
           status: Database["public"]["Enums"]["payment_request_status"]
           type: Database["public"]["Enums"]["payment_request_kind"] | null
           updated_at: string
@@ -548,6 +615,7 @@ export type Database = {
           id?: string
           last_error?: string | null
           note?: string | null
+          queue_priority?: number
           status?: Database["public"]["Enums"]["payment_request_status"]
           type?: Database["public"]["Enums"]["payment_request_kind"] | null
           updated_at?: string
@@ -563,6 +631,7 @@ export type Database = {
           id?: string
           last_error?: string | null
           note?: string | null
+          queue_priority?: number
           status?: Database["public"]["Enums"]["payment_request_status"]
           type?: Database["public"]["Enums"]["payment_request_kind"] | null
           updated_at?: string
@@ -871,7 +940,10 @@ export type Database = {
         | "rodando"
         | "encerrada_saldo_consumido"
         | "em_revisao"
-      payment_request_kind: "campaign_budget" | "balance_topup"
+      payment_request_kind:
+        | "campaign_budget"
+        | "balance_topup"
+        | "campaign_boost"
       payment_request_status: "pending" | "approved" | "rejected" | "paid"
     }
     CompositeTypes: {
@@ -1011,7 +1083,11 @@ export const Constants = {
         "encerrada_saldo_consumido",
         "em_revisao",
       ],
-      payment_request_kind: ["campaign_budget", "balance_topup"],
+      payment_request_kind: [
+        "campaign_budget",
+        "balance_topup",
+        "campaign_boost",
+      ],
       payment_request_status: ["pending", "approved", "rejected", "paid"],
     },
   },

@@ -101,6 +101,9 @@ export interface AdminCampaignRow {
   media: CampaignMediaItem[];
   archived_at: string | null;
   archived_reason: "deleted" | "awaiting_payment" | null;
+  extra_views?: number | null;
+  extra_paid?: number | null;
+  queue_priority?: number | null;
 }
 
 
@@ -112,6 +115,8 @@ export const adminListCampaigns = createServerFn({ method: "GET" })
     const { data: campaigns, error } = await supabaseAdmin
       .from("campaigns")
       .select("*")
+      // Fila de execução: Pro Max (prioridade) primeiro, depois ordem de chegada.
+      .order("queue_priority", { ascending: false })
       .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
     const userIds = Array.from(new Set((campaigns ?? []).map((c) => c.user_id)));
@@ -668,7 +673,7 @@ export interface AccessRequestRow {
   created_at: string;
   reviewed_at: string | null;
   /** nível do usuário, vindo do perfil */
-  plan: "free" | "pro" | "trial_pro" | "credits";
+  plan: "free" | "pro" | "trial_pro" | "credits" | "pro_max";
   trial_days: number | null;
   trial_started_at: string | null;
   phone: string | null;
@@ -721,7 +726,7 @@ export const adminSetUserPlan = createServerFn({ method: "POST" })
     z
       .object({
         user_id: z.string().uuid(),
-        plan: z.enum(["free", "pro", "trial_pro", "credits"]),
+        plan: z.enum(["free", "pro", "trial_pro", "credits", "pro_max"]),
         trial_days: z.number().int().min(1).max(365).optional(),
       })
       .parse(d),
@@ -748,7 +753,56 @@ export const adminSetUserPlan = createServerFn({ method: "POST" })
       target_id: data.user_id,
       details: patch as never,
     } as never);
+    await applyQueuePriority(data.user_id, data.plan);
     return { ok: true, plan: data.plan };
+  });
+
+/** Selo dourado Pro Max = prioridade 1 nas filas de pagamento e execução. */
+async function applyQueuePriority(userId: string, plan: string) {
+  const admin = await getSupabaseAdmin();
+  const priority = plan === "pro_max" ? 1 : 0;
+  await admin.from("campaigns").update({ queue_priority: priority } as never).eq("user_id", userId);
+  await admin
+    .from("payment_requests")
+    .update({ queue_priority: priority } as never)
+    .eq("user_id", userId);
+}
+
+/** Mudança de plano em massa (vários usuários de uma vez). */
+export const adminBulkSetUserPlan = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        user_ids: z.array(z.string().uuid()).min(1).max(500),
+        plan: z.enum(["free", "pro", "trial_pro", "credits", "pro_max"]),
+        trial_days: z.number().int().min(1).max(365).optional(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const patch: Record<string, unknown> = { plan: data.plan };
+    if (data.plan === "trial_pro") {
+      patch.trial_days = data.trial_days ?? 7;
+      patch.trial_started_at = new Date().toISOString();
+    } else {
+      patch.trial_days = null;
+      patch.trial_started_at = null;
+    }
+    const rows = data.user_ids.map((id) => ({ id, ...patch }));
+    const { error } = await admin.from("profiles").upsert(rows as never, { onConflict: "id" });
+    if (error) throw new Error(error.message);
+    for (const id of data.user_ids) await applyQueuePriority(id, data.plan);
+    await admin.from("admin_audit_log").insert({
+      admin_email: (context.claims as { email?: string })?.email ?? "",
+      action: "user_bulk_set_plan",
+      target_type: "user",
+      target_id: `${data.user_ids.length} usuários`,
+      details: { plan: data.plan, user_ids: data.user_ids } as never,
+    } as never);
+    return { ok: true, count: data.user_ids.length };
   });
 
 export const adminApproveAccessRequest = createServerFn({ method: "POST" })
@@ -841,7 +895,7 @@ export interface AdminClientRow {
   balance: number;
   status: string;
   created_at: string;
-  plan: "free" | "pro" | "trial_pro" | "credits";
+  plan: "free" | "pro" | "trial_pro" | "credits" | "pro_max";
   trial_days: number | null;
   trial_started_at: string | null;
 }

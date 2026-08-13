@@ -373,9 +373,46 @@ async function creditApprovedPayment(params: {
   amount: number;
   userId: string;
   campaignId: string | null;
-  type: "campaign_budget" | "balance_topup" | null | undefined;
+  type: "campaign_budget" | "balance_topup" | "campaign_boost" | null | undefined;
+  paymentRequestId?: string | null;
 }): Promise<void> {
   const admin = await getAdmin();
+  // Turbinar Alcance: injeta visualizações extras na campanha em andamento.
+  if (params.type === "campaign_boost" && params.campaignId) {
+    const { data: boost } = await admin
+      .from("campaign_boosts")
+      .select("id, views, media_budget")
+      .eq("payment_request_id", params.paymentRequestId ?? "")
+      .maybeSingle();
+    const { data: camp } = await admin
+      .from("campaigns")
+      .select("id, pix_remaining_budget, extra_views, extra_paid")
+      .eq("id", params.campaignId)
+      .maybeSingle();
+    const b = boost as unknown as { id: string; views: number; media_budget: number } | null;
+    const c = camp as unknown as {
+      pix_remaining_budget: number | string | null;
+      extra_views: number | null;
+      extra_paid: number | string | null;
+    } | null;
+    if (b && c) {
+      await admin
+        .from("campaigns")
+        .update({
+          extra_views: Number(c.extra_views ?? 0) + Number(b.views),
+          extra_paid: round2(Number(c.extra_paid ?? 0) + params.amount),
+          pix_remaining_budget: round2(
+            Number(c.pix_remaining_budget ?? 0) + Number(b.media_budget),
+          ),
+        } as never)
+        .eq("id", params.campaignId);
+      await admin
+        .from("campaign_boosts")
+        .update({ status: "paid", paid_at: new Date().toISOString() } as never)
+        .eq("id", b.id);
+    }
+    return;
+  }
   const isCampaign = params.type === "campaign_budget" && !!params.campaignId;
   if (isCampaign && params.campaignId) {
     const { data: camp } = await admin
@@ -431,6 +468,7 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
       amount: z.number().min(20).max(100000),
 
       campaignId: z.string().uuid().optional(),
+      boostId: z.string().uuid().optional(),
       billingType: z.enum(["PIX", "CREDIT_CARD"]).default("PIX"),
       card: cardInputSchema.optional(),
     }).parse(d),
@@ -490,13 +528,31 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
       key: "", beneficiary: "", enabled: false,
     };
 
-    const paymentType: "campaign_budget" | "balance_topup" = data.campaignId
-      ? "campaign_budget"
-      : "balance_topup";
+    const paymentType: "campaign_budget" | "balance_topup" | "campaign_boost" = data.boostId
+      ? "campaign_boost"
+      : data.campaignId
+        ? "campaign_budget"
+        : "balance_topup";
 
     let prId: string | null = null;
     let existingPaymentId: string | null = null;
-    if (data.campaignId && data.billingType === "PIX") {
+    if (data.boostId) {
+      const { data: reuse } = await admin
+        .from("payment_requests")
+        .select("id, asaas_payment_id")
+        .eq("user_id", context.userId)
+        .eq("status", "pending")
+        .eq("amount", data.amount)
+        .eq("campaign_id", data.campaignId ?? "")
+        .eq("type", "campaign_boost")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (reuse) {
+        prId = reuse.id;
+        existingPaymentId = reuse.asaas_payment_id ?? null;
+      }
+    } else if (data.campaignId && data.billingType === "PIX") {
       const { data: reuse } = await admin
         .from("payment_requests")
         .select("id, asaas_payment_id, amount")
@@ -504,6 +560,7 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
         .eq("status", "pending")
         .eq("amount", data.amount)
         .eq("campaign_id", data.campaignId)
+        .eq("type", "campaign_budget")
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -528,6 +585,14 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
         .single();
       if (error) throw new Error(error.message);
       prId = row.id as string;
+    }
+
+    if (data.boostId) {
+      await admin
+        .from("campaign_boosts")
+        .update({ payment_request_id: prId } as never)
+        .eq("id", data.boostId)
+        .eq("user_id", context.userId);
     }
 
     const externalReference = data.campaignId
@@ -627,6 +692,7 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
                   userId: context.userId,
                   campaignId: data.campaignId ?? null,
                   type: paymentType,
+                  paymentRequestId: prId,
                 });
               }
             }
@@ -743,6 +809,8 @@ export const adminListPayments = createServerFn({ method: "GET" })
     const { data, error } = await admin
       .from("payment_requests")
       .select("*")
+      // Fila de pagamento: prioridade (Pro Max) primeiro, depois ordem de chegada.
+      .order("queue_priority", { ascending: false })
       .order("created_at", { ascending: false })
       .limit(200);
     if (error) throw new Error(error.message);
@@ -786,7 +854,7 @@ export const adminApprovePayment = createServerFn({ method: "POST" })
       id: string;
       user_id: string;
       amount: number | string;
-      type?: "campaign_budget" | "balance_topup" | null;
+      type?: "campaign_budget" | "balance_topup" | "campaign_boost" | null;
       campaign_id?: string | null;
     };
 
@@ -795,6 +863,7 @@ export const adminApprovePayment = createServerFn({ method: "POST" })
       userId: prAny.user_id,
       campaignId: prAny.campaign_id ?? null,
       type: prAny.type,
+      paymentRequestId: prAny.id,
     });
 
     const { error: sErr } = await admin

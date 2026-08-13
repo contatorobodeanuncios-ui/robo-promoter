@@ -2,6 +2,7 @@ import { Link, Outlet, useRouterState, useNavigate } from "@tanstack/react-route
 import { LayoutDashboard, Plus, Settings, LogOut, Bot } from "lucide-react";
 import { Logo } from "./Logo";
 import { SupportWidget } from "./SupportWidget";
+import { ProMaxMenu } from "./ProMaxMenu";
 import { useAppStore } from "@/lib/store";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
@@ -53,7 +54,9 @@ export function AppShell() {
             );
           })}
         </nav>
+        <ProMaxMenu />
         <div className="mt-auto space-y-1">
+
           <div className="glass rounded-xl p-3 mb-3">
             <div className="flex items-center gap-2 text-xs">
               <Bot className="h-3.5 w-3.5 text-primary" />

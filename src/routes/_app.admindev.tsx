@@ -27,6 +27,7 @@ import {
   getMetaMetricsHealth,
   adminExportCampaignsCSV,
   adminSetUserPlan,
+  adminBulkSetUserPlan,
   adminListAccessRequests,
   getAutoApproveAccess,
   setAutoApproveAccess,
@@ -51,6 +52,8 @@ import {
   type MetaLinkAuditRow,
   type AIReviewRow,
 } from "@/lib/admin.functions";
+import { getProMaxLinks, adminSetProMaxLinks } from "@/lib/promax.functions";
+import { internalBreakdown } from "@/lib/pricing";
 import { aiReviewCampaign } from "@/lib/ai-metrics.functions";
 
 import {
@@ -687,6 +690,7 @@ function AdminDevPage() {
 
         {/* ============ Aba: Configurações Internas ============ */}
         <TabsContent value="settings" className="space-y-6 mt-6">
+          <ProMaxLinksCard />
           <MetaHealthCard />
           <PixAttemptsSection />
           <ExportCsvButton />
@@ -1375,6 +1379,34 @@ function FbPreview({ campaign, onClose }: { campaign: AdminCampaignRow; onClose:
             <Field label="Total a ser veiculado" value={fmtBRL(campaign.budget * campaign.days)} />
             <Field label="Total já pago" value={fmtBRL(campaign.total_paid)} />
           </div>
+          {/* Repartição financeira real — visível apenas para o admin. */}
+          {campaign.total_paid > 0 && (() => {
+            const b = internalBreakdown(campaign.total_paid);
+            return (
+              <div className="rounded-xl border border-[#e6b422]/25 bg-[#e6b422]/5 p-3 space-y-2">
+                <p className="text-[11px] uppercase tracking-wider text-[#e6b422]">
+                  Repartição financeira (interno)
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Valor pago pelo cliente" value={fmtBRL(b.pricePaid)} />
+                  <Field label="Taxas bancárias" value={`- ${fmtBRL(b.bankFees)}`} />
+                  <Field label="Plataforma (50%)" value={fmtBRL(b.platform)} />
+                  <Field label="Meta bruto (50%)" value={fmtBRL(b.metaGross)} />
+                  <Field label="Imposto Facebook (12%)" value={`- ${fmtBRL(b.facebookTax)}`} />
+                  <Field label="Verba real na Meta" value={fmtBRL(b.metaNet)} />
+                </div>
+                {(campaign.extra_paid ?? 0) > 0 && (
+                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-white/5">
+                    <Field label="Turbinar Alcance pago" value={fmtBRL(Number(campaign.extra_paid))} />
+                    <Field
+                      label="Visualizações extras"
+                      value={Number(campaign.extra_views ?? 0).toLocaleString("pt-BR")}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           {campaign.funding_type === "pix_dedicated" && (
             <div className="grid grid-cols-2 gap-3">
               <Field label="PIX total" value={fmtBRL(campaign.pix_total_budget)} />
@@ -1559,6 +1591,61 @@ function AutoApproveToggle() {
   );
 }
 
+// ============ Links exclusivos do plano Pro Max ============
+function ProMaxLinksCard() {
+  const getFn = useServerFn(getProMaxLinks);
+  const setFn = useServerFn(adminSetProMaxLinks);
+  const q = useQuery({ queryKey: ["promax-links"], queryFn: () => getFn() });
+  const [school, setSchool] = useState<string | null>(null);
+  const [wa, setWa] = useState<string | null>(null);
+  const qc = useQueryClient();
+  const mut = useMutation({
+    mutationFn: () =>
+      setFn({
+        data: {
+          seller_school_url: school ?? q.data?.seller_school_url ?? "",
+          whatsapp_url: wa ?? q.data?.whatsapp_url ?? "",
+        },
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["promax-links"] });
+      toast.success("Links do Pro Max atualizados");
+    },
+    onError: (e) => toast.error(String(e)),
+  });
+
+  return (
+    <section className="glass-strong rounded-2xl p-6 border border-[#e6b422]/30 space-y-3">
+      <h2 className="font-semibold flex items-center gap-2">
+        <Crown className="h-4 w-4 text-[#e6b422]" /> Links do plano Pro Max
+      </h2>
+      <div className="grid md:grid-cols-2 gap-3">
+        <label className="text-xs text-muted-foreground space-y-1 block">
+          Seller School (URL)
+          <input
+            value={school ?? q.data?.seller_school_url ?? ""}
+            onChange={(e) => setSchool(e.target.value)}
+            placeholder="https://..."
+            className="w-full rounded-xl bg-white/[0.03] border border-white/10 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
+          />
+        </label>
+        <label className="text-xs text-muted-foreground space-y-1 block">
+          Suporte WhatsApp (wa.me)
+          <input
+            value={wa ?? q.data?.whatsapp_url ?? ""}
+            onChange={(e) => setWa(e.target.value)}
+            placeholder="https://wa.me/55..."
+            className="w-full rounded-xl bg-white/[0.03] border border-white/10 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
+          />
+        </label>
+      </div>
+      <Button variant="neon" size="sm" disabled={mut.isPending} onClick={() => mut.mutate()}>
+        Salvar links
+      </Button>
+    </section>
+  );
+}
+
 // ============ Nível do usuário: FREE / PRO / TESTE PRO ============
 function PlanButtons({
   userId,
@@ -1567,14 +1654,17 @@ function PlanButtons({
   trialStartedAt,
 }: {
   userId: string;
-  plan: "free" | "pro" | "trial_pro" | "credits";
+  plan: "free" | "pro" | "trial_pro" | "credits" | "pro_max";
   trialDays: number | null;
   trialStartedAt: string | null;
 }) {
   const qc = useQueryClient();
   const fn = useServerFn(adminSetUserPlan);
   const mut = useMutation({
-    mutationFn: (v: { plan: "free" | "pro" | "trial_pro" | "credits"; trial_days?: number }) =>
+    mutationFn: (v: {
+      plan: "free" | "pro" | "trial_pro" | "credits" | "pro_max";
+      trial_days?: number;
+    }) =>
       fn({ data: { user_id: userId, ...v } }),
     onSuccess: (_r, v) => {
       qc.invalidateQueries({ queryKey: ["admin-access-requests"] });
@@ -1586,7 +1676,9 @@ function PlanButtons({
             ? "Usuário definido como PRO"
             : v.plan === "credits"
               ? "Usuário definido como CRÉDITOS"
-              : "Teste PRO liberado",
+              : v.plan === "pro_max"
+                ? "Usuário definido como PRO MAX"
+                : "Teste PRO liberado",
       );
     },
     onError: (e) => toast.error(String(e)),
@@ -1627,6 +1719,16 @@ function PlanButtons({
       >
         <span className="inline-flex items-center gap-1">
           <Crown className="h-3 w-3" /> PRO
+        </span>
+      </button>
+      <button
+        type="button"
+        disabled={mut.isPending}
+        onClick={() => mut.mutate({ plan: "pro_max" })}
+        className={`${base} ${plan === "pro_max" ? "border-[#e6b422] bg-gradient-to-r from-[#f7d774] to-[#c9971b] text-[#2b1c00]" : off}`}
+      >
+        <span className="inline-flex items-center gap-1">
+          <Crown className="h-3 w-3" /> PRO MAX
         </span>
       </button>
       <button
@@ -1782,6 +1884,26 @@ function AllClientsSection({
     .filter((c) => (filter === "active" ? c.status !== "banned" : c.status === "banned"))
     .filter((c) => matchesSearch(search, [c.display_name, c.email, c.phone, c.id, c.balance]));
 
+  // Seleção em massa para mudança de plano.
+  const [selected, setSelected] = useState<string[]>([]);
+  const bulkFn = useServerFn(adminBulkSetUserPlan);
+  const bulkMut = useMutation({
+    mutationFn: (v: {
+      plan: "free" | "pro" | "trial_pro" | "credits" | "pro_max";
+      trial_days?: number;
+    }) => bulkFn({ data: { user_ids: selected, ...v } }),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["admin-all-clients"] });
+      qc.invalidateQueries({ queryKey: ["admin-access-requests"] });
+      setSelected([]);
+      toast.success(`${r.count} usuário(s) atualizados`);
+    },
+    onError: (e) => toast.error(String(e)),
+  });
+  const toggleOne = (id: string) =>
+    setSelected((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  const allSelected = filtered.length > 0 && filtered.every((c) => selected.includes(c.id));
+
   return (
     <section className="glass-strong rounded-2xl overflow-hidden">
       <div className="p-5 border-b border-white/5 flex flex-wrap items-center justify-between gap-3">
@@ -1795,6 +1917,41 @@ function AllClientsSection({
           </Button>
         </div>
       </div>
+      {selected.length > 0 && (
+        <div className="px-5 py-3 border-b border-white/5 bg-primary/5 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">
+            {selected.length} selecionado(s) · mudar plano em massa:
+          </span>
+          {(["credits", "free", "pro", "pro_max"] as const).map((pl) => (
+            <Button
+              key={pl}
+              variant="glass"
+              size="sm"
+              disabled={bulkMut.isPending}
+              onClick={() => bulkMut.mutate({ plan: pl })}
+            >
+              {pl === "credits" ? "CRÉDITOS" : pl === "pro_max" ? "PRO MAX" : pl.toUpperCase()}
+            </Button>
+          ))}
+          <Button
+            variant="glass"
+            size="sm"
+            disabled={bulkMut.isPending}
+            onClick={() => {
+              const raw = window.prompt("Teste PRO por quantos dias?", "7");
+              if (raw === null) return;
+              const n = Math.floor(Number(raw));
+              if (!Number.isFinite(n) || n < 1 || n > 365) return toast.error("Dias inválidos");
+              bulkMut.mutate({ plan: "trial_pro", trial_days: n });
+            }}
+          >
+            TESTE PRO
+          </Button>
+          <Button variant="glass" size="sm" onClick={() => setSelected([])}>
+            Limpar
+          </Button>
+        </div>
+      )}
       {clientsQuery.isLoading ? (
         <div className="p-10 text-center text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin mx-auto" />
@@ -1808,6 +1965,14 @@ function AllClientsSection({
           <table className="w-full text-sm">
             <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-white/5">
               <tr>
+                <th className="px-3 py-3">
+                  <input
+                    type="checkbox"
+                    aria-label="Selecionar todos"
+                    checked={allSelected}
+                    onChange={() => setSelected(allSelected ? [] : filtered.map((c) => c.id))}
+                  />
+                </th>
                 <th className="px-4 py-3">Nome</th>
                 <th className="px-4 py-3">E-mail</th>
                 <th className="px-4 py-3">Telefone</th>
@@ -1820,8 +1985,30 @@ function AllClientsSection({
             </thead>
             <tbody>
               {filtered.map((c) => (
-                <tr key={c.id} className="border-b border-white/5 hover:bg-white/[0.02]">
-                  <td className="px-4 py-3 font-medium">{c.display_name ?? "—"}</td>
+                <tr
+                  key={c.id}
+                  className={`border-b border-white/5 hover:bg-white/[0.02] ${
+                    c.plan === "pro_max" ? "bg-[#e6b422]/10" : ""
+                  }`}
+                >
+                  <td className="px-3 py-3">
+                    <input
+                      type="checkbox"
+                      aria-label={`Selecionar ${c.display_name ?? c.id}`}
+                      checked={selected.includes(c.id)}
+                      onChange={() => toggleOne(c.id)}
+                    />
+                  </td>
+                  <td className="px-4 py-3 font-medium">
+                    <span className="inline-flex items-center gap-2">
+                      {c.display_name ?? "—"}
+                      {c.plan === "pro_max" && (
+                        <span className="rounded-full px-2 py-0.5 text-[9px] font-bold text-[#2b1c00] bg-gradient-to-r from-[#f7d774] to-[#c9971b]">
+                          PRO MAX
+                        </span>
+                      )}
+                    </span>
+                  </td>
                   <td className="px-4 py-3 text-[11px] text-muted-foreground">{c.email ?? c.id.slice(0, 8)}</td>
                   <td className="px-4 py-3 text-[11px] text-muted-foreground">{c.phone ?? "—"}</td>
                   <td className="px-4 py-3">

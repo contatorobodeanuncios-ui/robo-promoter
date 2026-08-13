@@ -20,7 +20,28 @@ export function PlanBanner() {
   const plan = useAppStore((s) => s.plan);
   const daysLeft = useAppStore((s) => s.trialDaysLeft);
 
+  if (plan === "pro_max") {
+    return (
+      <div className="glass rounded-2xl px-5 py-4 border border-[#e6b422]/50 bg-gradient-to-r from-[#e6b422]/15 to-transparent flex flex-wrap items-center gap-3">
+        <Crown className="h-5 w-5 text-[#e6b422]" />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold flex items-center gap-2">
+            Você está no plano PRO MAX
+            <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-[#2b1c00] bg-gradient-to-r from-[#f7d774] to-[#c9971b]">
+              PRIORIDADE
+            </span>
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Seller School, Copy Inteligente, suporte no WhatsApp, relatórios, Turbinar Alcance e
+            prioridade nas filas — tudo liberado.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (plan === "credits") {
+
     return (
       <div className="glass rounded-2xl px-5 py-4 border border-violet-400/40 bg-violet-500/5 flex flex-wrap items-center gap-3">
         <Coins className="h-5 w-5 text-violet-300" />

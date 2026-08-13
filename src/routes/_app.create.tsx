@@ -19,7 +19,8 @@ import { reachRange, fmtRange } from "@/lib/mock-data";
 import { analyzeCreative, type CreativeAnalysis } from "@/lib/ai-analysis.functions";
 import { getCreativeUploadPath, getMaintenanceMode } from "@/lib/data.functions";
 import { useAppStore } from "@/lib/store";
-import { campaignPricing, mediaBudgetForViews, viewsRangeForMedia } from "@/lib/pricing";
+import { campaignPricing, mediaBudgetForViews, viewsRangeForMedia, isCreditsLike, MIN_DAYS, packageViewsForDays, packageClicksForDays } from "@/lib/pricing";
+import { CopyModal } from "@/components/app/ProMaxMenu";
 
 import { supabase } from "@/integrations/supabase/client";
 
@@ -27,17 +28,21 @@ export const Route = createFileRoute("/_app/create")({
   head: () => ({
     meta: [
       { title: "Criar Anúncio — Robô de Lucro" },
-      { name: "description", content: "Lance um anúncio em 4 passos com a IA do Robô de Lucro." },
+      { name: "description", content: "Lance um anúncio em 8 passos guiados com a IA do Robô de Lucro." },
     ],
   }),
   component: CreateWizard,
 });
 
 const steps = [
-  { n: 1, title: "Criativo", desc: "Upload + análise IA" },
-  { n: 2, title: "Copy & Oferta", desc: "Texto e link" },
-  { n: 3, title: "Público", desc: "Segmentação" },
-  { n: 4, title: "Lançar", desc: "Orçamento e robô" },
+  { n: 1, title: "Boas-vindas", desc: "Como funciona" },
+  { n: 2, title: "Criativo", desc: "Upload + análise IA" },
+  { n: 3, title: "Copy", desc: "Texto e link" },
+  { n: 4, title: "Localização", desc: "Cidade e bairro" },
+  { n: 5, title: "Visualizações", desc: "Alcance desejado" },
+  { n: 6, title: "Duração", desc: `Mínimo ${MIN_DAYS} dias` },
+  { n: 7, title: "Pagamento", desc: "Ativar anúncio" },
+  { n: 8, title: "Confirmação", desc: "Revisão final" },
 ];
 
 // Limite real do Facebook para imagem de anúncio (não é um teto do app).
@@ -73,12 +78,13 @@ function CreateWizard() {
   const [radius, setRadius] = useState("15");
   const [budget, setBudget] = useState(15);
   const [days, setDays] = useState(7);
+  const [copyOpen, setCopyOpen] = useState(false);
   const [fundingType, setFundingType] = useState<"wallet" | "pix_dedicated">("wallet");
   // Verba de veiculação + taxa (mesma regra para PIX e saldo do app).
   const plan = useAppStore((s) => s.plan);
   // Plano CRÉDITOS: o cliente escolhe dias (1 crédito = 1 dia) + potência de
   // visualizações. O preço do pacote já embute tudo — nenhuma taxa é exibida.
-  const isCredits = plan === "credits";
+  const isCredits = isCreditsLike(plan);
   const [views, setViews] = useState(5000);
   const creditsDaily = Math.max(1, Math.round(mediaBudgetForViews(views) / days));
   const effBudget = isCredits ? creditsDaily : budget;
@@ -292,10 +298,13 @@ function CreateWizard() {
   };
 
   const canNext =
-    (step === 1 && files.length > 0 && scanState === "done" && (analysis?.compliant ?? true)) ||
-    (step === 2 && headline && body && link) ||
-    (step === 3 && city.trim() && neighborhood.trim() && Number(radius) > 0) ||
-    step === 4;
+    step === 1 ||
+    (step === 2 && files.length > 0 && scanState === "done" && (analysis?.compliant ?? true)) ||
+    (step === 3 && Boolean(headline && body && link)) ||
+    (step === 4 && Boolean(city.trim() && neighborhood.trim() && Number(radius) > 0)) ||
+    step === 5 ||
+    (step === 6 && days >= MIN_DAYS) ||
+    step === 7;
 
   // Modo de manutenção: bloqueia a criação de novas campanhas pra todo mundo.
   if (maintenanceQ.data?.enabled) {
@@ -324,6 +333,16 @@ function CreateWizard() {
       </header>
 
       {/* Stepper */}
+      <div className="space-y-3">
+        <div className="h-1.5 w-full rounded-full bg-white/5 overflow-hidden">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-primary to-accent transition-all"
+            style={{ width: `${(step / steps.length) * 100}%` }}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">Etapa {step} de {steps.length}</p>
+      </div>
+
       <ol className="grid grid-cols-2 md:grid-cols-4 gap-2">
         {steps.map((s, i) => {
           const active = step === s.n;
@@ -346,6 +365,29 @@ function CreateWizard() {
 
       <div className="glass-strong rounded-2xl p-6 lg:p-8 min-h-[420px]">
         {step === 1 && (
+          <div className="space-y-5 max-w-2xl">
+            <div>
+              <h2 className="text-xl font-semibold">Bem-vindo ao criador guiado</h2>
+              <p className="text-sm text-muted-foreground">
+                Em 8 passos rápidos o robô monta, valida e coloca seu anúncio no ar.
+              </p>
+            </div>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              {steps.slice(1).map((st) => (
+                <li key={st.n} className="flex items-center gap-3 glass rounded-lg px-3 py-2">
+                  <span className="grid place-items-center h-6 w-6 rounded-full bg-white/5 text-xs">{st.n - 1}</span>
+                  <span className="text-foreground font-medium">{st.title}</span>
+                  <span className="ml-auto text-[11px]">{st.desc}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-[11px] text-muted-foreground">
+              Você pode voltar em qualquer etapa antes de confirmar o pagamento.
+            </p>
+          </div>
+        )}
+
+        {step === 2 && (
           <div className="space-y-5">
             <div>
               <h2 className="text-xl font-semibold">Envie o criativo</h2>
@@ -499,12 +541,28 @@ function CreateWizard() {
         )}
 
 
-        {step === 2 && (
+        {step === 3 && (
           <div className="space-y-5 max-w-2xl">
             <div>
               <h2 className="text-xl font-semibold">Copy & oferta</h2>
               <p className="text-sm text-muted-foreground">A IA refinará seu texto antes de publicar.</p>
             </div>
+            {plan === "pro_max" && (
+              <Button variant="glass" onClick={() => setCopyOpen(true)}>
+                <Sparkles className="h-4 w-4" /> Copy Inteligente
+              </Button>
+            )}
+            {copyOpen && (
+              <CopyModal
+                initialText={body}
+                onClose={() => setCopyOpen(false)}
+                onApply={(r) => {
+                  if (r.headline) setHeadline(r.headline);
+                  if (r.copy) setBody(r.copy);
+                  setCopyOpen(false);
+                }}
+              />
+            )}
             <div className="space-y-1.5">
               <Label>Título do anúncio</Label>
               <Input placeholder="Ex: 🔥 Pizza grande por R$29,90" value={headline} onChange={(e) => setHeadline(e.target.value)} />
@@ -525,7 +583,7 @@ function CreateWizard() {
           </div>
         )}
 
-        {step === 3 && (
+        {step === 4 && (
           <div className="space-y-5 max-w-2xl">
             <div>
               <h2 className="text-xl font-semibold">Inteligência de público</h2>
@@ -614,7 +672,64 @@ function CreateWizard() {
           </div>
         )}
 
-        {step === 4 && (
+        {step === 5 && (
+          <div className="space-y-5 max-w-xl">
+            <div>
+              <h2 className="text-xl font-semibold">Visualizações</h2>
+              <p className="text-sm text-muted-foreground">
+                {isCredits
+                  ? "Escolha a potência de alcance desejada para o seu anúncio."
+                  : "Defina o investimento diário — quanto maior, mais pessoas alcançadas."}
+              </p>
+            </div>
+            {isCredits ? (
+              <div className="glass rounded-2xl p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Potência de visualizações</Label>
+                  <span className="text-sm font-semibold tabular-nums">{views.toLocaleString("pt-BR")}</span>
+                </div>
+                <Slider value={[views]} min={2500} max={200000} step={500} onValueChange={(v) => setViews(v[0])} />
+                <p className="text-[11px] text-muted-foreground">
+                  Estimativa com o pacote atual: {packageViewsForDays(days).min.toLocaleString("pt-BR")} a{" "}
+                  {packageViewsForDays(days).max.toLocaleString("pt-BR")} visualizações ·{" "}
+                  {packageClicksForDays(days).min.toLocaleString("pt-BR")} a{" "}
+                  {packageClicksForDays(days).max.toLocaleString("pt-BR")} cliques.
+                </p>
+              </div>
+            ) : (
+              <div className="glass rounded-2xl p-6 space-y-4">
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider">Investimento por dia</p>
+                  <p className="text-4xl font-bold tabular-nums mt-1">R$ <span className="text-gradient">{budget}</span></p>
+                </div>
+                <Slider value={[budget]} min={7} max={300} step={1} onValueChange={(v) => setBudget(v[0])} />
+              </div>
+            )}
+          </div>
+        )}
+
+        {step === 6 && (
+          <div className="space-y-5 max-w-xl">
+            <div>
+              <h2 className="text-xl font-semibold">Duração</h2>
+              <p className="text-sm text-muted-foreground">
+                Mínimo de {MIN_DAYS} dias — tempo que o robô precisa para aprender e otimizar.
+              </p>
+            </div>
+            <div className="glass rounded-2xl p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Dias de veiculação</Label>
+                <span className="text-sm font-semibold tabular-nums">{days} dia{days === 1 ? "" : "s"}</span>
+              </div>
+              <Slider value={[days]} min={MIN_DAYS} max={60} step={1} onValueChange={(v) => setDays(v[0])} />
+              <p className="text-[11px] text-muted-foreground">
+                Valor do pacote/veiculação: {fmtMoney(pricing.total)}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {step === 7 && (
           <div className="space-y-6 max-w-xl">
             <div>
               <h2 className="text-xl font-semibold">
@@ -639,34 +754,6 @@ function CreateWizard() {
                   </p>
                 </div>
 
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs">Potência de visualizações</Label>
-                    <span className="text-sm font-semibold tabular-nums">
-                      {views.toLocaleString("pt-BR")}
-                    </span>
-                  </div>
-                  <Slider
-                    value={[views]}
-                    min={2500}
-                    max={200000}
-                    step={500}
-                    onValueChange={(v) => setViews(v[0])}
-                  />
-                </div>
-
-                <div className="space-y-2 pt-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs">Créditos (dias no ar)</Label>
-                    <span className="text-sm font-semibold tabular-nums">
-                      {days} crédito{days === 1 ? "" : "s"}
-                    </span>
-                  </div>
-                  <Slider value={[days]} min={7} max={60} step={1} onValueChange={(v) => setDays(v[0])} />
-                  <p className="text-[11px] text-muted-foreground">
-                    Mínimo de 7 dias — período necessário para o robô aprender e otimizar.
-                  </p>
-                </div>
 
                 <div className="grid grid-cols-3 gap-3 pt-4 text-center border-t border-white/5">
                   <div className="pt-3">
@@ -696,16 +783,6 @@ function CreateWizard() {
                     R$ <span className="text-gradient">{budget}</span>
                   </p>
                   <p className="text-[11px] text-muted-foreground mt-1">Mínimo: R$ 7,00 / dia</p>
-                </div>
-                <Slider value={[budget]} min={7} max={300} step={1} onValueChange={(v) => setBudget(v[0])} />
-
-                <div className="space-y-2 pt-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs">Duração do anúncio</Label>
-                    <span className="text-sm font-semibold tabular-nums">{days} dias</span>
-                  </div>
-                  <Slider value={[days]} min={7} max={60} step={1} onValueChange={(v) => setDays(v[0])} />
-                  <p className="text-[11px] text-muted-foreground">Mínimo de 7 dias — período necessário para o robô aprender e otimizar a campanha.</p>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3 pt-4 text-center border-t border-white/5">
@@ -869,6 +946,41 @@ function CreateWizard() {
               )}
             </div>
 
+            <Button variant="neon" size="lg" className="w-full h-14 text-base" onClick={() => setStep(8)}>
+              <ChevronRight /> Ativar anúncio
+            </Button>
+          </div>
+        )}
+
+        {step === 8 && (
+          <div className="space-y-5 max-w-xl">
+            <div>
+              <h2 className="text-xl font-semibold">Confirmação final</h2>
+              <p className="text-sm text-muted-foreground">
+                Revise tudo antes do robô colocar seu anúncio no ar.
+              </p>
+            </div>
+            <div className="glass rounded-2xl p-5 space-y-3 text-sm">
+              <Row label="Título" value={headline || "—"} />
+              <Row label="Localização" value={`${neighborhood || "—"}${city ? `, ${city}` : ""} · raio ${radius} km`} />
+              <Row label="Duração" value={`${days} dia${days === 1 ? "" : "s"}`} />
+              <Row
+                label={isCredits ? "Visualizações estimadas" : "Investimento por dia"}
+                value={
+                  isCredits
+                    ? `${packageViewsForDays(days).min.toLocaleString("pt-BR")} a ${packageViewsForDays(days).max.toLocaleString("pt-BR")}`
+                    : fmtMoney(budget)
+                }
+              />
+              <Row
+                label="Forma de pagamento"
+                value={fundingType === "wallet" ? "Saldo do app" : "PIX"}
+              />
+              <div className="pt-2 border-t border-white/5 flex items-center justify-between">
+                <span className="text-muted-foreground">Total</span>
+                <span className="text-lg font-bold text-gradient">{fmtMoney(pricing.total)}</span>
+              </div>
+            </div>
             <Button variant="neon" size="lg" className="w-full h-14 text-base animate-pulse-glow" onClick={launch} disabled={launching}>
               {launching ? <><Loader2 className="animate-spin" /> {uploadProgress ?? "Ativando robô..."}</> : <><Rocket /> {fundingType === "pix_dedicated" ? "Gerar PIX e Lançar" : "Ativar Robô e Lançar Anúncio"}</>}
             </Button>
@@ -880,12 +992,21 @@ function CreateWizard() {
         <Button variant="glass" disabled={step === 1} onClick={() => setStep((s) => s - 1)}>
           <ChevronLeft /> Voltar
         </Button>
-        {step < 4 && (
+        {step < 8 && (
           <Button variant="neon" disabled={!canNext} onClick={() => setStep((s) => s + 1)}>
             Continuar <ChevronRight />
           </Button>
         )}
       </div>
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <span className="text-muted-foreground shrink-0">{label}</span>
+      <span className="font-medium text-right break-words">{value}</span>
     </div>
   );
 }

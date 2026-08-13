@@ -122,16 +122,50 @@ export const Route = createFileRoute("/api/public/asaas-webhook")({
 
         // Roteia pelo TIPO da payment_request (fonte de verdade), fallback no ref.
         const prAny = pr as unknown as {
-          type?: "campaign_budget" | "balance_topup" | null;
+          type?: "campaign_budget" | "balance_topup" | "campaign_boost" | null;
           campaign_id?: string | null;
           user_id: string;
           amount: number | string;
           id: string;
         };
-        const isCampaign = prAny.type === "campaign_budget" || !!refCampaignId;
+        const isBoost = prAny.type === "campaign_boost";
+        const isCampaign = !isBoost && (prAny.type === "campaign_budget" || !!refCampaignId);
         const campaignId = prAny.campaign_id ?? refCampaignId;
 
-        if (isCampaign && campaignId) {
+        if (isBoost && campaignId) {
+          // Turbinar Alcance: injeta as visualizações extras direto na campanha.
+          const { data: boost } = await supabaseAdmin
+            .from("campaign_boosts")
+            .select("id, views, media_budget")
+            .eq("payment_request_id", prAny.id)
+            .maybeSingle();
+          const { data: camp } = await supabaseAdmin
+            .from("campaigns")
+            .select("id, pix_remaining_budget, extra_views, extra_paid")
+            .eq("id", campaignId)
+            .maybeSingle();
+          const b = boost as unknown as { id: string; views: number; media_budget: number } | null;
+          const c = camp as unknown as {
+            pix_remaining_budget: number | string | null;
+            extra_views: number | null;
+            extra_paid: number | string | null;
+          } | null;
+          if (b && c) {
+            await supabaseAdmin
+              .from("campaigns")
+              .update({
+                extra_views: Number(c.extra_views ?? 0) + Number(b.views),
+                extra_paid: Number(c.extra_paid ?? 0) + Number(prAny.amount),
+                pix_remaining_budget:
+                  Number(c.pix_remaining_budget ?? 0) + Number(b.media_budget),
+              } as never)
+              .eq("id", campaignId);
+            await supabaseAdmin
+              .from("campaign_boosts")
+              .update({ status: "paid", paid_at: new Date().toISOString() } as never)
+              .eq("id", b.id);
+          }
+        } else if (isCampaign && campaignId) {
           // PIX dedicado → credita saldo da campanha e coloca pra rodar.
           const { data: camp, error: cErr } = await supabaseAdmin
             .from("campaigns")
