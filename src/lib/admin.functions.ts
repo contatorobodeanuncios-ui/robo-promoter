@@ -101,6 +101,9 @@ export interface AdminCampaignRow {
   media: CampaignMediaItem[];
   archived_at: string | null;
   archived_reason: "deleted" | "awaiting_payment" | null;
+  extra_views?: number | null;
+  extra_paid?: number | null;
+  queue_priority?: number | null;
 }
 
 
