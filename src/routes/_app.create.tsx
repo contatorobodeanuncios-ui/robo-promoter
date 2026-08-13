@@ -28,7 +28,7 @@ export const Route = createFileRoute("/_app/create")({
   head: () => ({
     meta: [
       { title: "Criar Anúncio — Robô de Lucro" },
-      { name: "description", content: "Lance um anúncio em 4 passos com a IA do Robô de Lucro." },
+      { name: "description", content: "Lance um anúncio em 8 passos guiados com a IA do Robô de Lucro." },
     ],
   }),
   component: CreateWizard,
@@ -946,6 +946,41 @@ function CreateWizard() {
               )}
             </div>
 
+            <Button variant="neon" size="lg" className="w-full h-14 text-base" onClick={() => setStep(8)}>
+              <ChevronRight /> Ativar anúncio
+            </Button>
+          </div>
+        )}
+
+        {step === 8 && (
+          <div className="space-y-5 max-w-xl">
+            <div>
+              <h2 className="text-xl font-semibold">Confirmação final</h2>
+              <p className="text-sm text-muted-foreground">
+                Revise tudo antes do robô colocar seu anúncio no ar.
+              </p>
+            </div>
+            <div className="glass rounded-2xl p-5 space-y-3 text-sm">
+              <Row label="Título" value={headline || "—"} />
+              <Row label="Localização" value={`${neighborhood || "—"}${city ? `, ${city}` : ""} · raio ${radius} km`} />
+              <Row label="Duração" value={`${days} dia${days === 1 ? "" : "s"}`} />
+              <Row
+                label={isCredits ? "Visualizações estimadas" : "Investimento por dia"}
+                value={
+                  isCredits
+                    ? `${packageViewsForDays(days).min.toLocaleString("pt-BR")} a ${packageViewsForDays(days).max.toLocaleString("pt-BR")}`
+                    : fmtMoney(budget)
+                }
+              />
+              <Row
+                label="Forma de pagamento"
+                value={fundingType === "wallet" ? "Saldo do app" : "PIX"}
+              />
+              <div className="pt-2 border-t border-white/5 flex items-center justify-between">
+                <span className="text-muted-foreground">Total</span>
+                <span className="text-lg font-bold text-gradient">{fmtMoney(pricing.total)}</span>
+              </div>
+            </div>
             <Button variant="neon" size="lg" className="w-full h-14 text-base animate-pulse-glow" onClick={launch} disabled={launching}>
               {launching ? <><Loader2 className="animate-spin" /> {uploadProgress ?? "Ativando robô..."}</> : <><Rocket /> {fundingType === "pix_dedicated" ? "Gerar PIX e Lançar" : "Ativar Robô e Lançar Anúncio"}</>}
             </Button>
@@ -963,6 +998,15 @@ function CreateWizard() {
           </Button>
         )}
       </div>
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <span className="text-muted-foreground shrink-0">{label}</span>
+      <span className="font-medium text-right break-words">{value}</span>
     </div>
   );
 }
