@@ -558,7 +558,7 @@ function CreateWizard() {
                 onClose={() => setCopyOpen(false)}
                 onApply={(r) => {
                   if (r.headline) setHeadline(r.headline);
-                  if (r.body) setBody(r.body);
+                  if (r.copy) setBody(r.copy);
                   setCopyOpen(false);
                 }}
               />
@@ -669,6 +669,63 @@ function CreateWizard() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {step === 5 && (
+          <div className="space-y-5 max-w-xl">
+            <div>
+              <h2 className="text-xl font-semibold">Visualizações</h2>
+              <p className="text-sm text-muted-foreground">
+                {isCredits
+                  ? "Escolha a potência de alcance desejada para o seu anúncio."
+                  : "Defina o investimento diário — quanto maior, mais pessoas alcançadas."}
+              </p>
+            </div>
+            {isCredits ? (
+              <div className="glass rounded-2xl p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Potência de visualizações</Label>
+                  <span className="text-sm font-semibold tabular-nums">{views.toLocaleString("pt-BR")}</span>
+                </div>
+                <Slider value={[views]} min={2500} max={200000} step={500} onValueChange={(v) => setViews(v[0])} />
+                <p className="text-[11px] text-muted-foreground">
+                  Estimativa com o pacote atual: {packageViewsForDays(days).min.toLocaleString("pt-BR")} a{" "}
+                  {packageViewsForDays(days).max.toLocaleString("pt-BR")} visualizações ·{" "}
+                  {packageClicksForDays(days).min.toLocaleString("pt-BR")} a{" "}
+                  {packageClicksForDays(days).max.toLocaleString("pt-BR")} cliques.
+                </p>
+              </div>
+            ) : (
+              <div className="glass rounded-2xl p-6 space-y-4">
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider">Investimento por dia</p>
+                  <p className="text-4xl font-bold tabular-nums mt-1">R$ <span className="text-gradient">{budget}</span></p>
+                </div>
+                <Slider value={[budget]} min={7} max={300} step={1} onValueChange={(v) => setBudget(v[0])} />
+              </div>
+            )}
+          </div>
+        )}
+
+        {step === 6 && (
+          <div className="space-y-5 max-w-xl">
+            <div>
+              <h2 className="text-xl font-semibold">Duração</h2>
+              <p className="text-sm text-muted-foreground">
+                Mínimo de {MIN_DAYS} dias — tempo que o robô precisa para aprender e otimizar.
+              </p>
+            </div>
+            <div className="glass rounded-2xl p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Dias de veiculação</Label>
+                <span className="text-sm font-semibold tabular-nums">{days} dia{days === 1 ? "" : "s"}</span>
+              </div>
+              <Slider value={[days]} min={MIN_DAYS} max={60} step={1} onValueChange={(v) => setDays(v[0])} />
+              <p className="text-[11px] text-muted-foreground">
+                Valor do pacote/veiculação: {fmtMoney(pricing.total)}
+              </p>
+            </div>
           </div>
         )}
 
