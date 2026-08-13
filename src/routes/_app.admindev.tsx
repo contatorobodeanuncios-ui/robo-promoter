@@ -52,6 +52,7 @@ import {
   type MetaLinkAuditRow,
   type AIReviewRow,
 } from "@/lib/admin.functions";
+import { getProMaxLinks, adminSetProMaxLinks } from "@/lib/promax.functions";
 import { aiReviewCampaign } from "@/lib/ai-metrics.functions";
 
 import {
@@ -688,6 +689,7 @@ function AdminDevPage() {
 
         {/* ============ Aba: Configurações Internas ============ */}
         <TabsContent value="settings" className="space-y-6 mt-6">
+          <ProMaxLinksCard />
           <MetaHealthCard />
           <PixAttemptsSection />
           <ExportCsvButton />
@@ -1557,6 +1559,61 @@ function AutoApproveToggle() {
     >
       {enabled ? "Entradas abertas (ON)" : "Entradas abertas (OFF)"}
     </Button>
+  );
+}
+
+// ============ Links exclusivos do plano Pro Max ============
+function ProMaxLinksCard() {
+  const getFn = useServerFn(getProMaxLinks);
+  const setFn = useServerFn(adminSetProMaxLinks);
+  const q = useQuery({ queryKey: ["promax-links"], queryFn: () => getFn() });
+  const [school, setSchool] = useState<string | null>(null);
+  const [wa, setWa] = useState<string | null>(null);
+  const qc = useQueryClient();
+  const mut = useMutation({
+    mutationFn: () =>
+      setFn({
+        data: {
+          seller_school_url: school ?? q.data?.seller_school_url ?? "",
+          whatsapp_url: wa ?? q.data?.whatsapp_url ?? "",
+        },
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["promax-links"] });
+      toast.success("Links do Pro Max atualizados");
+    },
+    onError: (e) => toast.error(String(e)),
+  });
+
+  return (
+    <section className="glass-strong rounded-2xl p-6 border border-[#e6b422]/30 space-y-3">
+      <h2 className="font-semibold flex items-center gap-2">
+        <Crown className="h-4 w-4 text-[#e6b422]" /> Links do plano Pro Max
+      </h2>
+      <div className="grid md:grid-cols-2 gap-3">
+        <label className="text-xs text-muted-foreground space-y-1 block">
+          Seller School (URL)
+          <input
+            value={school ?? q.data?.seller_school_url ?? ""}
+            onChange={(e) => setSchool(e.target.value)}
+            placeholder="https://..."
+            className="w-full rounded-xl bg-white/[0.03] border border-white/10 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
+          />
+        </label>
+        <label className="text-xs text-muted-foreground space-y-1 block">
+          Suporte WhatsApp (wa.me)
+          <input
+            value={wa ?? q.data?.whatsapp_url ?? ""}
+            onChange={(e) => setWa(e.target.value)}
+            placeholder="https://wa.me/55..."
+            className="w-full rounded-xl bg-white/[0.03] border border-white/10 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
+          />
+        </label>
+      </div>
+      <Button variant="neon" size="sm" disabled={mut.isPending} onClick={() => mut.mutate()}>
+        Salvar links
+      </Button>
+    </section>
   );
 }
 
