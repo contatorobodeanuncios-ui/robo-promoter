@@ -20,7 +20,7 @@ import { analyzeCreative, type CreativeAnalysis } from "@/lib/ai-analysis.functi
 import { getCreativeUploadPath, getMaintenanceMode } from "@/lib/data.functions";
 import { useAppStore } from "@/lib/store";
 import { campaignPricing, mediaBudgetForViews, viewsRangeForMedia, isCreditsLike, MIN_DAYS, packageViewsForDays, packageClicksForDays } from "@/lib/pricing";
-import { CopyModal } from "@/components/app/CopyModal";
+import { CopyModal } from "@/components/app/ProMaxMenu";
 
 import { supabase } from "@/integrations/supabase/client";
 
@@ -364,6 +364,29 @@ function CreateWizard() {
       </ol>
 
       <div className="glass-strong rounded-2xl p-6 lg:p-8 min-h-[420px]">
+        {step === 1 && (
+          <div className="space-y-5 max-w-2xl">
+            <div>
+              <h2 className="text-xl font-semibold">Bem-vindo ao criador guiado</h2>
+              <p className="text-sm text-muted-foreground">
+                Em 8 passos rápidos o robô monta, valida e coloca seu anúncio no ar.
+              </p>
+            </div>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              {steps.slice(1).map((st) => (
+                <li key={st.n} className="flex items-center gap-3 glass rounded-lg px-3 py-2">
+                  <span className="grid place-items-center h-6 w-6 rounded-full bg-white/5 text-xs">{st.n - 1}</span>
+                  <span className="text-foreground font-medium">{st.title}</span>
+                  <span className="ml-auto text-[11px]">{st.desc}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-[11px] text-muted-foreground">
+              Você pode voltar em qualquer etapa antes de confirmar o pagamento.
+            </p>
+          </div>
+        )}
+
         {step === 2 && (
           <div className="space-y-5">
             <div>
@@ -524,6 +547,22 @@ function CreateWizard() {
               <h2 className="text-xl font-semibold">Copy & oferta</h2>
               <p className="text-sm text-muted-foreground">A IA refinará seu texto antes de publicar.</p>
             </div>
+            {plan === "pro_max" && (
+              <Button variant="glass" onClick={() => setCopyOpen(true)}>
+                <Sparkles className="h-4 w-4" /> Copy Inteligente
+              </Button>
+            )}
+            {copyOpen && (
+              <CopyModal
+                initialText={body}
+                onClose={() => setCopyOpen(false)}
+                onApply={(r) => {
+                  if (r.headline) setHeadline(r.headline);
+                  if (r.body) setBody(r.body);
+                  setCopyOpen(false);
+                }}
+              />
+            )}
             <div className="space-y-1.5">
               <Label>Título do anúncio</Label>
               <Input placeholder="Ex: 🔥 Pizza grande por R$29,90" value={headline} onChange={(e) => setHeadline(e.target.value)} />
