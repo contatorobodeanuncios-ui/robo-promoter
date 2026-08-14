@@ -1,7 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { MessageCircle, Send, X, Loader2, Paperclip, Mic, Square, File as FileIcon, Play, Pause } from "lucide-react";
+import {
+  MessageCircle,
+  Send,
+  X,
+  Loader2,
+  Paperclip,
+  Mic,
+  Square,
+  File as FileIcon,
+  Play,
+  Pause,
+  Bot,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,15 +24,71 @@ import {
   getSupportUploadPath,
   getSupportAttachmentUrl,
   type SupportAttachment,
+  type SupportMessageRow,
 } from "@/lib/support.functions";
 import { supabase } from "@/integrations/supabase/client";
 
 const MAX_FILE_MB = 15;
+const BUBBLE_SIZE = 56;
+const STORAGE_KEY = "support_bubble_pos";
+const DRAG_THRESHOLD = 5;
 
 function kindFromMime(mime: string): SupportAttachment["kind"] {
   if (mime.startsWith("image/")) return "image";
   if (mime.startsWith("audio/")) return "audio";
   return "file";
+}
+
+function defaultBubblePos() {
+  if (typeof window === "undefined") return { x: 0, y: 0 };
+  return {
+    x: window.innerWidth - BUBBLE_SIZE - 16,
+    y: window.innerHeight - BUBBLE_SIZE - (window.innerWidth < 768 ? 96 : 24),
+  };
+}
+
+function clampPos(pos: { x: number; y: number }) {
+  if (typeof window === "undefined") return pos;
+  const maxX = window.innerWidth - BUBBLE_SIZE - 4;
+  const maxY = window.innerHeight - BUBBLE_SIZE - 4;
+  return {
+    x: Math.min(Math.max(pos.x, 4), Math.max(maxX, 4)),
+    y: Math.min(Math.max(pos.y, 4), Math.max(maxY, 4)),
+  };
+}
+
+function formatTime(iso: string) {
+  try {
+    return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "";
+  }
+}
+
+function formatDayLabel(iso: string) {
+  const d = new Date(iso);
+  const today = new Date();
+  const isSameDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  if (isSameDay(d, today)) return "Hoje";
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (isSameDay(d, yesterday)) return "Ontem";
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
+}
+
+function groupByDay(messages: SupportMessageRow[]) {
+  const groups: { day: string; items: SupportMessageRow[] }[] = [];
+  for (const m of messages) {
+    const label = formatDayLabel(m.created_at);
+    const last = groups[groups.length - 1];
+    if (last && last.day === label) {
+      last.items.push(m);
+    } else {
+      groups.push({ day: label, items: [m] });
+    }
+  }
+  return groups;
 }
 
 export function SupportWidget() {
@@ -36,6 +104,95 @@ export function SupportWidget() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const qc = useQueryClient();
+
+  // ---------- Bolha arrastável ----------
+  const [hydrated, setHydrated] = useState(false);
+  const [pos, setPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const bubbleRef = useRef<HTMLButtonElement>(null);
+  const dragState = useRef<{ startX: number; startY: number; origX: number; origY: number; dragging: boolean } | null>(
+    null,
+  );
+
+  useEffect(() => {
+    // Lê a posição salva apenas após hidratação — nunca durante SSR/render.
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { x: number; y: number };
+        setPos(clampPos(parsed));
+      } else {
+        setPos(defaultBubblePos());
+      }
+    } catch {
+      setPos(defaultBubblePos());
+    }
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    const onResize = () => setPos((p) => clampPos(p));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  const savePos = useCallback((next: { x: number; y: number }) => {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // ignora
+    }
+  }, []);
+
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      dragState.current = { startX: e.clientX, startY: e.clientY, origX: pos.x, origY: pos.y, dragging: false };
+      bubbleRef.current?.setPointerCapture(e.pointerId);
+    },
+    [pos],
+  );
+
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+    const ds = dragState.current;
+    if (!ds) return;
+    const dx = e.clientX - ds.startX;
+    const dy = e.clientY - ds.startY;
+    if (!ds.dragging && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+    ds.dragging = true;
+    setPos(clampPos({ x: ds.origX + dx, y: ds.origY + dy }));
+  }, []);
+
+  const handlePointerUp = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      const ds = dragState.current;
+      bubbleRef.current?.releasePointerCapture(e.pointerId);
+      if (ds?.dragging) {
+        setPos((p) => {
+          const clamped = clampPos(p);
+          savePos(clamped);
+          return clamped;
+        });
+      } else {
+        setOpen((o) => !o);
+      }
+      dragState.current = null;
+    },
+    [savePos],
+  );
+
+  // Painel: ancora perto da bolha, mas sempre dentro da viewport.
+  const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
+  useEffect(() => {
+    if (!hydrated) return;
+    const panelW = Math.min(window.innerWidth * 0.92, 380);
+    const panelH = Math.min(window.innerHeight * 0.65, 520);
+    let left = pos.x + BUBBLE_SIZE / 2 - panelW / 2;
+    let top = pos.y - panelH - 12;
+    if (top < 8) top = pos.y + BUBBLE_SIZE + 12;
+    if (top + panelH > window.innerHeight - 8) top = window.innerHeight - panelH - 8;
+    if (left < 8) left = 8;
+    if (left + panelW > window.innerWidth - 8) left = window.innerWidth - panelW - 8;
+    setPanelStyle({ left, top, width: panelW, height: panelH });
+  }, [hydrated, pos, open]);
 
   const openConv = useServerFn(getOrCreateMyConversation);
   const listFn = useServerFn(listMyMessages);
@@ -105,7 +262,7 @@ export function SupportWidget() {
 
   useEffect(() => {
     if (open && listRef.current) {
-      listRef.current.scrollTop = listRef.current.scrollHeight;
+      listRef.current.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
     }
   }, [msgsQuery.data, open]);
 
@@ -184,63 +341,112 @@ export function SupportWidget() {
 
   if (!signed) return null;
 
+  const dayGroups = groupByDay(msgsQuery.data ?? []);
+
   return (
     <>
-      {!open && (
-        <button
-          onClick={() => setOpen(true)}
-          aria-label="Abrir suporte"
-          className="fixed bottom-24 right-4 z-50 md:bottom-6 md:right-6 h-14 w-14 rounded-full bg-gradient-to-br from-primary to-accent shadow-lg shadow-primary/40 hover:scale-105 transition-transform flex items-center justify-center"
-        >
-          <MessageCircle className="h-6 w-6 text-primary-foreground" />
-          {hasUnread && (
-            <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive border-2 border-background animate-pulse" />
-          )}
-        </button>
-      )}
+      <button
+        ref={bubbleRef}
+        aria-label="Abrir suporte"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        style={{
+          position: "fixed",
+          left: pos.x,
+          top: pos.y,
+          touchAction: "none",
+          visibility: hydrated ? "visible" : "hidden",
+        }}
+        className={`z-50 h-14 w-14 rounded-full bg-gradient-to-br from-primary to-accent shadow-lg shadow-primary/40 hover:scale-105 active:scale-95 transition-transform flex items-center justify-center select-none cursor-grab active:cursor-grabbing ${
+          open ? "ring-2 ring-primary/50" : ""
+        }`}
+      >
+        {open ? <X className="h-6 w-6 text-primary-foreground" /> : <MessageCircle className="h-6 w-6 text-primary-foreground" />}
+        {hasUnread && !open && (
+          <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive border-2 border-background animate-pulse" />
+        )}
+      </button>
 
-      {open && (
-        <div className="fixed bottom-24 right-4 md:bottom-6 md:right-6 z-50 w-[min(92vw,380px)] h-[min(65vh,520px)] rounded-2xl border border-white/10 bg-background/95 backdrop-blur-xl shadow-2xl flex flex-col overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-gradient-to-r from-primary/10 to-accent/10 shrink-0">
-            <div>
-              <div className="text-sm font-semibold">Suporte Robô de Lucro</div>
-              <div className="text-[11px] text-muted-foreground">Respondemos em minutos</div>
+      {open && hydrated && (
+        <div
+          style={panelStyle}
+          className="fixed z-50 rounded-2xl border border-white/10 bg-background/95 backdrop-blur-xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+        >
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-gradient-to-r from-primary/15 to-accent/15 shrink-0">
+            <div className="flex items-center gap-2.5">
+              <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center shrink-0">
+                <Bot className="h-4 w-4 text-primary-foreground" />
+              </div>
+              <div>
+                <div className="text-sm font-semibold leading-tight">Suporte Robô de Lucro</div>
+                <div className="text-[11px] text-muted-foreground">Respondemos em minutos</div>
+              </div>
             </div>
-            <button onClick={() => setOpen(false)} aria-label="Fechar" className="p-1 rounded hover:bg-white/10">
+            <button onClick={() => setOpen(false)} aria-label="Fechar" className="p-1.5 rounded-full hover:bg-white/10 transition-colors">
               <X className="h-4 w-4" />
             </button>
           </div>
 
-          <div ref={listRef} className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
+          <div ref={listRef} className="flex-1 min-h-0 overflow-y-auto scroll-smooth p-3 space-y-3">
             {convQuery.isLoading || msgsQuery.isLoading ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
-            ) : (msgsQuery.data ?? []).length === 0 ? (
-              <div className="text-xs text-muted-foreground text-center py-8 px-2">
-                Envie sua mensagem, uma imagem, áudio ou arquivo. Nossa equipe responderá aqui mesmo.
+            ) : dayGroups.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 text-center py-10 px-4">
+                <div className="h-12 w-12 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+                  <Bot className="h-6 w-6 text-primary" />
+                </div>
+                <div className="text-sm font-medium">Como podemos ajudar?</div>
+                <div className="text-xs text-muted-foreground max-w-[240px]">
+                  Envie sua mensagem, uma imagem, áudio ou arquivo. Nossa equipe responderá aqui mesmo.
+                </div>
               </div>
             ) : (
-              (msgsQuery.data ?? []).map((m) => (
-                <div
-                  key={m.id}
-                  className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm space-y-2 ${
-                    m.sender === "user" || m.sender === "client"
-                      ? "ml-auto bg-primary text-primary-foreground"
-                      : "bg-white/5 text-foreground"
-                  }`}
-                >
-                  {m.content && <p>{m.content}</p>}
-                  {m.attachments.map((a, i) => (
-                    <AttachmentView key={i} attachment={a} />
-                  ))}
+              dayGroups.map((group) => (
+                <div key={group.day} className="space-y-2">
+                  <div className="flex items-center justify-center">
+                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground bg-white/5 px-2.5 py-1 rounded-full">
+                      {group.day}
+                    </span>
+                  </div>
+                  {group.items.map((m) => {
+                    const isMine = m.sender === "user" || m.sender === "client";
+                    return (
+                      <div key={m.id} className={`flex items-end gap-2 ${isMine ? "justify-end" : "justify-start"}`}>
+                        {!isMine && (
+                          <div className="h-6 w-6 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center shrink-0 mb-0.5">
+                            <Bot className="h-3.5 w-3.5 text-primary-foreground" />
+                          </div>
+                        )}
+                        <div
+                          className={`max-w-[78%] rounded-2xl px-3 py-2 text-sm space-y-2 shadow-sm ${
+                            isMine
+                              ? "bg-primary text-primary-foreground rounded-br-sm"
+                              : "bg-white/[0.06] text-foreground rounded-bl-sm border border-white/5"
+                          }`}
+                        >
+                          {!isMine && <div className="text-[10px] font-semibold text-primary/80">Suporte</div>}
+                          {m.content && <p className="whitespace-pre-wrap break-words leading-relaxed">{m.content}</p>}
+                          {m.attachments.map((a, i) => (
+                            <AttachmentView key={i} attachment={a} />
+                          ))}
+                          <div className={`text-[10px] ${isMine ? "text-primary-foreground/70" : "text-muted-foreground"} text-right`}>
+                            {formatTime(m.created_at)}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               ))
             )}
           </div>
 
           {pendingAttachment && (
-            <div className="px-3 py-2 border-t border-white/10 flex items-center justify-between gap-2 text-xs shrink-0">
+            <div className="px-3 py-2 border-t border-white/10 flex items-center justify-between gap-2 text-xs shrink-0 bg-white/5">
               <span className="truncate flex items-center gap-1.5">
                 <FileIcon className="h-3.5 w-3.5 shrink-0" /> {pendingAttachment.name}
               </span>

@@ -861,6 +861,36 @@ export type Database = {
           },
         ]
       }
+      user_activity_events: {
+        Row: {
+          created_at: string
+          duration_ms: number | null
+          id: string
+          kind: string
+          label: string | null
+          session_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          duration_ms?: number | null
+          id?: string
+          kind: string
+          label?: string | null
+          session_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          duration_ms?: number | null
+          id?: string
+          kind?: string
+          label?: string | null
+          session_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string

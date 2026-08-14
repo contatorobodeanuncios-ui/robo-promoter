@@ -104,6 +104,7 @@ export interface AdminCampaignRow {
   extra_views?: number | null;
   extra_paid?: number | null;
   queue_priority?: number | null;
+  client_plan?: string | null;
 }
 
 
@@ -122,7 +123,7 @@ export const adminListCampaigns = createServerFn({ method: "GET" })
     const userIds = Array.from(new Set((campaigns ?? []).map((c) => c.user_id)));
     const { data: profiles } = await supabaseAdmin
       .from("profiles")
-      .select("id, display_name, email")
+      .select("id, display_name, email, plan")
       .in("id", userIds.length ? userIds : ["00000000-0000-0000-0000-000000000000"]);
     const pMap = new Map((profiles ?? []).map((p) => [p.id, p]));
     return (campaigns ?? []).map((c) => {
@@ -132,6 +133,7 @@ export const adminListCampaigns = createServerFn({ method: "GET" })
         user_id: c.user_id,
         client_name: p?.display_name ?? null,
         client_email: p?.email ?? null,
+        client_plan: (p as { plan?: string } | undefined)?.plan ?? null,
         name: c.name,
         status: c.status,
         budget: c.budget,
@@ -612,7 +614,7 @@ export const adminExportCampaignsCSV = createServerFn({ method: "GET" })
     const userIds = Array.from(new Set(rows.map((r) => r.user_id)));
     const { data: profiles } = await admin
       .from("profiles")
-      .select("id, display_name, email")
+      .select("id, display_name, email, plan")
       .in("id", userIds.length ? userIds : ["00000000-0000-0000-0000-000000000000"]);
     const pMap = new Map((profiles ?? []).map((p) => [p.id, p]));
 
@@ -1480,4 +1482,115 @@ export const submitAccessRequest = createServerFn({ method: "POST" })
     );
     if (pErr) throw new Error(pErr.message);
     return { approved: true };
+  });
+
+// ============ Dashboard Executivo: métricas ocultas/resetadas ============
+// Guarda no app_settings (key "exec_dashboard_hidden") a lista de chaves de
+// métricas que o admin escondeu/resetou individualmente no painel.
+export const getExecDashboardHidden = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<{ hidden: string[] }> => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const supabaseAdmin = await getSupabaseAdmin();
+    const { data, error } = await supabaseAdmin
+      .from("app_settings")
+      .select("value")
+      .eq("key", "exec_dashboard_hidden")
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    const hidden = (data?.value as { hidden?: string[] } | null)?.hidden ?? [];
+    return { hidden: Array.isArray(hidden) ? hidden : [] };
+  });
+
+export const setExecDashboardHidden = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ hidden: z.array(z.string()) }).parse(d))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const supabaseAdmin = await getSupabaseAdmin();
+    const { error } = await supabaseAdmin
+      .from("app_settings")
+      .upsert({
+        key: "exec_dashboard_hidden",
+        value: { hidden: data.hidden },
+        updated_at: new Date().toISOString(),
+      });
+    if (error) throw new Error(error.message);
+    return { hidden: data.hidden };
+  });
+
+// ============ Turbinar Alcance (boosts): marcar como processado ============
+export interface AdminCampaignBoostRow {
+  id: string;
+  campaign_id: string;
+  views: number;
+  amount: number;
+  status: string;
+  paid_at: string | null;
+  created_at: string;
+}
+
+export const adminListCampaignBoosts = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ campaign_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }): Promise<AdminCampaignBoostRow[]> => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const supabaseAdmin = await getSupabaseAdmin();
+    const { data: rows, error } = await supabaseAdmin
+      .from("campaign_boosts")
+      .select("*")
+      .eq("campaign_id", data.campaign_id)
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return (rows ?? []).map((r) => ({
+      id: r.id,
+      campaign_id: r.campaign_id,
+      views: r.views,
+      amount: Number(r.amount),
+      status: r.status,
+      paid_at: r.paid_at ?? null,
+      created_at: r.created_at,
+    }));
+  });
+
+export const adminMarkBoostProcessed = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ boost_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const supabaseAdmin = await getSupabaseAdmin();
+    const { error } = await supabaseAdmin
+      .from("campaign_boosts")
+      .update({ status: "processed" } as never)
+      .eq("id", data.boost_id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+// ============ Histórico de atividade do usuário ============
+export interface AdminUserActivityRow {
+  id: string;
+  kind: string;
+  label: string | null;
+  session_id: string | null;
+  duration_ms: number | null;
+  created_at: string;
+}
+
+export const adminListUserActivity = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ user_id: z.string().uuid(), limit: z.number().min(1).max(500).optional() }).parse(d),
+  )
+  .handler(async ({ data, context }): Promise<AdminUserActivityRow[]> => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const supabaseAdmin = await getSupabaseAdmin();
+    const { data: rows, error } = await supabaseAdmin
+      .from("user_activity_events")
+      .select("id, kind, label, session_id, duration_ms, created_at")
+      .eq("user_id", data.user_id)
+      .order("created_at", { ascending: false })
+      .limit(data.limit ?? 100);
+    if (error) throw new Error(error.message);
+    return (rows ?? []) as AdminUserActivityRow[];
   });

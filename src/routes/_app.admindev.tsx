@@ -45,6 +45,11 @@ import {
   adminListMetaLinkAudit,
   adminListAIReviews,
   adminGetCampaignMediaUrls,
+  adminListCampaignBoosts,
+  adminMarkBoostProcessed,
+  adminListUserActivity,
+  type AdminCampaignBoostRow,
+  type AdminUserActivityRow,
   type AdminCampaignRow,
   type AdminClientRow,
   type PixAttemptRow,
@@ -53,7 +58,7 @@ import {
   type AIReviewRow,
 } from "@/lib/admin.functions";
 import { getProMaxLinks, adminSetProMaxLinks } from "@/lib/promax.functions";
-import { internalBreakdown } from "@/lib/pricing";
+import { adminCampaignValues } from "@/lib/pricing";
 import { aiReviewCampaign } from "@/lib/ai-metrics.functions";
 
 import {
@@ -64,10 +69,11 @@ import {
   adminListPayments,
   adminApprovePayment,
   adminRejectPayment,
+  type PaymentRequestRow,
 } from "@/lib/payment.functions";
 import { adminListConversations } from "@/lib/support.functions";
 import { supabase } from "@/integrations/supabase/client";
-import { Shield, Zap, Hand, Eye, X, Rocket, Loader2, Link2, Check, Ban, CreditCard, AlertTriangle, Trash2, PowerOff, UserPlus, Copy, Settings, Users, Megaphone, Wallet, Pencil, UserCheck, KeyRound, Sparkles, History, ThumbsUp, ThumbsDown, HelpCircle, RefreshCw, Download, Clock, Archive, ArchiveRestore, Search, Crown, Timer } from "lucide-react";
+import { Shield, Zap, Hand, Eye, X, Rocket, Loader2, Link2, Check, Ban, CreditCard, AlertTriangle, Trash2, PowerOff, UserPlus, Copy, Settings, Users, Megaphone, Wallet, Pencil, UserCheck, KeyRound, Sparkles, History, ThumbsUp, ThumbsDown, HelpCircle, RefreshCw, Download, Clock, Archive, ArchiveRestore, Search, Crown, Timer, Activity, Gauge } from "lucide-react";
 
 export const Route = createFileRoute("/_app/admindev")({
   ssr: false,
@@ -393,7 +399,13 @@ function AdminDevPage() {
         c.total_paid,
         c.meta_campaign_id,
       ]),
-    );
+    )
+    .sort((a, b) => {
+      const pa = a.client_plan === "pro_max" ? 1 : 0;
+      const pb = b.client_plan === "pro_max" ? 1 : 0;
+      if (pa !== pb) return pb - pa;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
 
 
   const [preview, setPreview] = useState<AdminCampaignRow | null>(null);
@@ -585,107 +597,12 @@ function AdminDevPage() {
 
         {/* ============ Aba: Solicitações de Pagamento ============ */}
         <TabsContent value="payments" className="space-y-6 mt-6">
-          <section className="glass-strong rounded-2xl overflow-hidden">
-            <div className="p-5 border-b border-white/5 flex items-center justify-between">
-              <h2 className="font-semibold">Solicitações de pagamento</h2>
-              <span className="text-xs text-muted-foreground">
-                {paymentsQuery.data?.filter((p) => p.status === "pending").length ?? 0} aguardando
-              </span>
-            </div>
-            {!paymentsQuery.data?.length ? (
-              <div className="p-8 text-center text-sm text-muted-foreground">Nenhuma solicitação ainda.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-white/5">
-                    <tr>
-                      <th className="px-4 py-3">Cliente</th>
-                      <th className="px-4 py-3">Destino</th>
-                      <th className="px-4 py-3 text-right">Valor</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3">Link Asaas</th>
-                      <th className="px-4 py-3 text-right">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paymentsQuery.data
-                      .filter((p) =>
-                        matchesSearch(search, [
-                          p.client_name,
-                          p.client_email,
-                          p.client_phone,
-                          p.user_id,
-                          p.id,
-                          p.amount,
-                          p.amount.toFixed(2).replace(".", ","),
-                        ]),
-                      )
-                      .map((p) => (
-                      <tr key={p.id} className="border-b border-white/5">
-                        <td className="px-4 py-3">
-                          <p className="font-medium">{p.client_name ?? "—"}</p>
-                          <p className="text-[11px] text-muted-foreground font-mono">{p.user_id.slice(0, 8)}</p>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={`text-[11px] px-2 py-1 rounded-full border whitespace-nowrap ${
-                              p.type === "balance_topup"
-                                ? "border-sky-400/40 text-sky-300 bg-sky-400/10"
-                                : "border-primary/40 text-primary bg-primary/10"
-                            }`}
-                          >
-                            {p.type === "balance_topup" ? "Saldo no App" : "Campanha"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right tabular-nums font-semibold">{fmtBRL(p.amount)}</td>
-                        <td className="px-4 py-3">
-                          <span className={`text-[11px] px-2 py-1 rounded-full border ${
-                            p.status === "paid" ? "border-success/40 text-success bg-success/10" :
-                            p.status === "rejected" ? "border-destructive/40 text-destructive bg-destructive/10" :
-                            p.status === "approved" ? "border-primary/40 text-primary bg-primary/10" :
-                            "border-warning/40 text-warning bg-warning/10"
-                          }`}>
-                            {p.status === "pending" ? "Aguardando" : p.status === "paid" ? "Pago" : p.status === "rejected" ? "Recusado" : "Aprovado"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          {p.asaas_link ? (
-                            <a href={p.asaas_link} target="_blank" rel="noreferrer" className="text-[11px] text-primary truncate inline-block max-w-[220px]">
-                              {p.asaas_link}
-                            </a>
-                          ) : (
-                            <span className="text-[11px] text-muted-foreground italic">sem link</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {p.status === "pending" && (
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                variant="neon"
-                                size="sm"
-                                onClick={() => approveMut.mutate(p.id)}
-                                disabled={approveMut.isPending}
-                              >
-                                <Check className="h-3.5 w-3.5" /> Aprovar
-                              </Button>
-                              <Button
-                                variant="glass"
-                                size="sm"
-                                onClick={() => rejectMut.mutate(p.id)}
-                                disabled={rejectMut.isPending}
-                              >
-                                <Ban className="h-3.5 w-3.5" /> Recusar
-                              </Button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
+          <PaymentsSection
+            payments={paymentsQuery.data ?? []}
+            campaigns={allCampaigns}
+            approveMut={approveMut}
+            rejectMut={rejectMut}
+          />
         </TabsContent>
 
         {/* ============ Aba: Configurações Internas ============ */}
@@ -1030,6 +947,11 @@ function AdminDevPage() {
                           <td className="px-2 py-2">
                             <p className="font-medium truncate max-w-[140px]">{c.client_name ?? "—"}</p>
                             <p className="text-[10px] text-muted-foreground truncate max-w-[140px]">{c.client_email ?? c.user_id.slice(0, 8)}</p>
+                            {c.client_plan === "pro_max" && (
+                              <span className="mt-0.5 inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border border-[#e6b422]/50 bg-gradient-to-r from-[#f7d774]/20 to-[#c9971b]/20 text-[#e6b422]">
+                                <Crown className="h-2.5 w-2.5" /> PRO MAX · PRIORIDADE
+                              </span>
+                            )}
                           </td>
                           <td className="px-2 py-2">
                             <p className="font-medium truncate max-w-[150px]">{c.name}</p>
@@ -1379,34 +1301,23 @@ function FbPreview({ campaign, onClose }: { campaign: AdminCampaignRow; onClose:
             <Field label="Total a ser veiculado" value={fmtBRL(campaign.budget * campaign.days)} />
             <Field label="Total já pago" value={fmtBRL(campaign.total_paid)} />
           </div>
-          {/* Repartição financeira real — visível apenas para o admin. */}
+          {/* Financeiro real — visível apenas para o admin. */}
           {campaign.total_paid > 0 && (() => {
-            const b = internalBreakdown(campaign.total_paid);
+            const v = adminCampaignValues(campaign.total_paid, campaign.days);
             return (
               <div className="rounded-xl border border-[#e6b422]/25 bg-[#e6b422]/5 p-3 space-y-2">
-                <p className="text-[11px] uppercase tracking-wider text-[#e6b422]">
-                  Repartição financeira (interno)
-                </p>
+                <p className="text-[11px] uppercase tracking-wider text-[#e6b422]">Financeiro (interno)</p>
                 <div className="grid grid-cols-2 gap-3">
-                  <Field label="Valor pago pelo cliente" value={fmtBRL(b.pricePaid)} />
-                  <Field label="Taxas bancárias" value={`- ${fmtBRL(b.bankFees)}`} />
-                  <Field label="Plataforma (50%)" value={fmtBRL(b.platform)} />
-                  <Field label="Meta bruto (50%)" value={fmtBRL(b.metaGross)} />
-                  <Field label="Imposto Facebook (12%)" value={`- ${fmtBRL(b.facebookTax)}`} />
-                  <Field label="Verba real na Meta" value={fmtBRL(b.metaNet)} />
+                  <Field label="Valor pago pelo cliente" value={fmtBRL(v.paid)} />
+                  <Field
+                    label="Valor real usado no Meta Ads"
+                    value={`${fmtBRL(v.metaNet)} (${fmtBRL(v.daily)}/dia)`}
+                  />
                 </div>
-                {(campaign.extra_paid ?? 0) > 0 && (
-                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-white/5">
-                    <Field label="Turbinar Alcance pago" value={fmtBRL(Number(campaign.extra_paid))} />
-                    <Field
-                      label="Visualizações extras"
-                      value={Number(campaign.extra_views ?? 0).toLocaleString("pt-BR")}
-                    />
-                  </div>
-                )}
               </div>
             );
           })()}
+          <CampaignBoostsBlock campaignId={campaign.id} extraViews={campaign.extra_views ?? 0} extraPaid={campaign.extra_paid ?? 0} />
           {campaign.funding_type === "pix_dedicated" && (
             <div className="grid grid-cols-2 gap-3">
               <Field label="PIX total" value={fmtBRL(campaign.pix_total_budget)} />
@@ -1426,6 +1337,56 @@ function FbPreview({ campaign, onClose }: { campaign: AdminCampaignRow; onClose:
           <Field label="Cliente" value={`${campaign.client_name ?? "—"} · ${campaign.client_email ?? "—"}`} />
         </div>
       </div>
+    </div>
+  );
+}
+
+function CampaignBoostsBlock({ campaignId, extraViews, extraPaid }: { campaignId: string; extraViews: number; extraPaid: number }) {
+  const qc = useQueryClient();
+  const listFn = useServerFn(adminListCampaignBoosts);
+  const markFn = useServerFn(adminMarkBoostProcessed);
+  const q = useQuery({
+    queryKey: ["admin-campaign-boosts", campaignId],
+    queryFn: () => listFn({ data: { campaign_id: campaignId } }),
+  });
+  const mut = useMutation({
+    mutationFn: (boost_id: string) => markFn({ data: { boost_id } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-campaign-boosts", campaignId] });
+      toast.success("Turbinar Alcance marcado como concluído");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const pending = (q.data ?? []).filter((b) => b.status === "paid");
+  if (extraPaid <= 0 && pending.length === 0) return null;
+  return (
+    <div className="space-y-2">
+      {pending.map((b) => (
+        <div
+          key={b.id}
+          className="rounded-xl border border-[#e6b422]/50 bg-gradient-to-r from-[#e6b422]/15 to-transparent p-3 flex items-center justify-between gap-3"
+        >
+          <div>
+            <p className="text-[11px] uppercase tracking-wider text-[#e6b422] font-semibold">Turbinar Alcance</p>
+            <p className="text-sm font-medium">+{Number(b.views).toLocaleString("pt-BR")} visualizações · {fmtBRL(b.amount)}</p>
+          </div>
+          <Button
+            variant="neon"
+            size="sm"
+            className="h-7 text-[11px]"
+            disabled={mut.isPending}
+            onClick={() => mut.mutate(b.id)}
+          >
+            <Check className="h-3.5 w-3.5" /> Concluído
+          </Button>
+        </div>
+      ))}
+      {extraPaid > 0 && (
+        <div className="grid grid-cols-2 gap-3 text-xs">
+          <Field label="Turbinar Alcance pago (total)" value={fmtBRL(extraPaid)} />
+          <Field label="Visualizações extras (total)" value={extraViews.toLocaleString("pt-BR")} />
+        </div>
+      )}
     </div>
   );
 }
@@ -2862,6 +2823,156 @@ function MetaAuditSection() {
             </div>
           ))}
         </div>
+      )}
+    </section>
+  );
+}
+
+// ============ Solicitações de pagamento (abas) ============
+const fmtDateTime = (iso: string) =>
+  new Date(iso).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+function PaymentsSection({
+  payments,
+  campaigns,
+  approveMut,
+  rejectMut,
+}: {
+  payments: PaymentRequestRow[];
+  campaigns: AdminCampaignRow[];
+  approveMut: { mutate: (id: string) => void; isPending: boolean };
+  rejectMut: { mutate: (id: string) => void; isPending: boolean };
+}) {
+  const [tab, setTab] = useState<"pending" | "done" | "rejected">("pending");
+  const campaignName = (id: string | null) =>
+    campaigns.find((c) => c.id === id)?.name ?? null;
+
+  const sorted = [...payments].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
+  const pending = sorted.filter((p) => p.status === "pending");
+  const done = sorted.filter((p) => p.status === "approved" || p.status === "paid");
+  const rejected = sorted.filter((p) => p.status === "rejected");
+  const list = tab === "pending" ? pending : tab === "done" ? done : rejected;
+
+  const tabs: Array<{ key: typeof tab; label: string; count: number }> = [
+    { key: "pending", label: "Pendentes", count: pending.length },
+    { key: "done", label: "Pago/Concluídos", count: done.length },
+    { key: "rejected", label: "Recusados", count: rejected.length },
+  ];
+
+  return (
+    <section className="glass-strong rounded-2xl p-5 sm:p-6 space-y-4">
+      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 sm:flex sm:justify-between">
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold truncate">Solicitações de pagamento</h2>
+          <p className="text-xs text-muted-foreground">Mais recentes primeiro.</p>
+        </div>
+        <CreditCard className="h-5 w-5 shrink-0 text-primary" />
+      </header>
+
+      <div className="flex flex-wrap gap-2">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key)}
+            className={`rounded-full px-3 py-1.5 text-xs font-medium border transition ${
+              tab === t.key
+                ? "border-primary/50 bg-primary/15 text-foreground"
+                : "border-white/10 text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {t.label} ({t.count})
+          </button>
+        ))}
+      </div>
+
+      {list.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-6 text-center">
+          Nenhuma solicitação nesta aba.
+        </p>
+      ) : (
+        <ul className="space-y-3">
+          {list.map((p) => {
+            const isBoost = p.type === "campaign_boost";
+            const cName = campaignName(p.campaign_id);
+            return (
+              <li
+                key={p.id}
+                className={`rounded-xl border p-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center ${
+                  isBoost
+                    ? "border-[#e6b422]/50 bg-[#e6b422]/5"
+                    : "border-white/10 bg-white/[0.02]"
+                }`}
+              >
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold truncate">
+                      {p.client_name || p.client_email || "Cliente"}
+                    </span>
+                    {isBoost ? (
+                      <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-[#2b1c00] bg-gradient-to-r from-[#f7d774] to-[#c9971b]">
+                        TURBINAR
+                      </span>
+                    ) : (
+                      <span className="rounded-full px-2 py-0.5 text-[10px] border border-white/15 text-muted-foreground">
+                        {p.type === "balance_topup" ? "SALDO" : "CAMPANHA"}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {isBoost ? "Turbinar Alcance" : p.note || "Pagamento"}
+                    {cName ? ` · ${cName}` : ""}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                    <Clock className="h-3 w-3 shrink-0" /> {fmtDateTime(p.created_at)}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                  <span className="text-lg font-bold tabular-nums">{fmtBRL(p.amount)}</span>
+                  {p.status === "pending" ? (
+                    <>
+                      <Button
+                        variant="neon"
+                        size="sm"
+                        disabled={approveMut.isPending}
+                        onClick={() => approveMut.mutate(p.id)}
+                      >
+                        <Check className="h-3.5 w-3.5" /> Aprovar
+                      </Button>
+                      <Button
+                        variant="glass"
+                        size="sm"
+                        disabled={rejectMut.isPending}
+                        onClick={() => rejectMut.mutate(p.id)}
+                      >
+                        <Ban className="h-3.5 w-3.5" /> Recusar
+                      </Button>
+                    </>
+                  ) : (
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                        p.status === "rejected"
+                          ? "bg-destructive/15 text-destructive"
+                          : "bg-success/15 text-success"
+                      }`}
+                    >
+                      {p.status === "rejected" ? "Recusado" : "Pago/Concluído"}
+                    </span>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </section>
   );

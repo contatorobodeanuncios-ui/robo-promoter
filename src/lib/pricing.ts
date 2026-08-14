@@ -202,3 +202,33 @@ export function trialDaysLeft(p: {
 }
 
 export const KIWIFY_PRO_CHECKOUT = "https://pay.kiwify.com.br/ECJMIKj";
+
+// ===== Escala de visualizações x dias (pacote de créditos) =====
+// Referência: 3 dias = 1.800 visualizações = R$ 57,00 (18*dias+3).
+export const VIEWS_PER_DAY_BASE = 600;
+
+export const baseViewsForDays = (days: number) =>
+  VIEWS_PER_DAY_BASE * Math.max(MIN_DAYS, days);
+
+/** Preço proporcional às visualizações escolhidas para a quantidade de dias. */
+export function packagePriceFor(days: number, views: number) {
+  const d = Math.max(MIN_DAYS, days);
+  const base = baseViewsForDays(d);
+  const v = Math.max(1, views);
+  return round2(packagePriceForDays(d) * (v / base));
+}
+
+/** Cliques estimados (3% a 4% das visualizações). */
+export function clicksForViews(views: number) {
+  return { min: Math.round(views * CTR_MIN), max: Math.round(views * CTR_MAX) };
+}
+
+/**
+ * Valores exibidos ao admin: apenas o total pago pelo cliente e o valor real
+ * que vai para o Meta Ads (pago - taxas de banco, /2, -12% de imposto).
+ */
+export function adminCampaignValues(pricePaid: number, days: number) {
+  const metaNet = campaignMediaBudget(pricePaid);
+  const d = Math.max(1, days);
+  return { paid: round2(pricePaid), metaNet, daily: round2(metaNet / d) };
+}

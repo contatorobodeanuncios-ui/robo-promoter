@@ -580,6 +580,7 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
           asaas_link: null,
           type: paymentType,
           campaign_id: data.campaignId ?? null,
+          note: paymentType === "campaign_boost" ? "Turbinar Alcance" : null,
         } as never)
         .select("id")
         .single();
@@ -795,9 +796,10 @@ export interface PaymentRequestRow {
   asaas_link: string | null;
   created_at: string;
   /** destino do dinheiro: campanha direta ou recarga de saldo */
-  type: "campaign_budget" | "balance_topup" | null;
+  type: "campaign_budget" | "balance_topup" | "campaign_boost" | null;
   campaign_id: string | null;
   client_email: string | null;
+  note: string | null;
   client_phone: string | null;
 }
 
@@ -830,8 +832,9 @@ export const adminListPayments = createServerFn({ method: "GET" })
       status: r.status,
       asaas_link: r.asaas_link,
       created_at: r.created_at,
-      type: (r.type ?? null) as "campaign_budget" | "balance_topup" | null,
+      type: (r.type ?? null) as "campaign_budget" | "balance_topup" | "campaign_boost" | null,
       campaign_id: r.campaign_id ?? null,
+      note: (r as { note?: string | null }).note ?? null,
     }));
   });
 
