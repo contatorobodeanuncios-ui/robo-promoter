@@ -596,107 +596,12 @@ function AdminDevPage() {
 
         {/* ============ Aba: Solicitações de Pagamento ============ */}
         <TabsContent value="payments" className="space-y-6 mt-6">
-          <section className="glass-strong rounded-2xl overflow-hidden">
-            <div className="p-5 border-b border-white/5 flex items-center justify-between">
-              <h2 className="font-semibold">Solicitações de pagamento</h2>
-              <span className="text-xs text-muted-foreground">
-                {paymentsQuery.data?.filter((p) => p.status === "pending").length ?? 0} aguardando
-              </span>
-            </div>
-            {!paymentsQuery.data?.length ? (
-              <div className="p-8 text-center text-sm text-muted-foreground">Nenhuma solicitação ainda.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-white/5">
-                    <tr>
-                      <th className="px-4 py-3">Cliente</th>
-                      <th className="px-4 py-3">Destino</th>
-                      <th className="px-4 py-3 text-right">Valor</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3">Link Asaas</th>
-                      <th className="px-4 py-3 text-right">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paymentsQuery.data
-                      .filter((p) =>
-                        matchesSearch(search, [
-                          p.client_name,
-                          p.client_email,
-                          p.client_phone,
-                          p.user_id,
-                          p.id,
-                          p.amount,
-                          p.amount.toFixed(2).replace(".", ","),
-                        ]),
-                      )
-                      .map((p) => (
-                      <tr key={p.id} className="border-b border-white/5">
-                        <td className="px-4 py-3">
-                          <p className="font-medium">{p.client_name ?? "—"}</p>
-                          <p className="text-[11px] text-muted-foreground font-mono">{p.user_id.slice(0, 8)}</p>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={`text-[11px] px-2 py-1 rounded-full border whitespace-nowrap ${
-                              p.type === "balance_topup"
-                                ? "border-sky-400/40 text-sky-300 bg-sky-400/10"
-                                : "border-primary/40 text-primary bg-primary/10"
-                            }`}
-                          >
-                            {p.type === "balance_topup" ? "Saldo no App" : "Campanha"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right tabular-nums font-semibold">{fmtBRL(p.amount)}</td>
-                        <td className="px-4 py-3">
-                          <span className={`text-[11px] px-2 py-1 rounded-full border ${
-                            p.status === "paid" ? "border-success/40 text-success bg-success/10" :
-                            p.status === "rejected" ? "border-destructive/40 text-destructive bg-destructive/10" :
-                            p.status === "approved" ? "border-primary/40 text-primary bg-primary/10" :
-                            "border-warning/40 text-warning bg-warning/10"
-                          }`}>
-                            {p.status === "pending" ? "Aguardando" : p.status === "paid" ? "Pago" : p.status === "rejected" ? "Recusado" : "Aprovado"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          {p.asaas_link ? (
-                            <a href={p.asaas_link} target="_blank" rel="noreferrer" className="text-[11px] text-primary truncate inline-block max-w-[220px]">
-                              {p.asaas_link}
-                            </a>
-                          ) : (
-                            <span className="text-[11px] text-muted-foreground italic">sem link</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {p.status === "pending" && (
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                variant="neon"
-                                size="sm"
-                                onClick={() => approveMut.mutate(p.id)}
-                                disabled={approveMut.isPending}
-                              >
-                                <Check className="h-3.5 w-3.5" /> Aprovar
-                              </Button>
-                              <Button
-                                variant="glass"
-                                size="sm"
-                                onClick={() => rejectMut.mutate(p.id)}
-                                disabled={rejectMut.isPending}
-                              >
-                                <Ban className="h-3.5 w-3.5" /> Recusar
-                              </Button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
+          <PaymentsSection
+            payments={paymentsQuery.data ?? []}
+            campaigns={allCampaigns}
+            approveMut={approveMut}
+            rejectMut={rejectMut}
+          />
         </TabsContent>
 
         {/* ============ Aba: Configurações Internas ============ */}
