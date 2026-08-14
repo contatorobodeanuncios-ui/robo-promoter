@@ -39,6 +39,8 @@ const statusMeta: Record<string, { label: string; cls: string; dot: string }> = 
 function Dashboard() {
   const campaigns = useAppStore((s) => s.campaigns);
   const balance = useAppStore((s) => s.balance);
+  const plan = useAppStore((s) => s.plan);
+  const isProMax = plan === "pro_max";
   const displayName = useUserDisplayName();
   const summary = computeSummary(campaigns);
   // Corrigido: faltava "rodando" aqui (o cron do Meta usa esse valor, não só
@@ -165,10 +167,17 @@ function Dashboard() {
                           <p className="font-medium truncate">{c.name}</p>
                           <p className="text-xs text-muted-foreground truncate">{c.headline}</p>
                         </div>
-                        <span className={`inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-full border shrink-0 ${s.cls}`}>
-                          <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
-                          {s.label}
-                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {isProMax && (
+                            <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-[#2b1c00] bg-gradient-to-r from-[#f7d774] to-[#c9971b]">
+                              PRIORIDADE
+                            </span>
+                          )}
+                          <span className={`inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-full border ${s.cls}`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
+                            {s.label}
+                          </span>
+                        </div>
                       </div>
 
                       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">

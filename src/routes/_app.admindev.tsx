@@ -1424,6 +1424,56 @@ function FbPreview({ campaign, onClose }: { campaign: AdminCampaignRow; onClose:
   );
 }
 
+function CampaignBoostsBlock({ campaignId, extraViews, extraPaid }: { campaignId: string; extraViews: number; extraPaid: number }) {
+  const qc = useQueryClient();
+  const listFn = useServerFn(adminListCampaignBoosts);
+  const markFn = useServerFn(adminMarkBoostProcessed);
+  const q = useQuery({
+    queryKey: ["admin-campaign-boosts", campaignId],
+    queryFn: () => listFn({ data: { campaign_id: campaignId } }),
+  });
+  const mut = useMutation({
+    mutationFn: (boost_id: string) => markFn({ data: { boost_id } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-campaign-boosts", campaignId] });
+      toast.success("Turbinar Alcance marcado como concluído");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const pending = (q.data ?? []).filter((b) => b.status === "paid");
+  if (extraPaid <= 0 && pending.length === 0) return null;
+  return (
+    <div className="space-y-2">
+      {pending.map((b) => (
+        <div
+          key={b.id}
+          className="rounded-xl border border-[#e6b422]/50 bg-gradient-to-r from-[#e6b422]/15 to-transparent p-3 flex items-center justify-between gap-3"
+        >
+          <div>
+            <p className="text-[11px] uppercase tracking-wider text-[#e6b422] font-semibold">Turbinar Alcance</p>
+            <p className="text-sm font-medium">+{Number(b.views).toLocaleString("pt-BR")} visualizações · {fmtBRL(b.amount)}</p>
+          </div>
+          <Button
+            variant="neon"
+            size="sm"
+            className="h-7 text-[11px]"
+            disabled={mut.isPending}
+            onClick={() => mut.mutate(b.id)}
+          >
+            <Check className="h-3.5 w-3.5" /> Concluído
+          </Button>
+        </div>
+      ))}
+      {extraPaid > 0 && (
+        <div className="grid grid-cols-2 gap-3 text-xs">
+          <Field label="Turbinar Alcance pago (total)" value={fmtBRL(extraPaid)} />
+          <Field label="Visualizações extras (total)" value={extraViews.toLocaleString("pt-BR")} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Field({ label, value, pre }: { label: string; value: string; pre?: boolean }) {
   return (
     <div>
