@@ -398,7 +398,13 @@ function AdminDevPage() {
         c.total_paid,
         c.meta_campaign_id,
       ]),
-    );
+    )
+    .sort((a, b) => {
+      const pa = a.client_plan === "pro_max" ? 1 : 0;
+      const pb = b.client_plan === "pro_max" ? 1 : 0;
+      if (pa !== pb) return pb - pa;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
 
 
   const [preview, setPreview] = useState<AdminCampaignRow | null>(null);
@@ -1035,6 +1041,11 @@ function AdminDevPage() {
                           <td className="px-2 py-2">
                             <p className="font-medium truncate max-w-[140px]">{c.client_name ?? "—"}</p>
                             <p className="text-[10px] text-muted-foreground truncate max-w-[140px]">{c.client_email ?? c.user_id.slice(0, 8)}</p>
+                            {c.client_plan === "pro_max" && (
+                              <span className="mt-0.5 inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border border-[#e6b422]/50 bg-gradient-to-r from-[#f7d774]/20 to-[#c9971b]/20 text-[#e6b422]">
+                                <Crown className="h-2.5 w-2.5" /> PRO MAX · PRIORIDADE
+                              </span>
+                            )}
                           </td>
                           <td className="px-2 py-2">
                             <p className="font-medium truncate max-w-[150px]">{c.name}</p>
