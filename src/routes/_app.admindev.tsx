@@ -69,6 +69,7 @@ import {
   adminListPayments,
   adminApprovePayment,
   adminRejectPayment,
+  type PaymentRequestRow,
 } from "@/lib/payment.functions";
 import { adminListConversations } from "@/lib/support.functions";
 import { supabase } from "@/integrations/supabase/client";
@@ -2822,6 +2823,156 @@ function MetaAuditSection() {
             </div>
           ))}
         </div>
+      )}
+    </section>
+  );
+}
+
+// ============ Solicitações de pagamento (abas) ============
+const fmtDateTime = (iso: string) =>
+  new Date(iso).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+function PaymentsSection({
+  payments,
+  campaigns,
+  approveMut,
+  rejectMut,
+}: {
+  payments: PaymentRequestRow[];
+  campaigns: AdminCampaignRow[];
+  approveMut: { mutate: (id: string) => void; isPending: boolean };
+  rejectMut: { mutate: (id: string) => void; isPending: boolean };
+}) {
+  const [tab, setTab] = useState<"pending" | "done" | "rejected">("pending");
+  const campaignName = (id: string | null) =>
+    campaigns.find((c) => c.id === id)?.name ?? null;
+
+  const sorted = [...payments].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
+  const pending = sorted.filter((p) => p.status === "pending");
+  const done = sorted.filter((p) => p.status === "approved" || p.status === "paid");
+  const rejected = sorted.filter((p) => p.status === "rejected");
+  const list = tab === "pending" ? pending : tab === "done" ? done : rejected;
+
+  const tabs: Array<{ key: typeof tab; label: string; count: number }> = [
+    { key: "pending", label: "Pendentes", count: pending.length },
+    { key: "done", label: "Pago/Concluídos", count: done.length },
+    { key: "rejected", label: "Recusados", count: rejected.length },
+  ];
+
+  return (
+    <section className="glass-strong rounded-2xl p-5 sm:p-6 space-y-4">
+      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 sm:flex sm:justify-between">
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold truncate">Solicitações de pagamento</h2>
+          <p className="text-xs text-muted-foreground">Mais recentes primeiro.</p>
+        </div>
+        <CreditCard className="h-5 w-5 shrink-0 text-primary" />
+      </header>
+
+      <div className="flex flex-wrap gap-2">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key)}
+            className={`rounded-full px-3 py-1.5 text-xs font-medium border transition ${
+              tab === t.key
+                ? "border-primary/50 bg-primary/15 text-foreground"
+                : "border-white/10 text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {t.label} ({t.count})
+          </button>
+        ))}
+      </div>
+
+      {list.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-6 text-center">
+          Nenhuma solicitação nesta aba.
+        </p>
+      ) : (
+        <ul className="space-y-3">
+          {list.map((p) => {
+            const isBoost = p.type === "campaign_boost";
+            const cName = campaignName(p.campaign_id);
+            return (
+              <li
+                key={p.id}
+                className={`rounded-xl border p-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center ${
+                  isBoost
+                    ? "border-[#e6b422]/50 bg-[#e6b422]/5"
+                    : "border-white/10 bg-white/[0.02]"
+                }`}
+              >
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold truncate">
+                      {p.client_name || p.client_email || "Cliente"}
+                    </span>
+                    {isBoost ? (
+                      <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-[#2b1c00] bg-gradient-to-r from-[#f7d774] to-[#c9971b]">
+                        TURBINAR
+                      </span>
+                    ) : (
+                      <span className="rounded-full px-2 py-0.5 text-[10px] border border-white/15 text-muted-foreground">
+                        {p.type === "balance_topup" ? "SALDO" : "CAMPANHA"}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {isBoost ? "Turbinar Alcance" : p.note || "Pagamento"}
+                    {cName ? ` · ${cName}` : ""}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                    <Clock className="h-3 w-3 shrink-0" /> {fmtDateTime(p.created_at)}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                  <span className="text-lg font-bold tabular-nums">{fmtBRL(p.amount)}</span>
+                  {p.status === "pending" ? (
+                    <>
+                      <Button
+                        variant="neon"
+                        size="sm"
+                        disabled={approveMut.isPending}
+                        onClick={() => approveMut.mutate(p.id)}
+                      >
+                        <Check className="h-3.5 w-3.5" /> Aprovar
+                      </Button>
+                      <Button
+                        variant="glass"
+                        size="sm"
+                        disabled={rejectMut.isPending}
+                        onClick={() => rejectMut.mutate(p.id)}
+                      >
+                        <Ban className="h-3.5 w-3.5" /> Recusar
+                      </Button>
+                    </>
+                  ) : (
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                        p.status === "rejected"
+                          ? "bg-destructive/15 text-destructive"
+                          : "bg-success/15 text-success"
+                      }`}
+                    >
+                      {p.status === "rejected" ? "Recusado" : "Pago/Concluído"}
+                    </span>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </section>
   );
