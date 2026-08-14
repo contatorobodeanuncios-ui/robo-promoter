@@ -21,7 +21,7 @@ export const Route = createFileRoute("/api/public/hooks/trial-expiry-notify")({
         }
 
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-        const { sendPushToUser } = await import("@/lib/push.functions");
+        const { sendPushToUser } = await import("@/lib/push.server");
 
         const { data: users } = await supabaseAdmin
           .from("profiles")

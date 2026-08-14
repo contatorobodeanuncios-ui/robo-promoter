@@ -19,7 +19,7 @@ import { reachRange, fmtRange } from "@/lib/mock-data";
 import { analyzeCreative, type CreativeAnalysis } from "@/lib/ai-analysis.functions";
 import { getCreativeUploadPath, getMaintenanceMode } from "@/lib/data.functions";
 import { useAppStore } from "@/lib/store";
-import { campaignPricing, mediaBudgetForViews, viewsRangeForMedia, isCreditsLike, MIN_DAYS, packageViewsForDays, packageClicksForDays } from "@/lib/pricing";
+import { campaignPricing, mediaBudgetForViews, viewsRangeForMedia, isCreditsLike, MIN_DAYS, packagePriceFor, clicksForViews } from "@/lib/pricing";
 import { CopyModal } from "@/components/app/ProMaxMenu";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -39,8 +39,8 @@ const steps = [
   { n: 2, title: "Criativo", desc: "Upload + análise IA" },
   { n: 3, title: "Copy", desc: "Texto e link" },
   { n: 4, title: "Localização", desc: "Cidade e bairro" },
-  { n: 5, title: "Visualizações", desc: "Alcance desejado" },
-  { n: 6, title: "Duração", desc: `Mínimo ${MIN_DAYS} dias` },
+  { n: 5, title: "Visualizações e duração", desc: `Alcance e dias (mín. ${MIN_DAYS})` },
+  { n: 6, title: "Seus anúncios", desc: "Resumo" },
   { n: 7, title: "Pagamento", desc: "Ativar anúncio" },
   { n: 8, title: "Confirmação", desc: "Revisão final" },
 ];
@@ -76,6 +76,12 @@ function CreateWizard() {
   const [city, setCity] = useState("");
   const [neighborhood, setNeighborhood] = useState("");
   const [radius, setRadius] = useState("15");
+  const clampRadius = (v: string) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return v;
+    if (n > 199) return "199";
+    return v;
+  };
   const [budget, setBudget] = useState(15);
   const [days, setDays] = useState(7);
   const [copyOpen, setCopyOpen] = useState(false);
@@ -90,6 +96,9 @@ function CreateWizard() {
   const effBudget = isCredits ? creditsDaily : budget;
   const pricing = campaignPricing(effBudget, days, plan);
   const creditsViews = viewsRangeForMedia(pricing.metaBudget);
+  // Preço real do pacote (créditos) considerando a potência de visualizações escolhida.
+  const packageTotal = isCredits ? packagePriceFor(days, views) : pricing.total;
+  const estClicks = clicksForViews(views);
   const fmtMoney = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
   const [launching, setLaunching] = useState(false);
@@ -301,9 +310,9 @@ function CreateWizard() {
     step === 1 ||
     (step === 2 && files.length > 0 && scanState === "done" && (analysis?.compliant ?? true)) ||
     (step === 3 && Boolean(headline && body && link)) ||
-    (step === 4 && Boolean(city.trim() && neighborhood.trim() && Number(radius) > 0)) ||
-    step === 5 ||
-    (step === 6 && days >= MIN_DAYS) ||
+    (step === 4 && Boolean(city.trim() && neighborhood.trim() && Number(radius) >= 1 && Number(radius) <= 199)) ||
+    (step === 5 && days >= MIN_DAYS) ||
+    step === 6 ||
     step === 7;
 
   // Modo de manutenção: bloqueia a criação de novas campanhas pra todo mundo.
@@ -635,7 +644,8 @@ function CreateWizard() {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Raio (km)</Label>
-                  <Input type="number" min={1} max={80} value={radius} onChange={(e) => setRadius(e.target.value)} />
+                  <Input type="number" min={1} max={199} value={radius} onChange={(e) => setRadius(clampRadius(e.target.value))} />
+                  <p className="text-[11px] text-muted-foreground">Máximo 199 km</p>
                 </div>
               </div>
 
@@ -675,34 +685,69 @@ function CreateWizard() {
         {step === 5 && (
           <div className="space-y-5 max-w-xl">
             <div>
-              <h2 className="text-xl font-semibold">Visualizações</h2>
+              <h2 className="text-xl font-semibold">Visualizações e duração</h2>
               <p className="text-sm text-muted-foreground">
                 {isCredits
-                  ? "Escolha a potência de alcance desejada para o seu anúncio."
-                  : "Defina o investimento diário — quanto maior, mais pessoas alcançadas."}
+                  ? "Escolha a potência de alcance e por quantos dias o robô vai rodar."
+                  : "Defina o investimento diário e por quantos dias o robô vai rodar."}
               </p>
             </div>
+
             {isCredits ? (
-              <div className="glass rounded-2xl p-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">Potência de visualizações</Label>
-                  <span className="text-sm font-semibold tabular-nums">{views.toLocaleString("pt-BR")}</span>
+              <div className="glass rounded-2xl p-6 space-y-5">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Potência de visualizações</Label>
+                  </div>
+                  <Slider value={[views]} min={2500} max={200000} step={500} onValueChange={(v) => setViews(v[0])} />
+                  <p className="text-center text-2xl font-bold tabular-nums text-gradient">{views.toLocaleString("pt-BR")}</p>
                 </div>
-                <Slider value={[views]} min={2500} max={200000} step={500} onValueChange={(v) => setViews(v[0])} />
-                <p className="text-[11px] text-muted-foreground">
-                  Estimativa com o pacote atual: {packageViewsForDays(days).min.toLocaleString("pt-BR")} a{" "}
-                  {packageViewsForDays(days).max.toLocaleString("pt-BR")} visualizações ·{" "}
-                  {packageClicksForDays(days).min.toLocaleString("pt-BR")} a{" "}
-                  {packageClicksForDays(days).max.toLocaleString("pt-BR")} cliques.
-                </p>
+
+                <div className="space-y-2 pt-2 border-t border-white/5">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Dias de veiculação</Label>
+                    <span className="text-sm font-semibold tabular-nums">{days} dia{days === 1 ? "" : "s"}</span>
+                  </div>
+                  <Slider value={[days]} min={MIN_DAYS} max={60} step={1} onValueChange={(v) => setDays(v[0])} />
+                </div>
+
+                <div className="grid grid-cols-3 gap-3 pt-3 text-center border-t border-white/5">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Valor do pacote</p>
+                    <p className="font-semibold text-gradient text-sm">{fmtMoney(packageTotal)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Cliques estimados</p>
+                    <p className="font-semibold text-sm">{estClicks.min.toLocaleString("pt-BR")} a {estClicks.max.toLocaleString("pt-BR")}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Créditos</p>
+                    <p className="font-semibold text-sm">{days}</p>
+                    <p className="text-[10px] text-muted-foreground">1 crédito = 24h</p>
+                  </div>
+                </div>
               </div>
             ) : (
-              <div className="glass rounded-2xl p-6 space-y-4">
-                <div className="text-center">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider">Investimento por dia</p>
-                  <p className="text-4xl font-bold tabular-nums mt-1">R$ <span className="text-gradient">{budget}</span></p>
+              <div className="glass rounded-2xl p-6 space-y-5">
+                <div className="space-y-2">
+                  <div className="text-center">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider">Investimento por dia</p>
+                    <p className="text-4xl font-bold tabular-nums mt-1">R$ <span className="text-gradient">{budget}</span></p>
+                  </div>
+                  <Slider value={[budget]} min={7} max={300} step={1} onValueChange={(v) => setBudget(v[0])} />
                 </div>
-                <Slider value={[budget]} min={7} max={300} step={1} onValueChange={(v) => setBudget(v[0])} />
+
+                <div className="space-y-2 pt-2 border-t border-white/5">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Dias de veiculação</Label>
+                    <span className="text-sm font-semibold tabular-nums">{days} dia{days === 1 ? "" : "s"}</span>
+                  </div>
+                  <Slider value={[days]} min={MIN_DAYS} max={60} step={1} onValueChange={(v) => setDays(v[0])} />
+                </div>
+
+                <p className="text-[11px] text-muted-foreground text-center pt-1 border-t border-white/5">
+                  Total estimado: {fmtMoney(packageTotal)}
+                </p>
               </div>
             )}
           </div>
@@ -711,19 +756,22 @@ function CreateWizard() {
         {step === 6 && (
           <div className="space-y-5 max-w-xl">
             <div>
-              <h2 className="text-xl font-semibold">Duração</h2>
+              <h2 className="text-xl font-semibold">Seus anúncios</h2>
               <p className="text-sm text-muted-foreground">
-                Mínimo de {MIN_DAYS} dias — tempo que o robô precisa para aprender e otimizar.
+                Você estará recebendo {days} anúncios, referente à quantidade de dias que o Robô irá rodar seus anúncios.
               </p>
             </div>
-            <div className="glass rounded-2xl p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs">Dias de veiculação</Label>
-                <span className="text-sm font-semibold tabular-nums">{days} dia{days === 1 ? "" : "s"}</span>
-              </div>
-              <Slider value={[days]} min={MIN_DAYS} max={60} step={1} onValueChange={(v) => setDays(v[0])} />
-              <p className="text-[11px] text-muted-foreground">
-                Valor do pacote/veiculação: {fmtMoney(pricing.total)}
+            <div
+              className="glass rounded-2xl p-5 border space-y-2"
+              style={{ borderColor: "rgba(230,180,34,0.4)", background: "rgba(230,180,34,0.06)" }}
+            >
+              <p className="text-sm font-semibold" style={{ color: "#e6b422" }}>
+                Novidade para os assinantes Pro Max
+              </p>
+              <p className="text-sm text-foreground/90">
+                Se você já está no plano Pro Max e estiver com uma boa performance no anúncio, poderá
+                aumentar a quantidade de visualizações pelo botão <strong>Turbinar Visualizações</strong> —
+                disponível apenas para o plano Pro Max. Não é necessário agora, pode prosseguir.
               </p>
             </div>
           </div>
@@ -747,7 +795,7 @@ function CreateWizard() {
                 <div className="text-center">
                   <p className="text-xs text-muted-foreground uppercase tracking-wider">Pacote</p>
                   <p className="text-5xl font-bold tabular-nums mt-1">
-                    <span className="text-gradient">{fmtMoney(pricing.total)}</span>
+                    <span className="text-gradient">{fmtMoney(packageTotal)}</span>
                   </p>
                   <p className="text-[11px] text-muted-foreground mt-1">
                     {days} crédito{days === 1 ? "" : "s"} · robô rodando por {days} dia{days === 1 ? "" : "s"}
@@ -755,13 +803,18 @@ function CreateWizard() {
                 </div>
 
 
-                <div className="grid grid-cols-3 gap-3 pt-4 text-center border-t border-white/5">
+                <div className="grid grid-cols-4 gap-3 pt-4 text-center border-t border-white/5">
                   <div className="pt-3">
-                    <p className="text-xs text-muted-foreground">Visualizações estimadas</p>
+                    <p className="text-xs text-muted-foreground">Visualizações</p>
                     <p className="font-semibold text-gradient text-sm">
-                      {creditsViews.min.toLocaleString("pt-BR")} a {creditsViews.max.toLocaleString("pt-BR")}
+                      {views.toLocaleString("pt-BR")}
                     </p>
-                    <p className="text-[10px] text-muted-foreground">faixa estimada</p>
+                  </div>
+                  <div className="pt-3">
+                    <p className="text-xs text-muted-foreground">Cliques estimados</p>
+                    <p className="font-semibold text-sm">
+                      {estClicks.min.toLocaleString("pt-BR")} a {estClicks.max.toLocaleString("pt-BR")}
+                    </p>
                   </div>
                   <div className="pt-3">
                     <p className="text-xs text-muted-foreground">Créditos</p>
@@ -770,7 +823,7 @@ function CreateWizard() {
                   </div>
                   <div className="pt-3">
                     <p className="text-xs text-muted-foreground">Valor do pacote</p>
-                    <p className="font-semibold">{fmtMoney(pricing.total)}</p>
+                    <p className="font-semibold">{fmtMoney(packageTotal)}</p>
                     <p className="text-[10px] text-muted-foreground">tudo incluso</p>
                   </div>
                 </div>
@@ -799,7 +852,7 @@ function CreateWizard() {
                   </div>
                   <div className="pt-3">
                     <p className="text-xs text-muted-foreground">Total a ser cobrado</p>
-                    <p className="font-semibold">{fmtMoney(pricing.total)}</p>
+                    <p className="font-semibold">{fmtMoney(packageTotal)}</p>
                   </div>
                 </div>
 
@@ -816,7 +869,7 @@ function CreateWizard() {
                     <span className="font-semibold">
                       {fundingType === "wallet" ? "Total a ser debitado" : "Total a ser cobrado"}
                     </span>
-                    <span className="tabular-nums font-bold">{fmtMoney(pricing.total)}</span>
+                    <span className="tabular-nums font-bold">{fmtMoney(packageTotal)}</span>
                   </div>
                 </div>
               </div>
@@ -858,11 +911,12 @@ function CreateWizard() {
                 {isCredits ? (
                   <>
                     Com {days} crédito{days === 1 ? "" : "s"} o robô roda por {days} dia
-                    {days === 1 ? "" : "s"} e deve gerar entre{" "}
+                    {days === 1 ? "" : "s"} e deve gerar cerca de{" "}
                     <span className="text-foreground font-semibold">
-                      {creditsViews.min.toLocaleString("pt-BR")} e {creditsViews.max.toLocaleString("pt-BR")}
+                      {views.toLocaleString("pt-BR")}
                     </span>{" "}
-                    visualizações em {neighborhood || "sua região"}{city ? `, ${city}` : ""} (raio de {radius} km).
+                    visualizações ({estClicks.min.toLocaleString("pt-BR")} a {estClicks.max.toLocaleString("pt-BR")} cliques)
+                    em {neighborhood || "sua região"}{city ? `, ${city}` : ""} (raio de {radius} km).
                   </>
                 ) : (
                   <>
@@ -905,7 +959,7 @@ function CreateWizard() {
                 >
                   <p className="font-semibold text-sm">Saldo do app</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Debita {fmtMoney(pricing.total)} do seu saldo pré-pago.
+                    Debita {fmtMoney(packageTotal)} do seu saldo pré-pago.
                     {isCredits ? " Valor do pacote, tudo incluso." : " Sobra vira crédito para a próxima campanha."}
                   </p>
 
@@ -921,12 +975,12 @@ function CreateWizard() {
                   <p className="text-xs text-muted-foreground mt-1">
                     {isCredits ? (
                       <>
-                        PIX de {fmtMoney(pricing.total)} para liberar os {days} créditos desta
+                        PIX de {fmtMoney(packageTotal)} para liberar os {days} créditos desta
                         campanha. Não entra no saldo.
                       </>
                     ) : (
                       <>
-                        PIX de {fmtMoney(pricing.total)}: {fmtMoney(pricing.metaBudget)} vão
+                        PIX de {fmtMoney(packageTotal)}: {fmtMoney(pricing.metaBudget)} vão
                         <strong> direto</strong> para esta campanha. Não entra no saldo.
                       </>
                     )}
@@ -965,20 +1019,19 @@ function CreateWizard() {
               <Row label="Localização" value={`${neighborhood || "—"}${city ? `, ${city}` : ""} · raio ${radius} km`} />
               <Row label="Duração" value={`${days} dia${days === 1 ? "" : "s"}`} />
               <Row
-                label={isCredits ? "Visualizações estimadas" : "Investimento por dia"}
-                value={
-                  isCredits
-                    ? `${packageViewsForDays(days).min.toLocaleString("pt-BR")} a ${packageViewsForDays(days).max.toLocaleString("pt-BR")}`
-                    : fmtMoney(budget)
-                }
+                label={isCredits ? "Visualizações" : "Investimento por dia"}
+                value={isCredits ? views.toLocaleString("pt-BR") : fmtMoney(budget)}
               />
+              {isCredits && (
+                <Row label="Créditos utilizados" value={`${days}`} />
+              )}
               <Row
                 label="Forma de pagamento"
                 value={fundingType === "wallet" ? "Saldo do app" : "PIX"}
               />
               <div className="pt-2 border-t border-white/5 flex items-center justify-between">
                 <span className="text-muted-foreground">Total</span>
-                <span className="text-lg font-bold text-gradient">{fmtMoney(pricing.total)}</span>
+                <span className="text-lg font-bold text-gradient">{fmtMoney(packageTotal)}</span>
               </div>
             </div>
             <Button variant="neon" size="lg" className="w-full h-14 text-base animate-pulse-glow" onClick={launch} disabled={launching}>

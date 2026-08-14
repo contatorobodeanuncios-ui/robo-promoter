@@ -277,6 +277,27 @@ export const adminSendMessage = createServerFn({ method: "POST" })
       target_id: data.conversation_id,
       details: { length: data.content.length, attachments: data.attachments.length },
     });
+
+    // Notifica o cliente por push (best-effort — nunca deve quebrar o envio).
+    try {
+      const { data: convRow } = await sb
+        .from("support_conversations")
+        .select("user_id")
+        .eq("id", data.conversation_id)
+        .maybeSingle();
+      if (convRow?.user_id) {
+        const { sendPushToUser } = await import("@/lib/push.server");
+        const preview = data.content.trim().slice(0, 90) || "Você recebeu uma nova mensagem.";
+        await sendPushToUser(convRow.user_id, {
+          title: "Suporte Robô de Lucro",
+          body: preview,
+          url: "/dashboard",
+        });
+      }
+    } catch {
+      // ignora falhas de push — não deve impactar o envio da mensagem
+    }
+
     return { ok: true };
   });
 

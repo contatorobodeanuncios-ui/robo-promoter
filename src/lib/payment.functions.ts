@@ -580,6 +580,7 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
           asaas_link: null,
           type: paymentType,
           campaign_id: data.campaignId ?? null,
+          note: paymentType === "campaign_boost" ? "Turbinar Alcance" : null,
         } as never)
         .select("id")
         .single();
