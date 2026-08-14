@@ -19,7 +19,7 @@ import { reachRange, fmtRange } from "@/lib/mock-data";
 import { analyzeCreative, type CreativeAnalysis } from "@/lib/ai-analysis.functions";
 import { getCreativeUploadPath, getMaintenanceMode } from "@/lib/data.functions";
 import { useAppStore } from "@/lib/store";
-import { campaignPricing, mediaBudgetForViews, viewsRangeForMedia, isCreditsLike, MIN_DAYS, packagePriceFor, clicksForViews } from "@/lib/pricing";
+import { campaignPricing, mediaBudgetForViews, isCreditsLike, MIN_DAYS, packagePriceFor, clicksForViews } from "@/lib/pricing";
 import { CopyModal } from "@/components/app/ProMaxMenu";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -95,7 +95,6 @@ function CreateWizard() {
   const creditsDaily = Math.max(1, Math.round(mediaBudgetForViews(views) / days));
   const effBudget = isCredits ? creditsDaily : budget;
   const pricing = campaignPricing(effBudget, days, plan);
-  const creditsViews = viewsRangeForMedia(pricing.metaBudget);
   // Preço real do pacote (créditos) considerando a potência de visualizações escolhida.
   const packageTotal = isCredits ? packagePriceFor(days, views) : pricing.total;
   const estClicks = clicksForViews(views);
