@@ -5,12 +5,14 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Eye, MousePointerClick, Percent, DollarSign, Sparkles,
   ThumbsUp, MessageCircle, Share2, MoreHorizontal, Info, CreditCard, Coins,
-  Download, Rocket,
+  Download, Rocket, Zap,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { BoostDialog } from "@/components/app/BoostDialog";
 import { SafeImage } from "@/components/app/SafeImage";
+import { downloadReportImage } from "@/lib/report-image";
+import type { Campaign } from "@/lib/store";
 
 export const Route = createFileRoute("/_app/campaign/$id")({
   head: () => ({
@@ -32,6 +34,12 @@ export const Route = createFileRoute("/_app/campaign/$id")({
 });
 
 const fmtBRL = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+/** extra_views ainda não existe no schema tipado — leitura defensiva. */
+function getExtraViews(c: unknown): number {
+  const v = (c as { extra_views?: number | string | null } | null)?.extra_views;
+  return v ? Number(v) || 0 : 0;
+}
 
 function CampaignDetail() {
   const { id } = Route.useParams();
@@ -60,6 +68,7 @@ function CampaignDetail() {
   const na = "não disponível";
   // Plano Créditos: 1 crédito = 24h de veiculação, consumido gradualmente.
   const credits = creditsState(c);
+  const extraViews = getExtraViews(c);
 
   const togglePause = () => {
     const next = c.status === "paused" ? "running" : "paused";
@@ -67,20 +76,35 @@ function CampaignDetail() {
     toast.success(next === "paused" ? "Campanha pausada" : "Campanha retomada");
   };
 
+  // Views/CPM card: X = impressões entregues, Y = total de visualizações
+  // compradas (pacote + turbos).
+  const purchasedViewsBase = (() => {
+    // Estimativa do pacote comprado com base no orçamento/dias quando não há
+    // um campo explícito de "views compradas" — mantém coerência com o que
+    // foi vendido ao cliente.
+    return Math.round(c.budget * c.days * 40); // ~ referência de CPM médio
+  })();
+  const totalViews = purchasedViewsBase + extraViews;
+
   const metrics: Array<{ label: string; value: string; icon: typeof Eye; dim?: boolean }> = [
     { label: "Impressões", value: hasRealMetrics ? c.impressions.toLocaleString("pt-BR") : na, icon: Eye, dim: !hasRealMetrics },
     { label: "Cliques", value: hasRealMetrics ? c.clicks.toLocaleString("pt-BR") : na, icon: MousePointerClick, dim: !hasRealMetrics },
     { label: "CTR", value: hasRealMetrics ? `${c.ctr.toFixed(2)}%` : na, icon: Percent, dim: !hasRealMetrics },
     { label: "CPC", value: hasRealMetrics && c.cpc ? fmtBRL(c.cpc) : na, icon: DollarSign, dim: !hasRealMetrics || !c.cpc },
-    c.credits_total
-      ? {
-          label: "Créditos restantes",
-          value: `${credits.remaining.toFixed(1)} de ${credits.total}`,
-          icon: Coins,
-          dim: false,
-        }
-      : { label: "Gasto (Facebook)", value: hasRealMetrics ? fmtBRL(c.spent) : na, icon: DollarSign, dim: !hasRealMetrics },
-    { label: "CPM", value: hasRealMetrics && c.cpm ? fmtBRL(c.cpm) : na, icon: DollarSign, dim: !hasRealMetrics || !c.cpm },
+    {
+      label: "Créditos",
+      value: c.credits_total
+        ? `${credits.daysDone}/${credits.total} dias restantes`
+        : na,
+      icon: Coins,
+      dim: !c.credits_total,
+    },
+    {
+      label: "Views / total comprado",
+      value: hasRealMetrics ? `${c.impressions.toLocaleString("pt-BR")}/${totalViews.toLocaleString("pt-BR")}` : na,
+      icon: Eye,
+      dim: !hasRealMetrics,
+    },
     { label: "Frequência", value: hasRealMetrics && c.frequency ? c.frequency.toFixed(2) : na, icon: Percent, dim: !hasRealMetrics || !c.frequency },
     { label: "Custo por resultado", value: hasRealMetrics && c.cost_per_result ? fmtBRL(c.cost_per_result) : na, icon: DollarSign, dim: !hasRealMetrics || !c.cost_per_result },
     { label: "Alcance", value: hasRealMetrics && c.reach ? c.reach.toLocaleString("pt-BR") : na, icon: Eye, dim: !hasRealMetrics || !c.reach },
@@ -103,7 +127,7 @@ function CampaignDetail() {
         <div className="flex flex-wrap gap-2">
           {isProMax && (
             <>
-              <Button variant="glass" onClick={() => downloadReport(c)}>
+              <Button variant="glass" onClick={() => handleDownloadReport(c, hasRealMetrics)}>
                 <Download className="h-4 w-4" /> Baixar Relatório
               </Button>
               <Button
@@ -118,6 +142,14 @@ function CampaignDetail() {
           <Button variant="glass" onClick={togglePause}>{c.status === "paused" ? "Retomar" : "Pausar"}</Button>
         </div>
       </header>
+
+      {extraViews > 0 && (
+        <div className="flex">
+          <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold text-[#2b1c00] bg-gradient-to-r from-[#f7d774] via-[#e6b422] to-[#c9971b] shadow-[0_0_18px_-6px_#e6b422]">
+            <Zap className="h-3.5 w-3.5" /> Turbinou {extraViews.toLocaleString("pt-BR")} visualizações
+          </span>
+        </div>
+      )}
 
       {(() => {
         const totalCost = Math.round(c.budget * c.days);
@@ -157,9 +189,9 @@ function CampaignDetail() {
           <p className="text-[11px] text-muted-foreground">não conta como saldo do app</p>
         </div>
         <div>
-          <p className="text-xs text-muted-foreground uppercase tracking-wider">Orçamento programado</p>
-          <p className="text-2xl font-bold tabular-nums">{fmtBRL(c.budget * c.days)}</p>
-          <p className="text-[11px] text-muted-foreground">{c.days} dias × {fmtBRL(c.budget)}/dia</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider">Créditos de veiculação</p>
+          <p className="text-lg font-bold tabular-nums">Créditos referente a {c.days} dias de anúncios</p>
+          <p className="text-[11px] text-muted-foreground">total pago {fmtBRL(c.total_paid)}</p>
         </div>
         <div>
           <p className="text-xs text-muted-foreground uppercase tracking-wider">Status</p>
@@ -250,57 +282,32 @@ function CampaignDetail() {
   );
 }
 
-/** Relatório de desempenho em CSV (aberto em Excel/Sheets). */
-function downloadReport(c: {
-  name: string;
-  headline: string;
-  status: string;
-  budget: number;
-  days: number;
-  total_paid: number;
-  city: string;
-  neighborhood: string;
-  impressions: number;
-  clicks: number;
-  ctr: number;
-  cpc: number;
-  cpm: number;
-  reach: number;
-  results: number;
-  frequency: number;
-  cost_per_result: number;
-  spent: number;
-  revenue: number;
-}) {
-  const rows: [string, string | number][] = [
-    ["Campanha", c.name],
-    ["Titulo", c.headline],
-    ["Status", c.status],
-    ["Cidade", c.city],
-    ["Bairro", c.neighborhood],
-    ["Dias", c.days],
-    ["Orcamento diario", c.budget],
-    ["Valor pago", c.total_paid],
-    ["Impressoes", c.impressions],
-    ["Alcance", c.reach],
-    ["Cliques", c.clicks],
-    ["CTR (%)", c.ctr],
-    ["CPC", c.cpc],
-    ["CPM", c.cpm],
-    ["Frequencia", c.frequency],
-    ["Resultados", c.results],
-    ["Custo por resultado", c.cost_per_result],
-    ["Gasto (Facebook)", c.spent],
-    ["Receita", c.revenue],
-    ["ROI (%)", c.spent > 0 ? (((c.revenue - c.spent) / c.spent) * 100).toFixed(2) : "0"],
-    ["Gerado em", new Date().toLocaleString("pt-BR")],
-  ];
-  const csv = "\uFEFF" + rows.map(([k, v]) => `"${k}";"${String(v).replace(/"/g, '""')}"`).join("\r\n");
-  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `relatorio-${c.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-  toast.success("Relatório baixado");
+/** Gera e baixa o relatório de desempenho em imagem (PNG). */
+function handleDownloadReport(c: Campaign, hasRealMetrics: boolean) {
+  const na = "não disponível";
+  const extraViews = getExtraViews(c);
+  const purchasedViewsBase = Math.round(c.budget * c.days * 40);
+  const totalViews = purchasedViewsBase + extraViews;
+  const statusLabel =
+    c.status === "running" || c.status === "rodando" ? "Ativa"
+      : c.status === "analyzing" ? "Em análise"
+      : c.status === "paused" ? "Pausada"
+      : c.status === "aguardando_vinculo_meta" ? "Aguardando pagamento"
+      : "Encerrada";
+
+  downloadReportImage({
+    campaignName: c.name,
+    headline: c.headline,
+    status: statusLabel,
+    metrics: [
+      { label: "Impressões", value: hasRealMetrics ? c.impressions.toLocaleString("pt-BR") : na },
+      { label: "Cliques", value: hasRealMetrics ? c.clicks.toLocaleString("pt-BR") : na },
+      { label: "CTR", value: hasRealMetrics ? `${c.ctr.toFixed(2)}%` : na },
+      { label: "CPC", value: hasRealMetrics && c.cpc ? fmtBRL(c.cpc) : na },
+      { label: "Views entregues/comprado", value: hasRealMetrics ? `${c.impressions.toLocaleString("pt-BR")}/${totalViews.toLocaleString("pt-BR")}` : na },
+      { label: "Alcance", value: hasRealMetrics && c.reach ? c.reach.toLocaleString("pt-BR") : na },
+      { label: "Resultados", value: hasRealMetrics && c.results ? c.results.toLocaleString("pt-BR") : na },
+      { label: "Valor pago", value: fmtBRL(c.total_paid) },
+    ],
+  }).then(() => toast.success("Relatório baixado")).catch(() => toast.error("Não foi possível gerar o relatório."));
 }
