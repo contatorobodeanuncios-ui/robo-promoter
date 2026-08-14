@@ -202,15 +202,39 @@ function CreateWizard() {
     try {
       // Sobe todos os arquivos do criativo (imagem, vídeo ou carrossel) para o
       // Storage, na ordem em que o cliente enviou.
+      const isNetworkError = (err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        return /failed to fetch|network|timeout/i.test(msg);
+      };
+
+      const uploadWithRetry = async (path: string, file: File, attempt = 1): Promise<void> => {
+        const { error: upErr } = await supabase.storage
+          .from("campaign-creatives")
+          .upload(path, file, { contentType: file.type || "application/octet-stream" });
+
+        if (!upErr) return;
+
+        if (isNetworkError(upErr) && attempt < 3) {
+          setUploadProgress(`Conexão instável, tentando novamente (${attempt + 1}/3)...`);
+          await new Promise((r) => setTimeout(r, 1500 * attempt));
+          return uploadWithRetry(path, file, attempt + 1);
+        }
+
+        if (isNetworkError(upErr)) {
+          throw new Error(
+            `Falha ao enviar ${file.name}: sem conexão com o servidor de arquivos. Verifique sua internet e tente novamente.`
+          );
+        }
+
+        throw new Error(`Falha ao enviar ${file.name}: ${upErr.message}`);
+      };
+
       const media: { path: string; kind: "image" | "video"; name: string; mime: string; size: number }[] = [];
       for (let i = 0; i < files.length; i++) {
         const f = files[i];
         setUploadProgress(`Enviando ${i + 1} de ${files.length}...`);
         const { path } = await uploadPathFn({ data: { filename: f.name } });
-        const { error: upErr } = await supabase.storage
-          .from("campaign-creatives")
-          .upload(path, f, { contentType: f.type || "application/octet-stream" });
-        if (upErr) throw new Error(`Falha ao enviar ${f.name}: ${upErr.message}`);
+        await uploadWithRetry(path, f);
         media.push({
           path,
           kind: f.type.startsWith("video/") ? "video" : "image",
