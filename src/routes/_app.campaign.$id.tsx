@@ -121,13 +121,13 @@ function CampaignDetail() {
 
 
   return (
-    <div className="p-6 lg:p-10 max-w-7xl mx-auto space-y-8">
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <div>
+    <div className="w-full px-4 py-6 sm:px-6 lg:p-10 max-w-5xl mx-auto space-y-8 overflow-x-hidden">
+      <header className="flex flex-col sm:flex-row sm:flex-wrap items-center sm:items-start sm:justify-between gap-4 text-center sm:text-left">
+        <div className="min-w-0 w-full sm:w-auto">
           <Link to="/dashboard" className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
             <ArrowLeft className="h-3.5 w-3.5" /> Voltar ao dashboard
           </Link>
-          <h1 className="text-3xl font-bold tracking-tight mt-1">{c.name}</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mt-1 break-words">{c.name}</h1>
           <p className="text-sm text-muted-foreground">{c.headline}</p>
         </div>
         <div className="flex flex-wrap gap-2">
