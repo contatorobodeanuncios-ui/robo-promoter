@@ -40,11 +40,11 @@ export function RobotMascot({
       className={`relative w-full max-w-sm glass-strong rounded-2xl p-4 pr-9 border ${ring} animate-in zoom-in-95 fade-in shadow-[0_10px_40px_-10px_rgba(0,0,0,0.6)]`}
     >
       <button
-        onClick={() => setOpen(false)}
+        onClick={close}
         className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
         aria-label="Fechar"
       >
-        <X className="h-3.5 w-3.5" />
+        <X className="h-4 w-4" />
       </button>
       <div className="flex items-start gap-3">
         <div className="relative shrink-0">
@@ -63,6 +63,7 @@ export function RobotMascot({
           <p className="text-muted-foreground mt-0.5">{message}</p>
         </div>
       </div>
+    </div>
     </div>
   );
 }
