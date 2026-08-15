@@ -58,7 +58,7 @@ import {
   type AIReviewRow,
 } from "@/lib/admin.functions";
 import { getProMaxLinks, adminSetProMaxLinks } from "@/lib/promax.functions";
-import { adminCampaignValues } from "@/lib/pricing";
+import { adminCampaignValues, airTimeLabel } from "@/lib/pricing";
 import { aiReviewCampaign } from "@/lib/ai-metrics.functions";
 
 import {
@@ -1298,6 +1298,7 @@ function FbPreview({ campaign, onClose }: { campaign: AdminCampaignRow; onClose:
           <div className="grid grid-cols-2 gap-3">
             <Field label="Investimento por dia" value={fmtBRL(campaign.budget)} />
             <Field label="Dias de veiculação" value={`${campaign.days} dia(s)`} />
+            <Field label="Tempo no ar" value={airTimeLabel(campaign) ?? "ainda não iniciada"} />
             <Field label="Total a ser veiculado" value={fmtBRL(campaign.budget * campaign.days)} />
             <Field label="Total já pago" value={fmtBRL(campaign.total_paid)} />
           </div>
