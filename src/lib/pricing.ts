@@ -244,3 +244,27 @@ export function adminCampaignValues(pricePaid: number, days: number) {
   const d = Math.max(1, days);
   return { paid: round2(pricePaid), metaNet, daily: round2(metaNet / d) };
 }
+
+/**
+ * Tempo no ar da campanha: começa no momento em que o pagamento foi
+ * confirmado e a campanha entrou no ar (started_running_at / started_at).
+ * Total = dias contratados × 24.
+ */
+export function airTime(c: {
+  days?: number | null;
+  started_running_at?: string | null;
+  started_at?: string | null;
+}) {
+  const totalHours = Math.max(0, Number(c.days ?? 0)) * 24;
+  const startIso = c.started_running_at ?? c.started_at ?? null;
+  if (!startIso || totalHours <= 0) return { elapsedHours: 0, totalHours, started: false };
+  const elapsed = (Date.now() - new Date(startIso).getTime()) / 3_600_000;
+  return { elapsedHours: Math.max(0, Math.min(totalHours, elapsed)), totalHours, started: true };
+}
+
+/** Rótulo "X/Y horas" do tempo no ar. */
+export function airTimeLabel(c: Parameters<typeof airTime>[0]) {
+  const t = airTime(c);
+  if (!t.started) return null;
+  return `${Math.floor(t.elapsedHours)}/${t.totalHours} horas`;
+}
