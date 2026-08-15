@@ -1,11 +1,11 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useAppStore } from "@/lib/store";
-import { creditsState } from "@/lib/pricing";
+import { creditsState, airTimeLabel } from "@/lib/pricing";
 import { toast } from "sonner";
 import {
   ArrowLeft, Eye, MousePointerClick, Percent, DollarSign, Sparkles,
   ThumbsUp, MessageCircle, Share2, MoreHorizontal, Info, CreditCard, Coins,
-  Download, Rocket, Zap,
+  Download, Rocket, Zap, Clock,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -94,10 +94,16 @@ function CampaignDetail() {
     {
       label: "Créditos",
       value: c.credits_total
-        ? `${credits.daysDone}/${credits.total} dias restantes`
+        ? `${credits.used.toFixed(2)}/${credits.total} créditos totais`
         : na,
       icon: Coins,
       dim: !c.credits_total,
+    },
+    {
+      label: "Tempo no ar",
+      value: airTimeLabel(c) ?? na,
+      icon: Clock,
+      dim: !airTimeLabel(c),
     },
     {
       label: "Views / total comprado",
