@@ -1,13 +1,20 @@
 import { reachRange, fmtRange } from "@/lib/mock-data";
 import { Button } from "@/components/ui/button";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Bot, MousePointerClick, DollarSign, TrendingDown, Plus, Sparkles, MapPin, CalendarDays, Users, Copy, ExternalLink, AlertTriangle } from "lucide-react";
+import { Bot, MousePointerClick, DollarSign, TrendingDown, Plus, Sparkles, MapPin, CalendarDays, Users, Copy, ExternalLink, AlertTriangle, Clock } from "lucide-react";
 import { EnergyOrb } from "@/components/app/EnergyOrb";
 import { RobotMascot } from "@/components/app/RobotMascot";
 import { SafeImage } from "@/components/app/SafeImage";
 import { useUserDisplayName } from "@/components/app/AppShell";
 import { useAppStore, computeSummary } from "@/lib/store";
-import { creditsState } from "@/lib/pricing";
+import { creditsState, airTimeLabel } from "@/lib/pricing";
+
+/** Data/hora em que a campanha foi enviada/paga pelo usuário. */
+const sentAt = (c: { started_at?: string | null; created_at?: string | null }) => {
+  const iso = c.started_at ?? c.created_at;
+  if (!iso) return null;
+  return new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+};
 import { PushNotificationBanner } from "@/components/app/PushNotificationBanner";
 import { toast } from "sonner";
 import { PlanBanner } from "@/components/app/PlanBanner";
