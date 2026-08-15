@@ -2,7 +2,7 @@ import { Link, Outlet, useRouterState, useNavigate } from "@tanstack/react-route
 import { LayoutDashboard, Plus, Settings, LogOut, Bot, Menu, X, ArrowUp } from "lucide-react";
 import { Logo } from "./Logo";
 import { SupportWidget } from "./SupportWidget";
-import { ProMaxMenu } from "./ProMaxMenu";
+import { ProMaxMenu, ProMaxBottomNavItems } from "./ProMaxMenu";
 import { useAppStore } from "@/lib/store";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
@@ -18,6 +18,7 @@ export function AppShell() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const isProMax = useAppStore((s) => s.plan) === "pro_max";
 
   useEffect(() => {
     import("@/lib/sentry-browser").then((m) => m.initSentryClient()).catch(() => { /* noop */ });
@@ -121,7 +122,11 @@ export function AppShell() {
       <OnboardingHint />
 
       {/* Mobile bottom nav */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 glass-strong border-t border-white/5 grid grid-cols-3 pb-[env(safe-area-inset-bottom)]">
+      <nav
+        className={`md:hidden fixed bottom-0 inset-x-0 z-40 glass-strong border-t border-white/5 grid ${
+          isProMax ? "grid-cols-6" : "grid-cols-3"
+        } pb-[env(safe-area-inset-bottom)]`}
+      >
         {nav.map(({ to, label, icon: Icon }) => {
           const active = path === to || (to === "/dashboard" && path === "/");
           return (
@@ -139,6 +144,7 @@ export function AppShell() {
             </Link>
           );
         })}
+        <ProMaxBottomNavItems />
       </nav>
 
       {/* Sheet "Mais" — garante acesso a tudo no mobile sem cortar nada */}
