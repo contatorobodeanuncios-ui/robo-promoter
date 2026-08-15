@@ -139,7 +139,7 @@ export function SupportWidget() {
 
   const savePos = useCallback((next: { x: number; y: number }) => {
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     } catch {
       // ignora
     }
