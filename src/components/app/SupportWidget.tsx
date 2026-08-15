@@ -39,11 +39,12 @@ function kindFromMime(mime: string): SupportAttachment["kind"] {
   return "file";
 }
 
+/** Sempre inicia no canto superior direito (abaixo da barra no mobile). */
 function defaultBubblePos() {
   if (typeof window === "undefined") return { x: 0, y: 0 };
   return {
     x: window.innerWidth - BUBBLE_SIZE - 16,
-    y: window.innerHeight - BUBBLE_SIZE - (window.innerWidth < 768 ? 96 : 24),
+    y: window.innerWidth < 768 ? 68 : 16,
   };
 }
 
@@ -114,9 +115,10 @@ export function SupportWidget() {
   );
 
   useEffect(() => {
-    // Lê a posição salva apenas após hidratação — nunca durante SSR/render.
+    // A cada entrada no app a bolha começa no canto superior direito.
+    // Dentro da mesma sessão, respeita para onde o usuário arrastou.
     try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
+      const raw = window.sessionStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as { x: number; y: number };
         setPos(clampPos(parsed));
@@ -137,7 +139,7 @@ export function SupportWidget() {
 
   const savePos = useCallback((next: { x: number; y: number }) => {
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     } catch {
       // ignora
     }

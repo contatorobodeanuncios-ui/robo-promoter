@@ -1,6 +1,8 @@
 import { X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import robotImg from "@/assets/robot-mascot.jpg";
+
+const SEEN_KEY = "robot_metrics_notice_seen";
 
 export function RobotMascot({
   message = "Olá! Sou o Robô de Lucro. Estou monitorando suas campanhas 24/7.",
@@ -9,7 +11,21 @@ export function RobotMascot({
   message?: string;
   tone?: "info" | "success" | "warning";
 }) {
-  const [open, setOpen] = useState(true);
+  // Exibida apenas 1 vez por entrada no app (por sessão do navegador).
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (window.sessionStorage.getItem(SEEN_KEY)) return;
+    } catch { /* ignore */ }
+    setOpen(true);
+  }, []);
+
+  const close = () => {
+    setOpen(false);
+    try { window.sessionStorage.setItem(SEEN_KEY, "1"); } catch { /* ignore */ }
+  };
+
   if (!open) return null;
   const ring =
     tone === "success" ? "border-success/40" :
@@ -18,13 +34,17 @@ export function RobotMascot({
     tone === "success" ? "bg-success" :
     tone === "warning" ? "bg-warning" : "bg-primary";
   return (
-    <div className={`fixed bottom-6 right-6 z-40 max-w-xs glass-strong rounded-2xl p-3 pr-8 border ${ring} animate-in slide-in-from-bottom-4 fade-in shadow-[0_10px_40px_-10px_rgba(0,0,0,0.6)]`}>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-6 bg-black/50" onClick={close}>
+    <div
+      onClick={(e) => e.stopPropagation()}
+      className={`relative w-full max-w-sm glass-strong rounded-2xl p-4 pr-9 border ${ring} animate-in zoom-in-95 fade-in shadow-[0_10px_40px_-10px_rgba(0,0,0,0.6)]`}
+    >
       <button
-        onClick={() => setOpen(false)}
+        onClick={close}
         className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
         aria-label="Fechar"
       >
-        <X className="h-3.5 w-3.5" />
+        <X className="h-4 w-4" />
       </button>
       <div className="flex items-start gap-3">
         <div className="relative shrink-0">
@@ -43,6 +63,7 @@ export function RobotMascot({
           <p className="text-muted-foreground mt-0.5">{message}</p>
         </div>
       </div>
+    </div>
     </div>
   );
 }

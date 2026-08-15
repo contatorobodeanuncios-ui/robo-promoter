@@ -1,13 +1,20 @@
 import { reachRange, fmtRange } from "@/lib/mock-data";
 import { Button } from "@/components/ui/button";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Bot, MousePointerClick, DollarSign, TrendingDown, Plus, Sparkles, MapPin, CalendarDays, Users, Copy, ExternalLink, AlertTriangle } from "lucide-react";
+import { Bot, MousePointerClick, DollarSign, TrendingDown, Plus, Sparkles, MapPin, CalendarDays, Users, Copy, ExternalLink, AlertTriangle, Clock } from "lucide-react";
 import { EnergyOrb } from "@/components/app/EnergyOrb";
 import { RobotMascot } from "@/components/app/RobotMascot";
 import { SafeImage } from "@/components/app/SafeImage";
 import { useUserDisplayName } from "@/components/app/AppShell";
 import { useAppStore, computeSummary } from "@/lib/store";
-import { creditsState } from "@/lib/pricing";
+import { creditsState, airTimeLabel } from "@/lib/pricing";
+
+/** Data/hora em que a campanha foi enviada/paga pelo usuário. */
+const sentAt = (c: { started_at?: string | null; created_at?: string | null }) => {
+  const iso = c.started_at ?? c.created_at;
+  if (!iso) return null;
+  return new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+};
 import { PushNotificationBanner } from "@/components/app/PushNotificationBanner";
 import { toast } from "sonner";
 import { PlanBanner } from "@/components/app/PlanBanner";
@@ -187,12 +194,24 @@ function Dashboard() {
                         </span>
                         <span className="inline-flex items-center gap-1">
                           <CalendarDays className="h-3 w-3 text-primary" />
-                          {c.days} dias · R$ {c.budget}/dia
+                          {c.days} crédito{c.days === 1 ? "" : "s"} · 1 por dia
                         </span>
                         <span className="inline-flex items-center gap-1">
                           <Users className="h-3 w-3 text-primary" />
                           alcance estimado {fmtRange(range)}
                         </span>
+                        {sentAt(c) && (
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="h-3 w-3 text-primary" />
+                            enviada em {sentAt(c)}
+                          </span>
+                        )}
+                        {airTimeLabel(c) && (
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="h-3 w-3 text-primary" />
+                            no ar {airTimeLabel(c)}
+                          </span>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 pt-1">
@@ -203,7 +222,7 @@ function Dashboard() {
                         {c.credits_total ? (
                           <M
                             label="Créditos"
-                            value={`${creditsState(c).remaining.toFixed(1)} / ${c.credits_total}`}
+                            value={`${creditsState(c).used.toFixed(2)}/${c.credits_total} créditos totais`}
                             has
                           />
                         ) : (

@@ -21,44 +21,129 @@ export function ProMaxMenu({ compact = false }: { compact?: boolean }) {
 
   if (plan !== "pro_max") return null;
 
+  const schoolUrl = links?.seller_school_url;
+  const waUrl = links?.whatsapp_url;
+
   return (
     <>
       <div className={compact ? "" : "mt-4 border-t border-white/5 pt-4"}>
         {!compact && (
           <p className="px-3 pb-2 text-[10px] uppercase tracking-wider text-[#e6b422]">Pro Max</p>
         )}
-        <a
-          href={links?.seller_school_url || "#"}
-          target="_blank"
-          rel="noreferrer"
-          onClick={(e) => {
-            if (!links?.seller_school_url) {
-              e.preventDefault();
-              toast.info("O link da Seller School ainda não foi configurado.");
-            }
-          }}
-          className={itemClass}
-        >
-          <GraduationCap className="h-4 w-4" /> Seller School
-        </a>
+        <div>
+          <a
+            href={schoolUrl || "#"}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => {
+              if (!schoolUrl) {
+                e.preventDefault();
+                toast.info("O link da Seller School ainda não foi configurado.");
+              }
+            }}
+            className={itemClass}
+          >
+            <GraduationCap className="h-4 w-4" /> Seller School
+          </a>
+          {!schoolUrl && <SoonTag />}
+        </div>
         <button type="button" onClick={() => setCopyOpen(true)} className={`${itemClass} w-full`}>
           <Sparkles className="h-4 w-4" /> Copy Inteligente
         </button>
-        <a
-          href={links?.whatsapp_url || "#"}
-          target="_blank"
-          rel="noreferrer"
-          onClick={(e) => {
-            if (!links?.whatsapp_url) {
-              e.preventDefault();
-              toast.info("O WhatsApp de suporte ainda não foi configurado.");
-            }
-          }}
-          className={itemClass}
-        >
-          <MessageCircle className="h-4 w-4" /> Suporte WhatsApp
-        </a>
+        <div>
+          <a
+            href={waUrl || "#"}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => {
+              if (!waUrl) {
+                e.preventDefault();
+                toast.info("O WhatsApp de suporte ainda não foi configurado.");
+              }
+            }}
+            className={itemClass}
+          >
+            <MessageCircle className="h-4 w-4" /> Suporte WhatsApp
+          </a>
+          {!waUrl && <SoonTag />}
+        </div>
       </div>
+      {copyOpen && <CopyModal onClose={() => setCopyOpen(false)} />}
+    </>
+  );
+}
+
+/** Tag sutil "Em breve" — some sozinha quando o link é cadastrado. */
+function SoonTag() {
+  return (
+    <span className="ml-3 inline-block rounded-full border border-[#e6b422]/40 px-1.5 py-[1px] text-[9px] leading-none text-[#e6b422]/80">
+      Em breve
+    </span>
+  );
+}
+
+const GOLD = "#e6b422";
+
+/**
+ * Itens do Pro Max no rodapé (somente mobile) — mesma barra do Dashboard e
+ * Configurações, com cor dourada para diferenciar.
+ */
+export function ProMaxBottomNavItems() {
+  const plan = useAppStore((s) => s.plan);
+  const [copyOpen, setCopyOpen] = useState(false);
+  const { data: links } = useQuery({
+    queryKey: ["promax-links"],
+    queryFn: () => getProMaxLinks(),
+    enabled: plan === "pro_max",
+    staleTime: 300_000,
+  });
+
+  if (plan !== "pro_max") return null;
+
+  const base = "flex flex-col items-center justify-center gap-1 py-2.5 text-[11px] min-w-0 relative";
+  const schoolUrl = links?.seller_school_url;
+  const waUrl = links?.whatsapp_url;
+
+  return (
+    <>
+      <a
+        href={schoolUrl || "#"}
+        target="_blank"
+        rel="noreferrer"
+        onClick={(e) => {
+          if (!schoolUrl) {
+            e.preventDefault();
+            toast.info("O link da Seller School ainda não foi configurado.");
+          }
+        }}
+        className={base}
+        style={{ color: GOLD }}
+      >
+        <GraduationCap className="h-5 w-5 shrink-0" />
+        <span className="truncate max-w-full px-1">School</span>
+        {!schoolUrl && <span className="text-[8px] opacity-70 leading-none">Em breve</span>}
+      </a>
+      <button type="button" onClick={() => setCopyOpen(true)} className={base} style={{ color: GOLD }}>
+        <Sparkles className="h-5 w-5 shrink-0" />
+        <span className="truncate max-w-full px-1">Copy</span>
+      </button>
+      <a
+        href={waUrl || "#"}
+        target="_blank"
+        rel="noreferrer"
+        onClick={(e) => {
+          if (!waUrl) {
+            e.preventDefault();
+            toast.info("O WhatsApp de suporte ainda não foi configurado.");
+          }
+        }}
+        className={base}
+        style={{ color: GOLD }}
+      >
+        <MessageCircle className="h-5 w-5 shrink-0" />
+        <span className="truncate max-w-full px-1">WhatsApp</span>
+        {!waUrl && <span className="text-[8px] opacity-70 leading-none">Em breve</span>}
+      </a>
       {copyOpen && <CopyModal onClose={() => setCopyOpen(false)} />}
     </>
   );

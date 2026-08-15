@@ -19,7 +19,7 @@ import { reachRange, fmtRange } from "@/lib/mock-data";
 import { analyzeCreative, type CreativeAnalysis } from "@/lib/ai-analysis.functions";
 import { getCreativeUploadPath, getMaintenanceMode } from "@/lib/data.functions";
 import { useAppStore } from "@/lib/store";
-import { campaignPricing, mediaBudgetForViews, isCreditsLike, MIN_DAYS, packagePriceFor, clicksForViews } from "@/lib/pricing";
+import { campaignPricing, mediaBudgetForViews, isCreditsLike, MIN_DAYS, packagePriceFor, clicksForViews, includedViewsForDays } from "@/lib/pricing";
 import { CopyModal } from "@/components/app/ProMaxMenu";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -91,7 +91,14 @@ function CreateWizard() {
   // Plano CRÉDITOS: o cliente escolhe dias (1 crédito = 1 dia) + potência de
   // visualizações. O preço do pacote já embute tudo — nenhuma taxa é exibida.
   const isCredits = isCreditsLike(plan);
-  const [views, setViews] = useState(5000);
+  const [views, setViews] = useState(() => includedViewsForDays(7));
+  const includedViews = includedViewsForDays(days);
+  /** Ao mudar os dias, preserva as visualizações extras já pedidas. */
+  const handleDaysChange = (d: number) => {
+    const extra = Math.max(0, views - includedViewsForDays(days));
+    setDays(d);
+    setViews(includedViewsForDays(d) + extra);
+  };
   const creditsDaily = Math.max(1, Math.round(mediaBudgetForViews(views) / days));
   const effBudget = isCredits ? creditsDaily : budget;
   const pricing = campaignPricing(effBudget, days, plan);
@@ -720,18 +727,27 @@ function CreateWizard() {
               <div className="glass rounded-2xl p-6 space-y-5">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label className="text-xs">Potência de visualizações</Label>
+                    <Label className="text-xs">Dias de veiculação</Label>
+                    <span className="text-sm font-semibold tabular-nums">{days} dia{days === 1 ? "" : "s"}</span>
                   </div>
-                  <Slider value={[views]} min={2500} max={200000} step={500} onValueChange={(v) => setViews(v[0])} />
-                  <p className="text-center text-2xl font-bold tabular-nums text-gradient">{views.toLocaleString("pt-BR")}</p>
+                  <Slider value={[days]} min={MIN_DAYS} max={60} step={1} onValueChange={(v) => handleDaysChange(v[0])} />
                 </div>
 
                 <div className="space-y-2 pt-2 border-t border-white/5">
                   <div className="flex items-center justify-between">
-                    <Label className="text-xs">Dias de veiculação</Label>
-                    <span className="text-sm font-semibold tabular-nums">{days} dia{days === 1 ? "" : "s"}</span>
+                    <Label className="text-xs">Potência de visualizações</Label>
+                    <span className="text-[11px] text-muted-foreground tabular-nums">
+                      {includedViews.toLocaleString("pt-BR")} incluídas
+                    </span>
                   </div>
-                  <Slider value={[days]} min={MIN_DAYS} max={60} step={1} onValueChange={(v) => setDays(v[0])} />
+                  <Slider
+                    value={[Math.max(views, includedViews)]}
+                    min={includedViews}
+                    max={Math.max(200000, includedViews)}
+                    step={500}
+                    onValueChange={(v) => setViews(v[0])}
+                  />
+                  <p className="text-center text-2xl font-bold tabular-nums text-gradient">{Math.max(views, includedViews).toLocaleString("pt-BR")}</p>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3 pt-3 text-center border-t border-white/5">
@@ -781,7 +797,7 @@ function CreateWizard() {
             <div>
               <h2 className="text-xl font-semibold">Seus anúncios</h2>
               <p className="text-sm text-muted-foreground">
-                Você estará recebendo {days} anúncios, referente à quantidade de dias que o Robô irá rodar seus anúncios.
+                Você estará recebendo {days} créditos, referente à quantidade de dias que o Robô irá rodar seus anúncios.
               </p>
             </div>
             <div

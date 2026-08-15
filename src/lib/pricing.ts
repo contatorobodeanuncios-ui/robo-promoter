@@ -204,18 +204,30 @@ export function trialDaysLeft(p: {
 export const KIWIFY_PRO_CHECKOUT = "https://pay.kiwify.com.br/ECJMIKj";
 
 // ===== Escala de visualizações x dias (pacote de créditos) =====
-// Referência: 3 dias = 1.800 visualizações = R$ 57,00 (18*dias+3).
-export const VIEWS_PER_DAY_BASE = 600;
+// Pacote mínimo: 3 dias + 4.000 visualizações incluídas = R$ 57,00.
+// Cada dia extra: +R$ 19,00 e +1.333 visualizações incluídas.
+// Visualização acima do incluído: +R$ 0,01425 cada.
+export const BASE_PACKAGE_PRICE = 57;
+export const BASE_INCLUDED_VIEWS = 4000;
+export const PRICE_PER_EXTRA_DAY = 19;
+export const VIEWS_PER_EXTRA_DAY = 1333;
+export const PRICE_PER_EXTRA_VIEW = 0.01425;
 
-export const baseViewsForDays = (days: number) =>
-  VIEWS_PER_DAY_BASE * Math.max(MIN_DAYS, days);
+/** Visualizações já incluídas no pacote para a quantidade de dias. */
+export const includedViewsForDays = (days: number) =>
+  BASE_INCLUDED_VIEWS + (Math.max(MIN_DAYS, days) - MIN_DAYS) * VIEWS_PER_EXTRA_DAY;
 
-/** Preço proporcional às visualizações escolhidas para a quantidade de dias. */
+/** Compat: total de visualizações base para os dias escolhidos. */
+export const baseViewsForDays = includedViewsForDays;
+
+/** Preço do pacote: base por dias + visualizações extras. */
 export function packagePriceFor(days: number, views: number) {
   const d = Math.max(MIN_DAYS, days);
-  const base = baseViewsForDays(d);
-  const v = Math.max(1, views);
-  return round2(packagePriceForDays(d) * (v / base));
+  const included = includedViewsForDays(d);
+  const extra = Math.max(0, Math.max(0, views) - included);
+  return round2(
+    BASE_PACKAGE_PRICE + (d - MIN_DAYS) * PRICE_PER_EXTRA_DAY + extra * PRICE_PER_EXTRA_VIEW,
+  );
 }
 
 /** Cliques estimados (3% a 4% das visualizações). */
@@ -231,4 +243,28 @@ export function adminCampaignValues(pricePaid: number, days: number) {
   const metaNet = campaignMediaBudget(pricePaid);
   const d = Math.max(1, days);
   return { paid: round2(pricePaid), metaNet, daily: round2(metaNet / d) };
+}
+
+/**
+ * Tempo no ar da campanha: começa no momento em que o pagamento foi
+ * confirmado e a campanha entrou no ar (started_running_at / started_at).
+ * Total = dias contratados × 24.
+ */
+export function airTime(c: {
+  days?: number | null;
+  started_running_at?: string | null;
+  started_at?: string | null;
+}) {
+  const totalHours = Math.max(0, Number(c.days ?? 0)) * 24;
+  const startIso = c.started_running_at ?? c.started_at ?? null;
+  if (!startIso || totalHours <= 0) return { elapsedHours: 0, totalHours, started: false };
+  const elapsed = (Date.now() - new Date(startIso).getTime()) / 3_600_000;
+  return { elapsedHours: Math.max(0, Math.min(totalHours, elapsed)), totalHours, started: true };
+}
+
+/** Rótulo "X/Y horas" do tempo no ar. */
+export function airTimeLabel(c: Parameters<typeof airTime>[0]) {
+  const t = airTime(c);
+  if (!t.started) return null;
+  return `${Math.floor(t.elapsedHours)}/${t.totalHours} horas`;
 }
