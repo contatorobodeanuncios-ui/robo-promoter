@@ -2902,30 +2902,32 @@ function PaymentsSection({
         <ul className="space-y-3">
           {list.map((p) => {
             const isBoost = p.type === "campaign_boost";
+            const isTopup = p.type === "balance_topup";
             const cName = campaignName(p.campaign_id);
+            // Cores por tipo: Campanha (azul), Saldo (verde), Turbinar (dourado).
+            const rowCls = isBoost
+              ? "border-[#e6b422]/50 bg-[#e6b422]/5"
+              : isTopup
+                ? "border-success/40 bg-success/5"
+                : "border-primary/40 bg-primary/5";
+            const tagCls = isBoost
+              ? "text-[#2b1c00] bg-gradient-to-r from-[#f7d774] to-[#c9971b] border-transparent"
+              : isTopup
+                ? "text-success border-success/40 bg-success/10"
+                : "text-primary border-primary/40 bg-primary/10";
             return (
               <li
                 key={p.id}
-                className={`rounded-xl border p-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center ${
-                  isBoost
-                    ? "border-[#e6b422]/50 bg-[#e6b422]/5"
-                    : "border-white/10 bg-white/[0.02]"
-                }`}
+                className={`rounded-xl border p-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center ${rowCls}`}
               >
                 <div className="min-w-0 space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold truncate">
                       {p.client_name || p.client_email || "Cliente"}
                     </span>
-                    {isBoost ? (
-                      <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-[#2b1c00] bg-gradient-to-r from-[#f7d774] to-[#c9971b]">
-                        TURBINAR
-                      </span>
-                    ) : (
-                      <span className="rounded-full px-2 py-0.5 text-[10px] border border-white/15 text-muted-foreground">
-                        {p.type === "balance_topup" ? "SALDO" : "CAMPANHA"}
-                      </span>
-                    )}
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold border ${tagCls}`}>
+                      {isBoost ? "TURBINAR" : isTopup ? "SALDO" : "CAMPANHA"}
+                    </span>
                   </div>
                   <p className="text-xs text-muted-foreground truncate">
                     {isBoost ? "Turbinar Alcance" : p.note || "Pagamento"}
