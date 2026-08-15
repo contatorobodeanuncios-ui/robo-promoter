@@ -130,7 +130,7 @@ function CampaignDetail() {
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mt-1 break-words">{c.name}</h1>
           <p className="text-sm text-muted-foreground">{c.headline}</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap justify-center sm:justify-end gap-2">
           {isProMax && (
             <>
               <Button variant="glass" onClick={() => handleDownloadReport(c, hasRealMetrics)}>
