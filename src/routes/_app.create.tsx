@@ -797,7 +797,7 @@ function CreateWizard() {
             <div>
               <h2 className="text-xl font-semibold">Seus anúncios</h2>
               <p className="text-sm text-muted-foreground">
-                Você estará recebendo {days} anúncios, referente à quantidade de dias que o Robô irá rodar seus anúncios.
+                Você estará recebendo {days} créditos, referente à quantidade de dias que o Robô irá rodar seus anúncios.
               </p>
             </div>
             <div
