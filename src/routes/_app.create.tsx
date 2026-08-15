@@ -19,7 +19,7 @@ import { reachRange, fmtRange } from "@/lib/mock-data";
 import { analyzeCreative, type CreativeAnalysis } from "@/lib/ai-analysis.functions";
 import { getCreativeUploadPath, getMaintenanceMode } from "@/lib/data.functions";
 import { useAppStore } from "@/lib/store";
-import { campaignPricing, mediaBudgetForViews, isCreditsLike, MIN_DAYS, packagePriceFor, clicksForViews } from "@/lib/pricing";
+import { campaignPricing, mediaBudgetForViews, isCreditsLike, MIN_DAYS, packagePriceFor, clicksForViews, includedViewsForDays } from "@/lib/pricing";
 import { CopyModal } from "@/components/app/ProMaxMenu";
 
 import { supabase } from "@/integrations/supabase/client";
