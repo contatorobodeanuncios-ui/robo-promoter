@@ -173,9 +173,6 @@ export function AppShell() {
                 </Link>
               ))}
             </div>
-            <div className="mt-3 rounded-xl border border-white/10">
-              <ProMaxMenu compact />
-            </div>
           </div>
         </div>
       )}
