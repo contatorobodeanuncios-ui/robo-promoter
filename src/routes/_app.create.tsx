@@ -727,18 +727,27 @@ function CreateWizard() {
               <div className="glass rounded-2xl p-6 space-y-5">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label className="text-xs">Potência de visualizações</Label>
+                    <Label className="text-xs">Dias de veiculação</Label>
+                    <span className="text-sm font-semibold tabular-nums">{days} dia{days === 1 ? "" : "s"}</span>
                   </div>
-                  <Slider value={[views]} min={2500} max={200000} step={500} onValueChange={(v) => setViews(v[0])} />
-                  <p className="text-center text-2xl font-bold tabular-nums text-gradient">{views.toLocaleString("pt-BR")}</p>
+                  <Slider value={[days]} min={MIN_DAYS} max={60} step={1} onValueChange={(v) => handleDaysChange(v[0])} />
                 </div>
 
                 <div className="space-y-2 pt-2 border-t border-white/5">
                   <div className="flex items-center justify-between">
-                    <Label className="text-xs">Dias de veiculação</Label>
-                    <span className="text-sm font-semibold tabular-nums">{days} dia{days === 1 ? "" : "s"}</span>
+                    <Label className="text-xs">Potência de visualizações</Label>
+                    <span className="text-[11px] text-muted-foreground tabular-nums">
+                      {includedViews.toLocaleString("pt-BR")} incluídas
+                    </span>
                   </div>
-                  <Slider value={[days]} min={MIN_DAYS} max={60} step={1} onValueChange={(v) => setDays(v[0])} />
+                  <Slider
+                    value={[Math.max(views, includedViews)]}
+                    min={includedViews}
+                    max={Math.max(200000, includedViews)}
+                    step={500}
+                    onValueChange={(v) => setViews(v[0])}
+                  />
+                  <p className="text-center text-2xl font-bold tabular-nums text-gradient">{Math.max(views, includedViews).toLocaleString("pt-BR")}</p>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3 pt-3 text-center border-t border-white/5">
