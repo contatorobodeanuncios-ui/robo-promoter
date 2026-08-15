@@ -204,18 +204,30 @@ export function trialDaysLeft(p: {
 export const KIWIFY_PRO_CHECKOUT = "https://pay.kiwify.com.br/ECJMIKj";
 
 // ===== Escala de visualizações x dias (pacote de créditos) =====
-// Referência: 3 dias = 1.800 visualizações = R$ 57,00 (18*dias+3).
-export const VIEWS_PER_DAY_BASE = 600;
+// Pacote mínimo: 3 dias + 4.000 visualizações incluídas = R$ 57,00.
+// Cada dia extra: +R$ 19,00 e +1.333 visualizações incluídas.
+// Visualização acima do incluído: +R$ 0,01425 cada.
+export const BASE_PACKAGE_PRICE = 57;
+export const BASE_INCLUDED_VIEWS = 4000;
+export const PRICE_PER_EXTRA_DAY = 19;
+export const VIEWS_PER_EXTRA_DAY = 1333;
+export const PRICE_PER_EXTRA_VIEW = 0.01425;
 
-export const baseViewsForDays = (days: number) =>
-  VIEWS_PER_DAY_BASE * Math.max(MIN_DAYS, days);
+/** Visualizações já incluídas no pacote para a quantidade de dias. */
+export const includedViewsForDays = (days: number) =>
+  BASE_INCLUDED_VIEWS + (Math.max(MIN_DAYS, days) - MIN_DAYS) * VIEWS_PER_EXTRA_DAY;
 
-/** Preço proporcional às visualizações escolhidas para a quantidade de dias. */
+/** Compat: total de visualizações base para os dias escolhidos. */
+export const baseViewsForDays = includedViewsForDays;
+
+/** Preço do pacote: base por dias + visualizações extras. */
 export function packagePriceFor(days: number, views: number) {
   const d = Math.max(MIN_DAYS, days);
-  const base = baseViewsForDays(d);
-  const v = Math.max(1, views);
-  return round2(packagePriceForDays(d) * (v / base));
+  const included = includedViewsForDays(d);
+  const extra = Math.max(0, Math.max(0, views) - included);
+  return round2(
+    BASE_PACKAGE_PRICE + (d - MIN_DAYS) * PRICE_PER_EXTRA_DAY + extra * PRICE_PER_EXTRA_VIEW,
+  );
 }
 
 /** Cliques estimados (3% a 4% das visualizações). */
