@@ -187,12 +187,24 @@ function Dashboard() {
                         </span>
                         <span className="inline-flex items-center gap-1">
                           <CalendarDays className="h-3 w-3 text-primary" />
-                          {c.days} dias · R$ {c.budget}/dia
+                          {c.days} crédito{c.days === 1 ? "" : "s"} · 1 por dia
                         </span>
                         <span className="inline-flex items-center gap-1">
                           <Users className="h-3 w-3 text-primary" />
                           alcance estimado {fmtRange(range)}
                         </span>
+                        {sentAt(c) && (
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="h-3 w-3 text-primary" />
+                            enviada em {sentAt(c)}
+                          </span>
+                        )}
+                        {airTimeLabel(c) && (
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="h-3 w-3 text-primary" />
+                            no ar {airTimeLabel(c)}
+                          </span>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 pt-1">
@@ -203,7 +215,7 @@ function Dashboard() {
                         {c.credits_total ? (
                           <M
                             label="Créditos"
-                            value={`${creditsState(c).remaining.toFixed(1)} / ${c.credits_total}`}
+                            value={`${creditsState(c).used.toFixed(2)}/${c.credits_total} créditos totais`}
                             has
                           />
                         ) : (
