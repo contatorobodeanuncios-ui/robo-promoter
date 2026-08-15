@@ -91,7 +91,14 @@ function CreateWizard() {
   // Plano CRÉDITOS: o cliente escolhe dias (1 crédito = 1 dia) + potência de
   // visualizações. O preço do pacote já embute tudo — nenhuma taxa é exibida.
   const isCredits = isCreditsLike(plan);
-  const [views, setViews] = useState(5000);
+  const [views, setViews] = useState(() => includedViewsForDays(7));
+  const includedViews = includedViewsForDays(days);
+  /** Ao mudar os dias, preserva as visualizações extras já pedidas. */
+  const handleDaysChange = (d: number) => {
+    const extra = Math.max(0, views - includedViewsForDays(days));
+    setDays(d);
+    setViews(includedViewsForDays(d) + extra);
+  };
   const creditsDaily = Math.max(1, Math.round(mediaBudgetForViews(views) / days));
   const effBudget = isCredits ? creditsDaily : budget;
   const pricing = campaignPricing(effBudget, days, plan);
