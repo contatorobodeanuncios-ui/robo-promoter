@@ -14,6 +14,16 @@ const nav = [
   { to: "/settings" as const, label: "Configurações", icon: Settings },
 ];
 
+// Rótulos curtos usados SÓ na barra inferior do celular quando há 6 itens
+// (Dashboard/Novo Anúncio/Configurações + os 3 do Pro Max), pra evitar que o
+// texto seja cortado ("Dashboa...", "Novo An..."). O menu lateral (desktop) e
+// a folha "Mais opções" continuam usando o label completo normalmente.
+const mobileShortLabel: Record<string, string> = {
+  "/dashboard": "Dashboard",
+  "/create": "Anúncio",
+  "/settings": "Config",
+};
+
 export function AppShell() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
@@ -129,18 +139,19 @@ export function AppShell() {
       >
         {nav.map(({ to, label, icon: Icon }) => {
           const active = path === to || (to === "/dashboard" && path === "/");
+          const shortLabel = isProMax ? (mobileShortLabel[to] ?? label) : label;
           return (
             <Link
               key={to}
               id={to === "/create" ? "nav-novo-anuncio" : undefined}
               to={to}
               onClick={() => trackClick(`nav:${label}`)}
-              className={`flex flex-col items-center justify-center gap-1 py-2.5 text-[11px] transition-colors min-w-0 ${
-                active ? "text-primary" : "text-muted-foreground"
-              }`}
+              className={`flex flex-col items-center justify-center gap-1 py-2 px-0.5 text-center transition-colors min-w-0 ${
+                isProMax ? "text-[9.5px]" : "text-[11px]"
+              } ${active ? "text-primary" : "text-muted-foreground"}`}
             >
-              <Icon className="h-5 w-5 shrink-0" />
-              <span className="truncate max-w-full px-1">{label}</span>
+              <Icon className={isProMax ? "h-4 w-4 shrink-0" : "h-5 w-5 shrink-0"} />
+              <span className="truncate max-w-full leading-none">{shortLabel}</span>
             </Link>
           );
         })}
