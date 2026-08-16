@@ -887,27 +887,27 @@ function CreateWizard() {
                 </div>
 
 
-                <div className="grid grid-cols-4 gap-3 pt-4 text-center border-t border-white/5">
-                  <div className="pt-3">
-                    <p className="text-xs text-muted-foreground">Visualizações</p>
-                    <p className="font-semibold text-gradient text-sm">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-4 pt-4 text-center border-t border-white/5">
+                  <div className="pt-3 min-w-0">
+                    <p className="text-xs text-muted-foreground truncate">Visualizações</p>
+                    <p className="font-semibold text-gradient text-sm break-words">
                       {totalViews.toLocaleString("pt-BR")}
                     </p>
                   </div>
-                  <div className="pt-3">
-                    <p className="text-xs text-muted-foreground">Cliques estimados</p>
-                    <p className="font-semibold text-sm">
+                  <div className="pt-3 min-w-0">
+                    <p className="text-xs text-muted-foreground truncate">Cliques estimados</p>
+                    <p className="font-semibold text-sm break-words">
                       {estClicks.min.toLocaleString("pt-BR")} a {estClicks.max.toLocaleString("pt-BR")}
                     </p>
                   </div>
-                  <div className="pt-3">
-                    <p className="text-xs text-muted-foreground">Créditos</p>
+                  <div className="pt-3 min-w-0">
+                    <p className="text-xs text-muted-foreground truncate">Créditos</p>
                     <p className="font-semibold">{days}</p>
                     <p className="text-[10px] text-muted-foreground">1 crédito = 24h</p>
                   </div>
-                  <div className="pt-3">
-                    <p className="text-xs text-muted-foreground">Valor do pacote</p>
-                    <p className="font-semibold">{fmtMoney(packageTotal)}</p>
+                  <div className="pt-3 min-w-0">
+                    <p className="text-xs text-muted-foreground truncate">Valor do pacote</p>
+                    <p className="font-semibold break-words">{fmtMoney(packageTotal)}</p>
                     <p className="text-[10px] text-muted-foreground">tudo incluso</p>
                   </div>
                 </div>
