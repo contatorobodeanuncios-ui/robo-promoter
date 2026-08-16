@@ -268,3 +268,22 @@ export function airTimeLabel(c: Parameters<typeof airTime>[0]) {
   if (!t.started) return null;
   return `${Math.floor(t.elapsedHours)}/${t.totalHours} horas`;
 }
+
+// ===== Order bump do passo 6 (criação da campanha) =====
+export const ORDER_BUMP_VIEWS = 3000;
+export const ORDER_BUMP_PRICE = 29.8;
+export const ORDER_BUMP_FULL_PRICE = round2(ORDER_BUMP_VIEWS * PRICE_PER_EXTRA_VIEW);
+
+/**
+ * Total de visualizações compradas de uma campanha: o que veio incluído nos
+ * dias + tudo que foi acrescentado (order bump na criação e Turbinar Alcance
+ * depois que a campanha já está no ar) — a coluna extra_views soma os dois.
+ */
+export function purchasedViews(c: {
+  days?: number | null;
+  extra_views?: number | string | null;
+}) {
+  const days = Math.max(MIN_DAYS, Number(c.days ?? 0));
+  const extra = Number(c.extra_views ?? 0) || 0;
+  return includedViewsForDays(days) + extra;
+}
