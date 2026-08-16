@@ -118,38 +118,40 @@ function CampaignDetail() {
 
 
   return (
-    <div className="w-full px-4 py-6 sm:px-6 lg:p-10 max-w-5xl mx-auto space-y-8 overflow-x-hidden">
+    <div className="w-full max-w-full px-4 py-6 sm:px-6 lg:p-10 lg:max-w-5xl mx-auto space-y-8 overflow-x-hidden">
       <header className="flex flex-col sm:flex-row sm:flex-wrap items-center sm:items-start sm:justify-between gap-4 text-center sm:text-left">
         <div className="min-w-0 w-full sm:w-auto">
           <Link to="/dashboard" className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
             <ArrowLeft className="h-3.5 w-3.5" /> Voltar ao dashboard
           </Link>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mt-1 break-words">{c.name}</h1>
-          <p className="text-sm text-muted-foreground">{c.headline}</p>
+          <p className="text-sm text-muted-foreground break-words">{c.headline}</p>
         </div>
-        <div className="flex flex-wrap justify-center sm:justify-end gap-2">
+        <div className="flex flex-wrap justify-center sm:justify-end gap-2 w-full sm:w-auto">
           {isProMax && (
             <>
-              <Button variant="glass" onClick={() => handleDownloadReport(c, hasRealMetrics)}>
-                <Download className="h-4 w-4" /> Baixar Relatório
+              <Button variant="glass" className="flex-1 sm:flex-none min-w-0" onClick={() => handleDownloadReport(c, hasRealMetrics)}>
+                <Download className="h-4 w-4 shrink-0" /> <span className="truncate">Baixar Relatório</span>
               </Button>
               <Button
                 variant="glass"
-                className="border-[#e6b422]/50 text-[#e6b422]"
+                className="flex-1 sm:flex-none min-w-0 border-[#e6b422]/50 text-[#e6b422]"
                 onClick={() => setBoostOpen(true)}
               >
-                <Rocket className="h-4 w-4" /> Turbinar Alcance
+                <Rocket className="h-4 w-4 shrink-0" /> <span className="truncate">Turbinar Alcance</span>
               </Button>
             </>
           )}
-          <Button variant="glass" onClick={togglePause}>{c.status === "paused" ? "Retomar" : "Pausar"}</Button>
+          <Button variant="glass" className="flex-1 sm:flex-none min-w-0" onClick={togglePause}>
+            <span className="truncate">{c.status === "paused" ? "Retomar" : "Pausar"}</span>
+          </Button>
         </div>
       </header>
 
       {extraViews > 0 && (
         <div className="flex">
-          <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold text-[#2b1c00] bg-gradient-to-r from-[#f7d774] via-[#e6b422] to-[#c9971b] shadow-[0_0_18px_-6px_#e6b422]">
-            <Zap className="h-3.5 w-3.5" /> Turbinou {extraViews.toLocaleString("pt-BR")} visualizações
+          <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold text-[#2b1c00] bg-gradient-to-r from-[#f7d774] via-[#e6b422] to-[#c9971b] shadow-[0_0_18px_-6px_#e6b422] max-w-full">
+            <Zap className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">Turbinou {extraViews.toLocaleString("pt-BR")} visualizações</span>
           </span>
         </div>
       )}
@@ -160,17 +162,18 @@ function CampaignDetail() {
         if (!unpaid) return null;
         return (
           <section className="rounded-2xl p-5 border-2 border-warning/50 bg-warning/5 flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-start gap-3">
+            <div className="flex items-start gap-3 min-w-0">
               <CreditCard className="h-5 w-5 text-warning shrink-0 mt-0.5" />
-              <div>
+              <div className="min-w-0">
                 <p className="font-semibold">Pagamento não concluído</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground break-words">
                   Esta campanha ainda não foi paga ({fmtBRL(totalCost)}). Conclua o pagamento para o anúncio subir.
                 </p>
               </div>
             </div>
             <Button
               variant="neon"
+              className="w-full sm:w-auto"
               onClick={() =>
                 nav({
                   to: "/payment",
@@ -185,42 +188,42 @@ function CampaignDetail() {
       })()}
 
       {/* Bloco de valor pago — sempre visível, separado do saldo */}
-      <section className="glass-strong rounded-2xl p-5 grid sm:grid-cols-3 gap-4">
-        <div>
+      <section className="glass-strong rounded-2xl p-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="min-w-0">
           <p className="text-xs text-muted-foreground uppercase tracking-wider">Valor pago pelo anúncio</p>
-          <p className="text-2xl font-bold text-primary tabular-nums">{fmtBRL(c.total_paid)}</p>
+          <p className="text-2xl font-bold text-primary tabular-nums break-words">{fmtBRL(c.total_paid)}</p>
           <p className="text-[11px] text-muted-foreground">não conta como saldo do app</p>
         </div>
-        <div>
+        <div className="min-w-0">
           <p className="text-xs text-muted-foreground uppercase tracking-wider">Créditos de veiculação</p>
-          <p className="text-lg font-bold tabular-nums">Créditos referente a {c.days} dias de anúncios</p>
-          <p className="text-[11px] text-muted-foreground">total pago {fmtBRL(c.total_paid)}</p>
+          <p className="text-lg font-bold break-words">Créditos referente a {c.days} dias de anúncios</p>
+          <p className="text-[11px] text-muted-foreground break-words">total pago {fmtBRL(c.total_paid)}</p>
         </div>
-        <div>
+        <div className="min-w-0">
           <p className="text-xs text-muted-foreground uppercase tracking-wider">Status</p>
-          <p className="text-2xl font-bold tabular-nums capitalize">
+          <p className="text-2xl font-bold tabular-nums capitalize break-words">
             {c.status === "running" || c.status === "rodando" ? "Ativa" : c.status === "analyzing" ? "Em análise" : c.status === "paused" ? "Pausada" : c.status === "aguardando_vinculo_meta" ? "Aguardando pagamento" : "Encerrada"}
           </p>
         </div>
       </section>
 
-      <div className="grid lg:grid-cols-[400px,1fr] gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-[400px,1fr] gap-6 min-w-0">
         {/* Preview */}
-        <div className="space-y-4">
+        <div className="space-y-4 min-w-0">
           <div className="glass rounded-2xl overflow-hidden">
-            <div className="flex items-center gap-3 p-4">
-              <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-accent grid place-items-center text-white text-xs font-bold">M</div>
+            <div className="flex items-center gap-3 p-4 min-w-0">
+              <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-accent grid place-items-center text-white text-xs font-bold shrink-0">M</div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold">Minha Empresa</p>
-                <p className="text-[11px] text-muted-foreground">Patrocinado · 🌎</p>
+                <p className="text-sm font-semibold truncate">Minha Empresa</p>
+                <p className="text-[11px] text-muted-foreground truncate">Patrocinado · 🌎</p>
               </div>
-              <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+              <MoreHorizontal className="h-4 w-4 text-muted-foreground shrink-0" />
             </div>
-            <p className="px-4 pb-3 text-sm">{c.copy}</p>
+            <p className="px-4 pb-3 text-sm break-words">{c.copy}</p>
             <CampaignImage image={c.image} media={c.media} alt="" className="w-full aspect-square object-cover" fallbackClassName="w-full aspect-square grid place-items-center bg-white/5 text-muted-foreground" />
-            <div className="p-3 flex items-center justify-between bg-white/[0.02] border-t border-white/5">
-              <div className="min-w-0">
-                <p className="text-[11px] text-muted-foreground uppercase">
+            <div className="p-3 flex items-center justify-between gap-2 bg-white/[0.02] border-t border-white/5">
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] text-muted-foreground uppercase truncate">
                   {(() => {
                     try { return new URL(c.link.startsWith("http") ? c.link : "https://" + c.link).hostname; }
                     catch { return c.link || "—"; }
@@ -228,26 +231,26 @@ function CampaignDetail() {
                 </p>
                 <p className="text-sm font-medium truncate">{c.headline}</p>
               </div>
-              <Button variant="glass" size="sm">Saiba mais</Button>
+              <Button variant="glass" size="sm" className="shrink-0">Saiba mais</Button>
             </div>
             <div className="flex items-center justify-around p-2 border-t border-white/5 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1.5"><ThumbsUp className="h-4 w-4" /> Curtir</span>
-              <span className="flex items-center gap-1.5"><MessageCircle className="h-4 w-4" /> Comentar</span>
-              <span className="flex items-center gap-1.5"><Share2 className="h-4 w-4" /> Compartilhar</span>
+              <span className="flex items-center gap-1.5"><ThumbsUp className="h-4 w-4 shrink-0" /> <span className="hidden xs:inline">Curtir</span></span>
+              <span className="flex items-center gap-1.5"><MessageCircle className="h-4 w-4 shrink-0" /> <span className="hidden xs:inline">Comentar</span></span>
+              <span className="flex items-center gap-1.5"><Share2 className="h-4 w-4 shrink-0" /> <span className="hidden xs:inline">Compartilhar</span></span>
             </div>
           </div>
         </div>
 
         {/* Métricas reais — só aparecem se houver dados do Facebook */}
         <div className="space-y-6 min-w-0">
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {metrics.map((m) => (
-              <div key={m.label} className="glass rounded-xl p-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">{m.label}</span>
-                  <m.icon className="h-4 w-4 text-primary" />
+              <div key={m.label} className="glass rounded-xl p-4 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground truncate">{m.label}</span>
+                  <m.icon className="h-4 w-4 text-primary shrink-0" />
                 </div>
-                <p className={`text-xl font-bold mt-2 tabular-nums ${m.dim ? "text-muted-foreground italic" : ""}`}>{m.value}</p>
+                <p className={`text-lg sm:text-xl font-bold mt-2 tabular-nums break-words ${m.dim ? "text-muted-foreground italic" : ""}`}>{m.value}</p>
               </div>
             ))}
           </div>
@@ -256,9 +259,9 @@ function CampaignDetail() {
           {!hasRealMetrics && (
             <div className="glass rounded-2xl p-6 flex items-start gap-3 border border-primary/20">
               <Info className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-              <div className="space-y-1">
+              <div className="space-y-1 min-w-0">
                 <p className="font-semibold text-sm">Aguardando dados reais do Facebook & Pixel</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground break-words">
                   O Robô só exibe métricas validadas pelo Facebook Marketing API e pelo Pixel.
                   Assim que a campanha tiver algum dado real reportado (mesmo que já tenha sido
                   pausada depois), ele aparece aqui automaticamente.
@@ -270,7 +273,7 @@ function CampaignDetail() {
           {hasRealMetrics && (
             <div className="glass rounded-2xl p-5 flex items-start gap-3 border border-primary/30">
               <Sparkles className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground break-words">
                 Insights só são gerados a partir de dados reais reportados pelo Facebook e Pixel.
               </p>
             </div>
