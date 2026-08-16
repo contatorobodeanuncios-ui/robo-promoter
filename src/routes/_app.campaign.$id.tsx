@@ -78,13 +78,10 @@ function CampaignDetail() {
 
   // Views/CPM card: X = impressões entregues, Y = total de visualizações
   // compradas (pacote + turbos).
-  const purchasedViewsBase = (() => {
-    // Estimativa do pacote comprado com base no orçamento/dias quando não há
-    // um campo explícito de "views compradas" — mantém coerência com o que
-    // foi vendido ao cliente.
-    return Math.round(c.budget * c.days * 40); // ~ referência de CPM médio
-  })();
-  const totalViews = purchasedViewsBase + extraViews;
+  // Total comprado = incluído no pacote de dias + extras (order bump da
+  // criação e Turbinar Alcance) — a coluna extra_views soma os dois.
+  const totalViews = purchasedViews(c);
+  void extraViews;
 
   const metrics: Array<{ label: string; value: string; icon: typeof Eye; dim?: boolean }> = [
     { label: "Impressões", value: hasRealMetrics ? c.impressions.toLocaleString("pt-BR") : na, icon: Eye, dim: !hasRealMetrics },
@@ -292,8 +289,8 @@ function CampaignDetail() {
 function handleDownloadReport(c: Campaign, hasRealMetrics: boolean) {
   const na = "não disponível";
   const extraViews = getExtraViews(c);
-  const purchasedViewsBase = Math.round(c.budget * c.days * 40);
-  const totalViews = purchasedViewsBase + extraViews;
+  const totalViews = purchasedViews(c);
+  void extraViews;
   const statusLabel =
     c.status === "running" || c.status === "rodando" ? "Ativa"
       : c.status === "analyzing" ? "Em análise"
