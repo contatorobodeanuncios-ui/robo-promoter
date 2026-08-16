@@ -14,6 +14,18 @@ export type Campaign = CampaignRow;
 
 const APP_DATA_KEY = ["app-data"] as const;
 
+/** Entrada da criação de campanha (inclui os campos só do wizard). */
+export type NewCampaignInput = Omit<
+  Campaign,
+  "id" | "total_paid" | "extra_views" | "extra_paid"
+> & {
+  id?: string;
+  /** Plano Créditos: total de visualizações escolhido. */
+  views?: number;
+  /** Order bump do passo 6 (+3.000 visualizações). */
+  order_bump?: boolean;
+};
+
 interface AppState {
   balance: number;
   plan: UserPlan;
