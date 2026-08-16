@@ -2,7 +2,18 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { Json } from "@/integrations/supabase/types";
-import { campaignPricing, round2, effectivePlan, trialDaysLeft } from "@/lib/pricing";
+import {
+  campaignPricing,
+  round2,
+  effectivePlan,
+  trialDaysLeft,
+  isCreditsLike,
+  packagePriceFor,
+  includedViewsForDays,
+  campaignMediaBudget,
+  ORDER_BUMP_VIEWS,
+  ORDER_BUMP_PRICE,
+} from "@/lib/pricing";
 
 
 async function getAdmin() {
@@ -252,6 +263,10 @@ const campaignInput = z.object({
     .default([]),
   // Plano Créditos: quantidade de créditos do pacote (1 crédito = 1 dia).
   credits_total: z.number().int().min(0).max(365).nullable().optional(),
+  // Plano Créditos: total de visualizações escolhido pelo cliente no wizard.
+  views: z.number().int().min(0).max(5_000_000).optional(),
+  // Order bump do passo 6 (+3.000 visualizações por R$ 29,80).
+  order_bump: z.boolean().default(false),
 });
 
 
@@ -300,13 +315,36 @@ export const createCampaign = createServerFn({ method: "POST" })
       (planProf ?? {}) as { plan?: string | null; trial_days?: number | null; trial_started_at?: string | null },
     );
     // Orçamento que vai para a Meta + taxas (mesma regra no PIX e no saldo).
-    const {
+    let {
       metaBudget,
       serviceFee,
       platformFee,
       feesTotal,
       total: totalCost,
     } = campaignPricing(data.budget, data.days, plan);
+
+    // Plano Créditos/Pro Max: o preço real é o pacote por dias + visualizações
+    // extras + (opcional) o order bump escolhido no passo 6.
+    const includedViews = includedViewsForDays(data.days);
+    const chosenViews = Math.max(includedViews, data.views ?? includedViews);
+    const bumpViews = data.order_bump ? ORDER_BUMP_VIEWS : 0;
+    const bumpPrice = data.order_bump ? ORDER_BUMP_PRICE : 0;
+    // extra_views = tudo que foi comprado acima do incluído pelos dias
+    // (mesma coluna usada pelo Turbinar Alcance, para o total bater sempre).
+    let extraViews = 0;
+    let extraPaid = 0;
+    if (isCreditsLike(plan)) {
+      const packageTotal = packagePriceFor(data.days, chosenViews);
+      totalCost = round2(packageTotal + bumpPrice);
+      metaBudget = campaignMediaBudget(totalCost);
+      serviceFee = 0;
+      platformFee = 0;
+      feesTotal = 0;
+      extraViews = Math.max(0, chosenViews - includedViews) + bumpViews;
+      extraPaid = round2(
+        packageTotal - packagePriceFor(data.days, includedViews) + bumpPrice,
+      );
+    }
 
     const isPix = data.funding_type === "pix_dedicated";
     const safe = {
@@ -338,7 +376,9 @@ export const createCampaign = createServerFn({ method: "POST" })
       media_type: data.media_type,
       media: data.media as unknown as Json,
       // No plano Créditos o pacote vira créditos (1 crédito = 1 dia).
-      credits_total: plan === "credits" ? data.days : null,
+      credits_total: isCreditsLike(plan) ? data.days : null,
+      extra_views: extraViews,
+      extra_paid: extraPaid,
 
     };
     const { data: row, error } = await supabase
