@@ -314,7 +314,8 @@ function CreateWizard() {
         started_running_at: null,
         ended_at: null,
         created_at: new Date().toISOString(),
-        views: totalViews,
+        // sem o bump: o servidor soma as 3.000 do bump quando order_bump=true
+        views: Math.max(views, includedViews),
         order_bump: bumpAdded,
         scheduled_start_at: scheduledStartIso,
         scheduled_end_at: scheduledEndIso,
