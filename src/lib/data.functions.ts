@@ -2,7 +2,18 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { Json } from "@/integrations/supabase/types";
-import { campaignPricing, round2, effectivePlan, trialDaysLeft } from "@/lib/pricing";
+import {
+  campaignPricing,
+  round2,
+  effectivePlan,
+  trialDaysLeft,
+  isCreditsLike,
+  packagePriceFor,
+  includedViewsForDays,
+  campaignMediaBudget,
+  ORDER_BUMP_VIEWS,
+  ORDER_BUMP_PRICE,
+} from "@/lib/pricing";
 
 
 async function getAdmin() {
@@ -73,6 +84,9 @@ export interface CampaignRow {
   media: CampaignMediaItem[];
   /** Plano Créditos: total de créditos do pacote (1 crédito = 24h de veiculação). */
   credits_total: number | null;
+  /** Visualizações compradas além do incluído (order bump + Turbinar Alcance). */
+  extra_views: number;
+  extra_paid: number;
 }
 
 
@@ -114,6 +128,8 @@ interface DbCampaign {
   media_type?: string | null;
   media?: unknown;
   credits_total?: number | null;
+  extra_views?: number | null;
+  extra_paid?: string | number | null;
 }
 
 const num = (v: string | number | null | undefined) => (v == null ? 0 : Number(v));
@@ -171,6 +187,8 @@ const mapCampaign = (r: DbCampaign): CampaignRow => ({
   media_type: (r.media_type ?? "image") as CampaignMediaType,
   media: parseMedia(r.media),
   credits_total: r.credits_total ?? null,
+  extra_views: r.extra_views ?? 0,
+  extra_paid: num(r.extra_paid),
 });
 
 
@@ -252,6 +270,10 @@ const campaignInput = z.object({
     .default([]),
   // Plano Créditos: quantidade de créditos do pacote (1 crédito = 1 dia).
   credits_total: z.number().int().min(0).max(365).nullable().optional(),
+  // Plano Créditos: total de visualizações escolhido pelo cliente no wizard.
+  views: z.number().int().min(0).max(5_000_000).optional(),
+  // Order bump do passo 6 (+3.000 visualizações por R$ 29,80).
+  order_bump: z.boolean().default(false),
 });
 
 
@@ -300,13 +322,36 @@ export const createCampaign = createServerFn({ method: "POST" })
       (planProf ?? {}) as { plan?: string | null; trial_days?: number | null; trial_started_at?: string | null },
     );
     // Orçamento que vai para a Meta + taxas (mesma regra no PIX e no saldo).
-    const {
+    let {
       metaBudget,
       serviceFee,
       platformFee,
       feesTotal,
       total: totalCost,
     } = campaignPricing(data.budget, data.days, plan);
+
+    // Plano Créditos/Pro Max: o preço real é o pacote por dias + visualizações
+    // extras + (opcional) o order bump escolhido no passo 6.
+    const includedViews = includedViewsForDays(data.days);
+    const chosenViews = Math.max(includedViews, data.views ?? includedViews);
+    const bumpViews = data.order_bump ? ORDER_BUMP_VIEWS : 0;
+    const bumpPrice = data.order_bump ? ORDER_BUMP_PRICE : 0;
+    // extra_views = tudo que foi comprado acima do incluído pelos dias
+    // (mesma coluna usada pelo Turbinar Alcance, para o total bater sempre).
+    let extraViews = 0;
+    let extraPaid = 0;
+    if (isCreditsLike(plan)) {
+      const packageTotal = packagePriceFor(data.days, chosenViews);
+      totalCost = round2(packageTotal + bumpPrice);
+      metaBudget = campaignMediaBudget(totalCost);
+      serviceFee = 0;
+      platformFee = 0;
+      feesTotal = 0;
+      extraViews = Math.max(0, chosenViews - includedViews) + bumpViews;
+      extraPaid = round2(
+        packageTotal - packagePriceFor(data.days, includedViews) + bumpPrice,
+      );
+    }
 
     const isPix = data.funding_type === "pix_dedicated";
     const safe = {
@@ -338,7 +383,9 @@ export const createCampaign = createServerFn({ method: "POST" })
       media_type: data.media_type,
       media: data.media as unknown as Json,
       // No plano Créditos o pacote vira créditos (1 crédito = 1 dia).
-      credits_total: plan === "credits" ? data.days : null,
+      credits_total: isCreditsLike(plan) ? data.days : null,
+      extra_views: extraViews,
+      extra_paid: extraPaid,
 
     };
     const { data: row, error } = await supabase
@@ -425,9 +472,10 @@ export const updateCampaign = createServerFn({ method: "POST" })
     const {
       spent: _s, clicks: _c, impressions: _i, ctr: _ct, cpc: _cp,
       funding_type: _ft, pix_total_budget: _ptb,
+      views: _v, order_bump: _ob,
       ...safe
     } = data.patch;
-    void _s; void _c; void _i; void _ct; void _cp; void _ft; void _ptb;
+    void _s; void _c; void _i; void _ct; void _cp; void _ft; void _ptb; void _v; void _ob;
     const { error } = await supabase.from("campaigns").update(safe).eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
@@ -493,6 +541,46 @@ export const getMaintenanceMode = createServerFn({ method: "GET" }).handler(
     return {
       enabled: !!v?.enabled,
       message: v?.message || DEFAULT_MAINTENANCE_MESSAGE,
+    };
+  },
+);
+
+// ============ Pausa programada do robô ============
+// Dois modos: "free" (horário livre, padrão — campanhas pagas entram na fila
+// imediatamente) e "scheduled" (pausa por N horas; ao chegar o horário de
+// retomada volta sozinho para "free").
+export interface RobotSchedule {
+  mode: "free" | "scheduled";
+  paused_at: string | null;
+  hours: number;
+  resume_at: string | null;
+}
+
+export const getRobotSchedule = createServerFn({ method: "GET" }).handler(
+  async (): Promise<RobotSchedule> => {
+    const admin = await getAdmin();
+    const { data } = await admin
+      .from("app_settings")
+      .select("value")
+      .eq("key", "robot_schedule")
+      .maybeSingle();
+    const v = (data?.value ?? null) as
+      | { mode?: string; paused_at?: string; hours?: number }
+      | null;
+    const hours = Number(v?.hours ?? 0);
+    if (v?.mode !== "scheduled" || !v?.paused_at || !(hours > 0)) {
+      return { mode: "free", paused_at: null, hours: 0, resume_at: null };
+    }
+    const resume = new Date(new Date(v.paused_at).getTime() + hours * 3_600_000);
+    // Passou do horário de retomada → volta automaticamente para horário livre.
+    if (resume.getTime() <= Date.now()) {
+      return { mode: "free", paused_at: null, hours: 0, resume_at: null };
+    }
+    return {
+      mode: "scheduled",
+      paused_at: v.paused_at,
+      hours,
+      resume_at: resume.toISOString(),
     };
   },
 );

@@ -1,3 +1,4 @@
+import { getRobotSchedule } from "@/lib/data.functions";
 import { createFileRoute, redirect, useNavigate, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -56,6 +57,7 @@ import {
   type MetaAdAccountCampaign,
   type MetaLinkAuditRow,
   type AIReviewRow,
+  setRobotSchedule,
 } from "@/lib/admin.functions";
 import { getProMaxLinks, adminSetProMaxLinks } from "@/lib/promax.functions";
 import { adminCampaignValues, airTimeLabel } from "@/lib/pricing";
@@ -607,6 +609,7 @@ function AdminDevPage() {
 
         {/* ============ Aba: Configurações Internas ============ */}
         <TabsContent value="settings" className="space-y-6 mt-6">
+          <RobotScheduleCard />
           <ProMaxLinksCard />
           <MetaHealthCard />
           <PixAttemptsSection />
@@ -2977,6 +2980,75 @@ function PaymentsSection({
           })}
         </ul>
       )}
+    </section>
+  );
+}
+
+/** Pausa programada do robô para novas campanhas (Horário livre × Programado). */
+function RobotScheduleCard() {
+  const qc = useQueryClient();
+  const getFn = useServerFn(getRobotSchedule);
+  const setFn = useServerFn(setRobotSchedule);
+  const [hours, setHours] = useState(3);
+
+  const q = useQuery({
+    queryKey: ["robot-schedule"],
+    queryFn: () => getFn(),
+    refetchInterval: 60_000,
+  });
+
+  const mut = useMutation({
+    mutationFn: (v: { mode: "free" | "scheduled"; hours?: number }) => setFn({ data: v }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["robot-schedule"] });
+      toast.success("Disponibilidade do robô atualizada");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const scheduled = q.data?.mode === "scheduled";
+  const resume = q.data?.resume_at
+    ? new Date(q.data.resume_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+    : null;
+
+  return (
+    <section className="glass-strong rounded-2xl p-6 space-y-4 border border-primary/20">
+      <div>
+        <p className="text-xs uppercase tracking-wider text-muted-foreground">Disponibilidade do robô</p>
+        <h2 className="font-semibold mt-1">Pausa programada para novas campanhas</h2>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          variant={scheduled ? "outline" : "neon"}
+          disabled={mut.isPending}
+          onClick={() => mut.mutate({ mode: "free" })}
+        >
+          Horário livre
+        </Button>
+        <Button
+          variant={scheduled ? "neon" : "outline"}
+          disabled={mut.isPending}
+          onClick={() => mut.mutate({ mode: "scheduled", hours })}
+        >
+          {scheduled ? "Estender pausa" : "Pausar"} por {hours}h
+        </Button>
+        <Input
+          type="number"
+          min={1}
+          max={72}
+          step={1}
+          value={hours}
+          onChange={(e) => setHours(Math.min(72, Math.max(1, Number(e.target.value) || 1)))}
+          className="w-24"
+        />
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        {scheduled
+          ? `⏸ Pausado. Retomada às ${resume} — os clientes veem "O robô está programado para iniciar as próximas campanhas às ${resume}". Ao chegar o horário, volta sozinho para Horário livre.`
+          : "▶ Horário livre: campanhas pagas chegam para colocar no ar imediatamente, sem aviso de espera."}
+      </p>
     </section>
   );
 }

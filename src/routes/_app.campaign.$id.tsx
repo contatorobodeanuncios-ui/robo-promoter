@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useAppStore } from "@/lib/store";
-import { creditsState, airTimeLabel } from "@/lib/pricing";
+import { creditsState, airTimeLabel, purchasedViews } from "@/lib/pricing";
 import { toast } from "sonner";
 import {
   ArrowLeft, Eye, MousePointerClick, Percent, DollarSign, Sparkles,
@@ -10,7 +10,7 @@ import {
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { BoostDialog } from "@/components/app/BoostDialog";
-import { SafeImage } from "@/components/app/SafeImage";
+import { CampaignImage } from "@/components/app/CampaignImage";
 import { downloadReportImage } from "@/lib/report-image";
 import type { Campaign } from "@/lib/store";
 
@@ -78,13 +78,10 @@ function CampaignDetail() {
 
   // Views/CPM card: X = impressões entregues, Y = total de visualizações
   // compradas (pacote + turbos).
-  const purchasedViewsBase = (() => {
-    // Estimativa do pacote comprado com base no orçamento/dias quando não há
-    // um campo explícito de "views compradas" — mantém coerência com o que
-    // foi vendido ao cliente.
-    return Math.round(c.budget * c.days * 40); // ~ referência de CPM médio
-  })();
-  const totalViews = purchasedViewsBase + extraViews;
+  // Total comprado = incluído no pacote de dias + extras (order bump da
+  // criação e Turbinar Alcance) — a coluna extra_views soma os dois.
+  const totalViews = purchasedViews(c);
+  void extraViews;
 
   const metrics: Array<{ label: string; value: string; icon: typeof Eye; dim?: boolean }> = [
     { label: "Impressões", value: hasRealMetrics ? c.impressions.toLocaleString("pt-BR") : na, icon: Eye, dim: !hasRealMetrics },
@@ -220,7 +217,7 @@ function CampaignDetail() {
               <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
             </div>
             <p className="px-4 pb-3 text-sm">{c.copy}</p>
-            <SafeImage src={c.image} alt="" className="w-full aspect-square object-cover" fallbackClassName="w-full aspect-square grid place-items-center bg-white/5 text-muted-foreground" />
+            <CampaignImage image={c.image} media={c.media} alt="" className="w-full aspect-square object-cover" fallbackClassName="w-full aspect-square grid place-items-center bg-white/5 text-muted-foreground" />
             <div className="p-3 flex items-center justify-between bg-white/[0.02] border-t border-white/5">
               <div className="min-w-0">
                 <p className="text-[11px] text-muted-foreground uppercase">
@@ -292,8 +289,8 @@ function CampaignDetail() {
 function handleDownloadReport(c: Campaign, hasRealMetrics: boolean) {
   const na = "não disponível";
   const extraViews = getExtraViews(c);
-  const purchasedViewsBase = Math.round(c.budget * c.days * 40);
-  const totalViews = purchasedViewsBase + extraViews;
+  const totalViews = purchasedViews(c);
+  void extraViews;
   const statusLabel =
     c.status === "running" || c.status === "rodando" ? "Ativa"
       : c.status === "analyzing" ? "Em análise"

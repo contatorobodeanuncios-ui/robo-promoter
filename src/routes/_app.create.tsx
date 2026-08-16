@@ -17,9 +17,9 @@ import {
 import { MapPreview } from "@/components/app/MapPreview";
 import { reachRange, fmtRange } from "@/lib/mock-data";
 import { analyzeCreative, type CreativeAnalysis } from "@/lib/ai-analysis.functions";
-import { getCreativeUploadPath, getMaintenanceMode } from "@/lib/data.functions";
+import { getCreativeUploadPath, getMaintenanceMode, getRobotSchedule } from "@/lib/data.functions";
 import { useAppStore } from "@/lib/store";
-import { campaignPricing, mediaBudgetForViews, isCreditsLike, MIN_DAYS, packagePriceFor, clicksForViews, includedViewsForDays } from "@/lib/pricing";
+import { campaignPricing, mediaBudgetForViews, isCreditsLike, MIN_DAYS, packagePriceFor, clicksForViews, includedViewsForDays, ORDER_BUMP_VIEWS, ORDER_BUMP_PRICE, ORDER_BUMP_FULL_PRICE } from "@/lib/pricing";
 import { CopyModal } from "@/components/app/ProMaxMenu";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -54,6 +54,17 @@ function CreateWizard() {
   const analyzeFn = useServerFn(analyzeCreative);
   const uploadPathFn = useServerFn(getCreativeUploadPath);
   const maintenanceFn = useServerFn(getMaintenanceMode);
+
+  const robotScheduleFn = useServerFn(getRobotSchedule);
+  const robotQ = useQuery({
+    queryKey: ["robot-schedule"],
+    queryFn: () => robotScheduleFn(),
+    staleTime: 30_000,
+  });
+  const robotResumeAt =
+    robotQ.data?.mode === "scheduled" && robotQ.data.resume_at
+      ? new Date(robotQ.data.resume_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+      : null;
 
   const maintenanceQ = useQuery({
     queryKey: ["maintenance-mode"],
@@ -103,8 +114,13 @@ function CreateWizard() {
   const effBudget = isCredits ? creditsDaily : budget;
   const pricing = campaignPricing(effBudget, days, plan);
   // Preço real do pacote (créditos) considerando a potência de visualizações escolhida.
-  const packageTotal = isCredits ? packagePriceFor(days, views) : pricing.total;
-  const estClicks = clicksForViews(views);
+  // Order bump do passo 6: +3.000 visualizações por R$ 29,80 (uma vez só).
+  const [bumpAdded, setBumpAdded] = useState(false);
+  const bumpViews = bumpAdded ? ORDER_BUMP_VIEWS : 0;
+  const bumpPrice = bumpAdded ? ORDER_BUMP_PRICE : 0;
+  const totalViews = Math.max(views, includedViews) + bumpViews;
+  const packageTotal = (isCredits ? packagePriceFor(days, views) : pricing.total) + bumpPrice;
+  const estClicks = clicksForViews(totalViews);
   const fmtMoney = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
   const [launching, setLaunching] = useState(false);
@@ -252,9 +268,9 @@ function CreateWizard() {
       }
       setUploadProgress(null);
       const firstImage = media.find((m) => m.kind === "image");
-      const persistedImage = firstImage
-        ? supabase.storage.from("campaign-creatives").getPublicUrl(firstImage.path).data.publicUrl
-        : "";
+      // O bucket é privado: guardamos o CAMINHO no Storage e a exibição gera
+      // uma URL assinada (a URL pública não carregava — imagem quebrada).
+      const persistedImage = firstImage ? firstImage.path : "";
 
       const scheduledStartIso = scheduleEnabled && startAt ? new Date(startAt).toISOString() : null;
       const scheduledEndIso = scheduleEnabled && endAt ? new Date(endAt).toISOString() : null;
@@ -298,6 +314,9 @@ function CreateWizard() {
         started_running_at: null,
         ended_at: null,
         created_at: new Date().toISOString(),
+        // sem o bump: o servidor soma as 3.000 do bump quando order_bump=true
+        views: Math.max(views, includedViews),
+        order_bump: bumpAdded,
         scheduled_start_at: scheduledStartIso,
         scheduled_end_at: scheduledEndIso,
         credits_total: isCredits ? days : null,
@@ -799,7 +818,33 @@ function CreateWizard() {
               <p className="text-sm text-muted-foreground">
                 Você estará recebendo {days} créditos, referente à quantidade de dias que o Robô irá rodar seus anúncios.
               </p>
+              {robotResumeAt && (
+                <p className="mt-3 glass rounded-xl p-3 text-sm flex items-start gap-2">
+                  <Clock className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                  O robô está programado para iniciar as próximas campanhas às {robotResumeAt}
+                </p>
+              )}
             </div>
+            <div className="glass rounded-2xl p-5 border border-primary/40 bg-primary/5 space-y-3">
+              {bumpAdded ? (
+                <div className="flex items-center gap-2 text-sm font-semibold text-success">
+                  <Check className="h-4 w-4" /> Adicionado ✓ — +{ORDER_BUMP_VIEWS.toLocaleString("pt-BR")} visualizações
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-foreground/90">
+                    Quer acrescentar mais {ORDER_BUMP_VIEWS.toLocaleString("pt-BR")} visualizações{" "}
+                    <span className="text-destructive line-through">de {fmtMoney(ORDER_BUMP_FULL_PRICE)}</span>{" "}
+                    por apenas{" "}
+                    <span className="text-success font-bold text-lg">{fmtMoney(ORDER_BUMP_PRICE)}</span>?
+                  </p>
+                  <Button variant="neon" onClick={() => setBumpAdded(true)}>
+                    Acrescentar
+                  </Button>
+                </>
+              )}
+            </div>
+
             <div
               className="glass rounded-2xl p-5 border space-y-2"
               style={{ borderColor: "rgba(230,180,34,0.4)", background: "rgba(230,180,34,0.06)" }}
@@ -846,7 +891,7 @@ function CreateWizard() {
                   <div className="pt-3">
                     <p className="text-xs text-muted-foreground">Visualizações</p>
                     <p className="font-semibold text-gradient text-sm">
-                      {views.toLocaleString("pt-BR")}
+                      {totalViews.toLocaleString("pt-BR")}
                     </p>
                   </div>
                   <div className="pt-3">
@@ -952,7 +997,7 @@ function CreateWizard() {
                     Com {days} crédito{days === 1 ? "" : "s"} o robô roda por {days} dia
                     {days === 1 ? "" : "s"} e deve gerar cerca de{" "}
                     <span className="text-foreground font-semibold">
-                      {views.toLocaleString("pt-BR")}
+                      {totalViews.toLocaleString("pt-BR")}
                     </span>{" "}
                     visualizações ({estClicks.min.toLocaleString("pt-BR")} a {estClicks.max.toLocaleString("pt-BR")} cliques)
                     em {neighborhood || "sua região"}{city ? `, ${city}` : ""} (raio de {radius} km).
