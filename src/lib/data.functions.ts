@@ -84,6 +84,9 @@ export interface CampaignRow {
   media: CampaignMediaItem[];
   /** Plano Créditos: total de créditos do pacote (1 crédito = 24h de veiculação). */
   credits_total: number | null;
+  /** Visualizações compradas além do incluído (order bump + Turbinar Alcance). */
+  extra_views: number;
+  extra_paid: number;
 }
 
 
@@ -125,6 +128,8 @@ interface DbCampaign {
   media_type?: string | null;
   media?: unknown;
   credits_total?: number | null;
+  extra_views?: number | null;
+  extra_paid?: string | number | null;
 }
 
 const num = (v: string | number | null | undefined) => (v == null ? 0 : Number(v));
@@ -182,6 +187,8 @@ const mapCampaign = (r: DbCampaign): CampaignRow => ({
   media_type: (r.media_type ?? "image") as CampaignMediaType,
   media: parseMedia(r.media),
   credits_total: r.credits_total ?? null,
+  extra_views: r.extra_views ?? 0,
+  extra_paid: num(r.extra_paid),
 });
 
 
