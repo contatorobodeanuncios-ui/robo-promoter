@@ -29,19 +29,31 @@ function ProMaxUpsellBanner() {
   return (
     <div className="glass-strong rounded-2xl p-5 border border-[#e6b422]/40 bg-gradient-to-br from-[#e6b422]/15 via-transparent to-transparent relative overflow-hidden">
       <div className="absolute -top-16 -right-16 h-48 w-48 rounded-full bg-[#e6b422]/20 blur-3xl pointer-events-none" />
-      <div className="relative flex flex-wrap items-center gap-4">
-        <div className="grid place-items-center h-11 w-11 rounded-xl bg-gradient-to-br from-[#f7d774] to-[#c9971b] shrink-0">
-          <Crown className="h-5 w-5 text-[#2b1c00]" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold text-[#e6b422]">Suba de nível para o PRO MAX</p>
-          <p className="text-xs text-muted-foreground">Desbloqueie tudo isso e ainda tenha prioridade na fila de anúncios:</p>
+      {/*
+        Correção: antes tudo (ícone + texto + botão) ficava num único
+        "flex flex-wrap" com o texto usando min-w-0, então o texto era
+        espremido a uma largura mínima (às vezes uns 50px) em vez de quebrar
+        de verdade pra outra linha — resultado: cada palavra numa linha e o
+        botão sobrepondo o texto no celular.
+        Agora: ícone+texto formam um bloco (sempre lado a lado, com bastante
+        espaço pro texto quebrar normalmente), e o botão vai para uma nova
+        linha inteira no celular (w-full) e volta a ficar ao lado no desktop.
+      */}
+      <div className="relative flex flex-col sm:flex-row sm:items-center gap-4">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="grid place-items-center h-11 w-11 rounded-xl bg-gradient-to-br from-[#f7d774] to-[#c9971b] shrink-0">
+            <Crown className="h-5 w-5 text-[#2b1c00]" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-[#e6b422]">Suba de nível para o PRO MAX</p>
+            <p className="text-xs text-muted-foreground">Desbloqueie tudo isso e ainda tenha prioridade na fila de anúncios:</p>
+          </div>
         </div>
         <a
           href={KIWIFY_PRO_CHECKOUT}
           target="_blank"
           rel="noreferrer"
-          className="shrink-0 inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-bold text-[#2b1c00] bg-gradient-to-r from-[#f7d774] via-[#e6b422] to-[#c9971b] shadow-[0_0_24px_-6px_#e6b422] hover:brightness-110 transition"
+          className="shrink-0 w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-bold text-[#2b1c00] bg-gradient-to-r from-[#f7d774] via-[#e6b422] to-[#c9971b] shadow-[0_0_24px_-6px_#e6b422] hover:brightness-110 transition"
         >
           <Crown className="h-4 w-4" /> QUERO SER PRO MAX
         </a>
