@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useAppStore } from "@/lib/store";
-import { creditsState, airTimeLabel } from "@/lib/pricing";
+import { creditsState, airTimeLabel, purchasedViews } from "@/lib/pricing";
 import { toast } from "sonner";
 import {
   ArrowLeft, Eye, MousePointerClick, Percent, DollarSign, Sparkles,
