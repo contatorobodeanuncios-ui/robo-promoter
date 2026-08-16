@@ -537,6 +537,46 @@ export const getMaintenanceMode = createServerFn({ method: "GET" }).handler(
   },
 );
 
+// ============ Pausa programada do robô ============
+// Dois modos: "free" (horário livre, padrão — campanhas pagas entram na fila
+// imediatamente) e "scheduled" (pausa por N horas; ao chegar o horário de
+// retomada volta sozinho para "free").
+export interface RobotSchedule {
+  mode: "free" | "scheduled";
+  paused_at: string | null;
+  hours: number;
+  resume_at: string | null;
+}
+
+export const getRobotSchedule = createServerFn({ method: "GET" }).handler(
+  async (): Promise<RobotSchedule> => {
+    const admin = await getAdmin();
+    const { data } = await admin
+      .from("app_settings")
+      .select("value")
+      .eq("key", "robot_schedule")
+      .maybeSingle();
+    const v = (data?.value ?? null) as
+      | { mode?: string; paused_at?: string; hours?: number }
+      | null;
+    const hours = Number(v?.hours ?? 0);
+    if (v?.mode !== "scheduled" || !v?.paused_at || !(hours > 0)) {
+      return { mode: "free", paused_at: null, hours: 0, resume_at: null };
+    }
+    const resume = new Date(new Date(v.paused_at).getTime() + hours * 3_600_000);
+    // Passou do horário de retomada → volta automaticamente para horário livre.
+    if (resume.getTime() <= Date.now()) {
+      return { mode: "free", paused_at: null, hours: 0, resume_at: null };
+    }
+    return {
+      mode: "scheduled",
+      paused_at: v.paused_at,
+      hours,
+      resume_at: resume.toISOString(),
+    };
+  },
+);
+
 // ============ Upload de criativo (imagem do anúncio) ============
 // Antes: a imagem inteira ia como base64 direto numa coluna de texto do
 // banco (ineficiente, e por isso o limite baixo de ~6MB). Agora só gera o

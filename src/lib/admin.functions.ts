@@ -1207,6 +1207,44 @@ export const setMaintenanceMode = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+// ============ Pausa programada do robô ============
+export const setRobotSchedule = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        mode: z.enum(["free", "scheduled"]),
+        hours: z.number().min(0.5).max(72).optional(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    const value =
+      data.mode === "scheduled"
+        ? {
+            mode: "scheduled",
+            hours: data.hours ?? 1,
+            paused_at: new Date().toISOString(),
+          }
+        : { mode: "free", hours: 0, paused_at: null };
+    const { error } = await admin.from("app_settings").upsert({
+      key: "robot_schedule",
+      value,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) throw new Error(error.message);
+    await admin.from("admin_audit_log").insert({
+      admin_email: (context.claims as { email?: string })?.email ?? "",
+      action: data.mode === "scheduled" ? "robot_pause_on" : "robot_pause_off",
+      target_type: "app_settings",
+      target_id: "robot_schedule",
+      details: value as never,
+    });
+    return { ok: true };
+  });
+
 // ============ Link de acesso direto (magic link com slug curto) ============
 export const adminGenerateAccessLink = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
