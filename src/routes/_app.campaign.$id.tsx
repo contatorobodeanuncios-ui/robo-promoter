@@ -10,7 +10,7 @@ import {
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { BoostDialog } from "@/components/app/BoostDialog";
-import { SafeImage } from "@/components/app/SafeImage";
+import { CampaignImage } from "@/components/app/CampaignImage";
 import { downloadReportImage } from "@/lib/report-image";
 import type { Campaign } from "@/lib/store";
 
@@ -220,7 +220,7 @@ function CampaignDetail() {
               <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
             </div>
             <p className="px-4 pb-3 text-sm">{c.copy}</p>
-            <SafeImage src={c.image} alt="" className="w-full aspect-square object-cover" fallbackClassName="w-full aspect-square grid place-items-center bg-white/5 text-muted-foreground" />
+            <CampaignImage image={c.image} media={c.media} alt="" className="w-full aspect-square object-cover" fallbackClassName="w-full aspect-square grid place-items-center bg-white/5 text-muted-foreground" />
             <div className="p-3 flex items-center justify-between bg-white/[0.02] border-t border-white/5">
               <div className="min-w-0">
                 <p className="text-[11px] text-muted-foreground uppercase">

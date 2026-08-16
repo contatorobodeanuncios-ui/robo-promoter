@@ -4,10 +4,10 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Bot, MousePointerClick, DollarSign, TrendingDown, Plus, Sparkles, MapPin, CalendarDays, Users, Copy, ExternalLink, AlertTriangle, Clock } from "lucide-react";
 import { EnergyOrb } from "@/components/app/EnergyOrb";
 import { RobotMascot } from "@/components/app/RobotMascot";
-import { SafeImage } from "@/components/app/SafeImage";
+import { CampaignImage } from "@/components/app/CampaignImage";
 import { useUserDisplayName } from "@/components/app/AppShell";
 import { useAppStore, computeSummary } from "@/lib/store";
-import { creditsState, airTimeLabel } from "@/lib/pricing";
+import { creditsState, airTimeLabel, purchasedViews } from "@/lib/pricing";
 
 /** Data/hora em que a campanha foi enviada/paga pelo usuário. */
 const sentAt = (c: { started_at?: string | null; created_at?: string | null }) => {
@@ -167,7 +167,7 @@ function Dashboard() {
                   className="block hover:bg-white/[0.02] transition-colors -mx-2 px-2 rounded-lg"
                 >
                   <div className="flex items-start gap-3">
-                    <SafeImage src={c.image} alt="" className="h-14 w-14 rounded-lg object-cover border border-white/10 shrink-0" fallbackClassName="h-14 w-14 rounded-lg border border-white/10 shrink-0 grid place-items-center bg-white/5 text-muted-foreground" />
+                    <CampaignImage image={c.image} media={c.media} alt="" className="h-14 w-14 rounded-lg object-cover border border-white/10 shrink-0" fallbackClassName="h-14 w-14 rounded-lg border border-white/10 shrink-0 grid place-items-center bg-white/5 text-muted-foreground" />
                     <div className="flex-1 min-w-0 space-y-2">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
@@ -219,16 +219,16 @@ function Dashboard() {
                         <M label="Impr." value={c.impressions ? c.impressions.toLocaleString("pt-BR") : na} has={!!c.impressions} />
                         <M label="CTR" value={c.ctr ? `${c.ctr.toFixed(2)}%` : na} has={!!c.ctr} />
                         <M label="CPC" value={c.cpc ? fmtBRL(c.cpc) : na} has={!!c.cpc} />
-                        {c.credits_total ? (
-                          <M
-                            label="Créditos"
-                            value={`${creditsState(c).used.toFixed(2)}/${c.credits_total} créditos totais`}
-                            has
-                          />
-                        ) : (
-                          <M label="Gasto" value={c.spent ? fmtBRL(c.spent) : na} has={!!c.spent} />
-                        )}
-                        <M label="CPM" value={c.cpm ? fmtBRL(c.cpm) : na} has={!!c.cpm} />
+                        <M
+                          label="Créditos"
+                          value={`${creditsState(c).used.toFixed(2)}/${c.credits_total ?? c.days} créditos`}
+                          has
+                        />
+                        <M
+                          label="Visualizações"
+                          value={`${(c.impressions ?? 0).toLocaleString("pt-BR")}/${purchasedViews(c).toLocaleString("pt-BR")}`}
+                          has
+                        />
                         <M label="Freq." value={c.frequency ? c.frequency.toFixed(2) : na} has={!!c.frequency} />
                         <M label="C/Result." value={c.cost_per_result ? fmtBRL(c.cost_per_result) : na} has={!!c.cost_per_result} />
                         <M label="ROI" value={c.revenue && c.spent ? `${(((c.revenue - c.spent) / c.spent) * 100).toFixed(1)}%` : na} has={!!(c.revenue && c.spent)} />
