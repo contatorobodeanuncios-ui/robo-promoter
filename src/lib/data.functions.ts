@@ -472,9 +472,10 @@ export const updateCampaign = createServerFn({ method: "POST" })
     const {
       spent: _s, clicks: _c, impressions: _i, ctr: _ct, cpc: _cp,
       funding_type: _ft, pix_total_budget: _ptb,
+      views: _v, order_bump: _ob,
       ...safe
     } = data.patch;
-    void _s; void _c; void _i; void _ct; void _cp; void _ft; void _ptb;
+    void _s; void _c; void _i; void _ct; void _cp; void _ft; void _ptb; void _v; void _ob;
     const { error } = await supabase.from("campaigns").update(safe).eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };

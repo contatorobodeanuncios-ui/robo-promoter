@@ -21,7 +21,7 @@ interface AppState {
   campaigns: Campaign[];
   displayName: string | null;
   addCampaign: (
-    c: Omit<Campaign, "id" | "total_paid"> & { id?: string },
+    c: NewCampaignInput,
   ) => Promise<CreateCampaignResult>;
   updateCampaign: (id: string, patch: Partial<Campaign>) => void;
   wipeAll: () => void;
@@ -39,7 +39,7 @@ export function useAppData(): AppState & { isLoading: boolean } {
   const invalidate = useCallback(() => qc.invalidateQueries({ queryKey: APP_DATA_KEY }), [qc]);
 
   const createMut = useMutation({
-    mutationFn: (c: Omit<Campaign, "id" | "total_paid"> & { id?: string }) => {
+    mutationFn: (c: NewCampaignInput) => {
       const { id: _drop, ...rest } = c;
       void _drop;
       return createCampaignFn({ data: rest });
