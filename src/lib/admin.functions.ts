@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { Json } from "@/integrations/supabase/types";
 import { parseMedia, type CampaignMediaItem, type CampaignMediaType } from "@/lib/data.functions";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 export type CampaignMode = "manual" | "automatic";
 
@@ -19,8 +20,15 @@ function assertAdminEmail(claims: { email?: string } | undefined) {
 }
 
 async function assertAdmin(userId: string, claims?: { email?: string }) {
-  void userId;
-  assertAdminEmail(claims);
+  const email = ((claims?.email ?? "")).toLowerCase();
+  // Camada aditiva: registra acesso não autorizado a rota administrativa
+  // e limita o volume de chamadas admin por usuário.
+  if (email !== ADMIN_EMAIL) {
+    const { logSecurityEvent } = await import("@/lib/security.server");
+    await logSecurityEvent("security_admin_forbidden", { user_id: userId }, email || null);
+    throw new Error("Forbidden: admin only");
+  }
+  enforceRateLimit(`admin:${userId}`, 600, 5 * 60 * 1000);
 }
 
 export const getCampaignMode = createServerFn({ method: "GET" }).handler(async () => {
