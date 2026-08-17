@@ -152,6 +152,25 @@ function ExecPage() {
         </div>
       </div>
 
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => clearAll(["meta_budget", "platform_profit", "revenue", "pending_revenue", "conversion_rate", "total_users", "campaigns_running", "total_spent", "open_support", "credits_gross", "credits_profit"])}
+          className="text-xs px-3 py-1.5 rounded-full border border-red-500/40 text-red-200 hover:bg-red-500/10 inline-flex items-center gap-1"
+        >
+          <Eraser className="h-3.5 w-3.5" /> Limpar todas as métricas
+        </button>
+        {hidden.length > 0 && (
+          <button
+            type="button"
+            onClick={restoreAll}
+            className="text-xs px-3 py-1.5 rounded-full border border-white/10 hover:bg-white/5"
+          >
+            Restaurar métricas
+          </button>
+        )}
+      </div>
+
       {q.isLoading || !d ? (
         <div className="text-sm text-muted-foreground">Carregando métricas...</div>
       ) : (
@@ -160,40 +179,40 @@ function ExecPage() {
             <Card
               icon={PieChart}
               tone="info"
-              label="Orçamento Meta (anúncios)"
+              metricKey="meta_budget" label="Orçamento Meta (anúncios)"
               value={fmtBRL(d.meta_budget)}
               sub="apenas campanhas pagas"
             />
             <Card
               icon={DollarSign}
               tone="positive"
-              label="Lucro da plataforma"
+              metricKey="platform_profit" label="Lucro da plataforma"
               value={fmtBRL(d.platform_profit)}
               sub={`Serviço ${fmtBRL(d.service_fees)} · Plataforma ${fmtBRL(d.platform_fees)}`}
             />
-            <Card icon={DollarSign} tone="positive" label="Receita real (aprovada)" value={fmtBRL(d.revenue)} sub={`Ticket médio ${fmtBRL(d.avg_ticket)}`} />
+            <Card icon={DollarSign} tone="positive" metricKey="revenue" label="Receita real (aprovada)" value={fmtBRL(d.revenue)} sub={`Ticket médio ${fmtBRL(d.avg_ticket)}`} />
             <Card
               icon={Clock}
-              label="Aguardando pagamento"
+              metricKey="pending_revenue" label="Aguardando pagamento"
               value={fmtBRL(d.pending_revenue)}
               sub={`${d.pending_count} cobrança${d.pending_count === 1 ? "" : "s"} não confirmada${d.pending_count === 1 ? "" : "s"}`}
             />
-            <Card icon={TrendingUp} tone="info" label="Conversão" value={`${(d.conversion_rate * 100).toFixed(1)}%`} sub="pagos / total gerado" />
-            <Card icon={Users} label="Usuários" value={String(d.total_users)} sub={`${d.active_users} aprovados`} />
-            <Card icon={Zap} tone="positive" label="Campanhas rodando" value={String(d.campaigns_running)} />
-            <Card icon={PieChart} tone="negative" label="Gasto em anúncios" value={fmtBRL(d.total_spent)} />
-            <Card icon={MessageCircle} label="Suporte aberto" value={String(d.open_support)} />
+            <Card icon={TrendingUp} tone="info" metricKey="conversion_rate" label="Conversão" value={`${(d.conversion_rate * 100).toFixed(1)}%`} sub="pagos / total gerado" />
+            <Card icon={Users} metricKey="total_users" label="Usuários" value={String(d.total_users)} sub={`${d.active_users} aprovados`} />
+            <Card icon={Zap} tone="positive" metricKey="campaigns_running" label="Campanhas rodando" value={String(d.campaigns_running)} />
+            <Card icon={PieChart} tone="negative" metricKey="total_spent" label="Gasto em anúncios" value={fmtBRL(d.total_spent)} />
+            <Card icon={MessageCircle} metricKey="open_support" label="Suporte aberto" value={String(d.open_support)} />
             <Card
               icon={Coins}
               tone="info"
-              label="Créditos — faturamento"
+              metricKey="credits_gross" label="Créditos — faturamento"
               value={fmtBRL(d.credits_gross)}
               sub={`${d.credits_campaigns} pacote${d.credits_campaigns === 1 ? "" : "s"} pago${d.credits_campaigns === 1 ? "" : "s"}`}
             />
             <Card
               icon={Coins}
               tone="positive"
-              label="Créditos — lucro líquido"
+              metricKey="credits_profit" label="Créditos — lucro líquido"
               value={fmtBRL(d.credits_profit)}
               sub={`Mídia ${fmtBRL(d.credits_media)} · Custos ${fmtBRL(d.credits_costs)}`}
             />
