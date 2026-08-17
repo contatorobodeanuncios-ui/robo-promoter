@@ -66,15 +66,44 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
   return brandedErrorResponse();
 }
 
+// ============ Cabeçalhos de segurança HTTP (camada aditiva) ============
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://connect.facebook.net https://*.lovable.dev https://*.lovable.app",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "img-src 'self' data: blob: https:",
+  "media-src 'self' blob: https:",
+  "connect-src 'self' https: wss:",
+  "frame-src 'self' https:",
+  "frame-ancestors 'self' https://lovable.dev https://*.lovable.dev https://*.lovable.app",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join("; ");
+
+function withSecurityHeaders(response: Response): Response {
+  const headers = new Headers(response.headers);
+  if (!headers.has("content-security-policy")) headers.set("content-security-policy", CSP);
+  headers.set("x-content-type-options", "nosniff");
+  headers.set("referrer-policy", "strict-origin-when-cross-origin");
+  headers.set("strict-transport-security", "max-age=31536000; includeSubDomains");
+  headers.set("x-frame-options", "SAMEORIGIN");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
-      return await normalizeCatastrophicSsrResponse(response);
+      return withSecurityHeaders(await normalizeCatastrophicSsrResponse(response));
     } catch (error) {
       console.error(error);
-      return brandedErrorResponse();
+      return withSecurityHeaders(brandedErrorResponse());
     }
   },
 };
