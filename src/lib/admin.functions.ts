@@ -1632,3 +1632,20 @@ export const adminListUserActivity = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
     return (rows ?? []) as AdminUserActivityRow[];
   });
+
+// ============ Meta Pixel: salvar o ID no app_settings ============
+export const setMetaPixelId = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ pixel_id: z.string().max(64) }).parse(d))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const supabaseAdmin = await getSupabaseAdmin();
+    const pixel = data.pixel_id.trim();
+    const { error } = await supabaseAdmin.from("app_settings").upsert({
+      key: "meta_pixel_id",
+      value: { pixel_id: pixel },
+      updated_at: new Date().toISOString(),
+    });
+    if (error) throw new Error(error.message);
+    return { pixel_id: pixel };
+  });
