@@ -355,6 +355,17 @@ function CreateWizard() {
     }
   };
 
+  // Meta Pixel: InitiateCheckout no clique que leva ao fluxo de pagamento.
+  // Cliques repetidos nos 2s seguintes são ignorados (não duplica evento).
+  const lastCheckoutClick = useRef(0);
+  const handleCheckoutClick = () => {
+    const now = Date.now();
+    if (now - lastCheckoutClick.current < 2000) return;
+    lastCheckoutClick.current = now;
+    fbTrack("InitiateCheckout");
+    void launch();
+  };
+
   const canNext =
     step === 1 ||
     (step === 2 && files.length > 0 && scanState === "done" && (analysis?.compliant ?? true)) ||
@@ -818,12 +829,7 @@ function CreateWizard() {
               <p className="text-sm text-muted-foreground">
                 Você estará recebendo {days} créditos, referente à quantidade de dias que o Robô irá rodar seus anúncios.
               </p>
-              {robotResumeAt && (
-                <p className="mt-3 glass rounded-xl p-3 text-sm flex items-start gap-2">
-                  <Clock className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                  O robô está programado para iniciar as próximas campanhas às {robotResumeAt}
-                </p>
-              )}
+              <RobotResumeNotice resumeAt={robotQ.data?.mode === "scheduled" ? robotQ.data.resume_at : null} />
             </div>
             <div className="glass rounded-2xl p-5 border border-primary/40 bg-primary/5 space-y-3">
               {bumpAdded ? (
@@ -1118,7 +1124,7 @@ function CreateWizard() {
                 <span className="text-lg font-bold text-gradient">{fmtMoney(packageTotal)}</span>
               </div>
             </div>
-            <Button variant="neon" size="lg" className="w-full h-14 text-base animate-pulse-glow" onClick={launch} disabled={launching}>
+            <Button variant="neon" size="lg" className="w-full h-14 text-base animate-pulse-glow" onClick={handleCheckoutClick} disabled={launching}>
               {launching ? <><Loader2 className="animate-spin" /> {uploadProgress ?? "Ativando robô..."}</> : <><Rocket /> {fundingType === "pix_dedicated" ? "Gerar PIX e Lançar" : "Ativar Robô e Lançar Anúncio"}</>}
             </Button>
           </div>
