@@ -1,4 +1,5 @@
-import { getRobotSchedule } from "@/lib/data.functions";
+import { getRobotSchedule, getMetaPixelId } from "@/lib/data.functions";
+import { adminListSecurityEvents } from "@/lib/security.functions";
 import { createFileRoute, redirect, useNavigate, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -58,6 +59,8 @@ import {
   type MetaLinkAuditRow,
   type AIReviewRow,
   setRobotSchedule,
+  setMetaPixelId,
+  adminListUserActivity,
 } from "@/lib/admin.functions";
 import { getProMaxLinks, adminSetProMaxLinks } from "@/lib/promax.functions";
 import { adminCampaignValues, airTimeLabel } from "@/lib/pricing";
@@ -610,6 +613,8 @@ function AdminDevPage() {
         {/* ============ Aba: Configurações Internas ============ */}
         <TabsContent value="settings" className="space-y-6 mt-6">
           <RobotScheduleCard />
+          <MetaPixelCard />
+          <SecurityEventsCard />
           <ProMaxLinksCard />
           <MetaHealthCard />
           <PixAttemptsSection />
@@ -2136,6 +2141,7 @@ function ProfileDialog({ client, onClose }: { client: AdminClientRow; onClose: (
             <Label className="text-xs">Telefone</Label>
             <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(00) 00000-0000" />
           </div>
+          <ClientAccessActivity userId={client.id} />
         </div>
         <DialogFooter>
           <Button variant="glass" size="sm" onClick={onClose}>Cancelar</Button>
@@ -3049,6 +3055,142 @@ function RobotScheduleCard() {
           ? `⏸ Pausado. Retomada às ${resume} — os clientes veem "O robô está programado para iniciar as próximas campanhas às ${resume}". Ao chegar o horário, volta sozinho para Horário livre.`
           : "▶ Horário livre: campanhas pagas chegam para colocar no ar imediatamente, sem aviso de espera."}
       </p>
+    </section>
+  );
+}
+
+
+/** Há quanto tempo o cliente não entra + últimas 5 entradas no app. */
+function ClientAccessActivity({ userId }: { userId: string }) {
+  const fn = useServerFn(adminListUserActivity);
+  const q = useQuery({
+    queryKey: ["admin-user-activity", userId],
+    queryFn: () => fn({ data: { user_id: userId, limit: 200 } }),
+  });
+
+  const sessions = (q.data ?? []).filter(
+    (e) => e.kind === "session_start" || e.kind === "login" || e.kind === "session",
+  );
+  const entries = (sessions.length > 0 ? sessions : (q.data ?? [])).slice(0, 5);
+  const last = entries[0]?.created_at ?? null;
+
+  const ago = (iso: string) => {
+    const diff = Date.now() - new Date(iso).getTime();
+    const min = Math.floor(diff / 60_000);
+    if (min < 5) return "online agora";
+    if (min < 60) return `há ${min} minutos`;
+    const h = Math.floor(min / 60);
+    if (h < 24) return `há ${h} hora${h === 1 ? "" : "s"}`;
+    const d = Math.floor(h / 24);
+    return `há ${d} dia${d === 1 ? "" : "s"}`;
+  };
+
+  return (
+    <div className="rounded-xl border border-white/10 p-3 space-y-2">
+      <p className="text-xs uppercase tracking-wider text-muted-foreground">Atividade de acesso</p>
+      {q.isLoading ? (
+        <p className="text-xs text-muted-foreground">Carregando...</p>
+      ) : !last ? (
+        <p className="text-xs text-muted-foreground">Nenhuma entrada registrada.</p>
+      ) : (
+        <>
+          <p className="text-sm font-medium">Última entrada: {ago(last)}</p>
+          <ul className="space-y-1">
+            {entries.map((e) => (
+              <li key={e.id} className="text-xs text-muted-foreground">
+                {new Date(e.created_at).toLocaleString("pt-BR")}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Configuração do Meta Pixel (ID salvo no banco). */
+function MetaPixelCard() {
+  const qc = useQueryClient();
+  const getFn = useServerFn(getMetaPixelId);
+  const setFn = useServerFn(setMetaPixelId);
+  const q = useQuery({ queryKey: ["meta-pixel-id"], queryFn: () => getFn() });
+  const [value, setValue] = useState<string | null>(null);
+  const pixel = value ?? q.data?.pixel_id ?? "";
+
+  const mut = useMutation({
+    mutationFn: (pixel_id: string) => setFn({ data: { pixel_id } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["meta-pixel-id"] });
+      toast.success("Meta Pixel salvo", { description: "Vale a partir do próximo carregamento do app." });
+    },
+    onError: (e: Error) => toast.error("Falha ao salvar", { description: e.message }),
+  });
+
+  return (
+    <section className="glass-strong rounded-2xl p-6 space-y-3 border border-white/10">
+      <div>
+        <p className="text-xs uppercase tracking-wider text-muted-foreground">Integrações</p>
+        <h2 className="font-semibold mt-1">Meta Pixel</h2>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          value={pixel}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="Ex.: 1234567890123456"
+          className="max-w-xs"
+        />
+        <Button variant="neon" size="sm" disabled={mut.isPending} onClick={() => mut.mutate(pixel.trim())}>
+          {mut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+          Salvar
+        </Button>
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        Deixe em branco para desativar o Pixel — nenhum evento é disparado sem ID configurado.
+      </p>
+    </section>
+  );
+}
+
+/** Log de atividade suspeita (somente leitura). */
+function SecurityEventsCard() {
+  const fn = useServerFn(adminListSecurityEvents);
+  const q = useQuery({
+    queryKey: ["admin-security-events"],
+    queryFn: () => fn(),
+    refetchInterval: 120_000,
+  });
+  const rows = q.data ?? [];
+
+  const labels: Record<string, string> = {
+    security_login_failed: "Login malsucedido",
+    security_login_rate_limited: "Excesso de tentativas (bloqueio temporário)",
+    security_admin_forbidden: "Acesso admin negado",
+    security_rate_limited: "Excesso de requisições",
+  };
+
+  return (
+    <section className="glass-strong rounded-2xl p-6 space-y-3 border border-white/10">
+      <div>
+        <p className="text-xs uppercase tracking-wider text-muted-foreground">Segurança</p>
+        <h2 className="font-semibold mt-1">Atividade suspeita</h2>
+      </div>
+      {q.isLoading ? (
+        <p className="text-xs text-muted-foreground">Carregando...</p>
+      ) : rows.length === 0 ? (
+        <p className="text-xs text-muted-foreground">Nenhum evento registrado.</p>
+      ) : (
+        <ul className="space-y-1.5 max-h-72 overflow-auto">
+          {rows.map((r) => (
+            <li key={r.id} className="text-xs border-b border-white/5 pb-1.5">
+              <span className="font-medium">{labels[r.action] ?? r.action}</span>{" "}
+              <span className="text-muted-foreground">· {r.actor}</span>
+              <div className="text-[11px] text-muted-foreground">
+                {new Date(r.created_at).toLocaleString("pt-BR")} · {r.details}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
