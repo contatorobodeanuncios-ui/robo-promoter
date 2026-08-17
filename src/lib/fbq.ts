@@ -29,7 +29,7 @@ export function loadPixel(pixelId: string) {
     s.parentNode.insertBefore(t, s);
   })(window, document, "script", "https://connect.facebook.net/en_US/fbevents.js");
   /* eslint-enable */
-  window.fbq?.("init", pixelId);
+  (window as unknown as { fbq?: (...a: unknown[]) => void }).fbq?.("init", pixelId);
 }
 
 export function fbTrack(event: string) {
