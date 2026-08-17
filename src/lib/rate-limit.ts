@@ -37,3 +37,24 @@ export function ipFromRequest(request: Request): string {
     "unknown"
   );
 }
+
+/**
+ * Camada aditiva: aplica o limite e lança um erro genérico quando estourado.
+ * Não altera nenhuma lógica existente — roda ANTES dela.
+ */
+export class RateLimitError extends Error {
+  constructor() {
+    super("Muitas tentativas, tente novamente em alguns minutos.");
+    this.name = "RateLimitError";
+  }
+}
+
+export function enforceRateLimit(
+  key: string,
+  limit = 10,
+  windowMs = 5 * 60 * 1000,
+): RateLimitResult {
+  const res = rateLimit(key, limit, windowMs);
+  if (!res.ok) throw new RateLimitError();
+  return res;
+}
