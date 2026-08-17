@@ -5,6 +5,10 @@ import { useState } from "react";
 import { ArrowLeft, TrendingUp, Users, Zap, DollarSign, PieChart, MessageCircle, Clock, Coins } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getExecDashboard } from "@/lib/support.functions";
+import { getExecDashboardHidden, setExecDashboardHidden } from "@/lib/admin.functions";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { X, Eraser } from "lucide-react";
 import {
   ResponsiveContainer,
   BarChart,
@@ -33,6 +37,28 @@ type Period = "7d" | "30d" | "90d";
 
 function ExecPage() {
   const fn = useServerFn(getExecDashboard);
+  const qc = useQueryClient();
+  const hiddenFn = useServerFn(getExecDashboardHidden);
+  const setHiddenFn = useServerFn(setExecDashboardHidden);
+  const hiddenQ = useQuery({ queryKey: ["exec-hidden"], queryFn: () => hiddenFn() });
+  const hidden = hiddenQ.data?.hidden ?? [];
+  const hideMut = useMutation({
+    mutationFn: (next: string[]) => setHiddenFn({ data: { hidden: next } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["exec-hidden"] });
+      toast.success("Métricas atualizadas");
+    },
+    onError: () => toast.error("Não foi possível limpar agora. Tente novamente."),
+  });
+  const clearOne = (key: string) => {
+    if (!window.confirm("Tem certeza que deseja limpar esta métrica?")) return;
+    hideMut.mutate(Array.from(new Set([...hidden, key])));
+  };
+  const clearAll = (keys: string[]) => {
+    if (!window.confirm("Tem certeza que deseja limpar TODAS as métricas?")) return;
+    hideMut.mutate(keys);
+  };
+  const restoreAll = () => hideMut.mutate([]);
   const [period, setPeriod] = useState<Period>("30d");
   const q = useQuery({
     queryKey: ["admin-exec", period],
@@ -47,12 +73,14 @@ function ExecPage() {
     value,
     sub,
     tone = "default",
+    metricKey,
   }: {
     icon: React.ElementType;
     label: string;
     value: string;
     sub?: string;
     tone?: "default" | "positive" | "negative" | "info";
+    metricKey?: string;
   }) => {
     const tones = {
       default: "border-white/10 bg-white/[0.02]",
@@ -66,13 +94,25 @@ function ExecPage() {
       negative: "text-red-400",
       info: "text-sky-400",
     };
+    const isHidden = !!metricKey && hidden.includes(metricKey);
     return (
-      <div className={`glass rounded-xl p-4 border ${tones[tone]}`}>
+      <div className={`glass rounded-xl p-4 border relative ${tones[tone]}`}>
+        {metricKey && !isHidden && (
+          <button
+            type="button"
+            title="Limpar esta métrica"
+            onClick={() => clearOne(metricKey)}
+            className="absolute top-2 right-2 p-1 rounded hover:bg-white/10 text-muted-foreground"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
         <div className="flex items-center gap-2 text-xs">
           <Icon className={`h-4 w-4 ${iconTone[tone]}`} /> {label}
         </div>
-        <div className="mt-2 text-2xl font-bold">{value}</div>
-        {sub && <div className="text-[11px] opacity-80 mt-1">{sub}</div>}
+        <div className="mt-2 text-2xl font-bold">{isHidden ? "—" : value}</div>
+        {sub && !isHidden && <div className="text-[11px] opacity-80 mt-1">{sub}</div>}
+        {isHidden && <div className="text-[11px] opacity-70 mt-1">Métrica limpa</div>}
       </div>
     );
   };
