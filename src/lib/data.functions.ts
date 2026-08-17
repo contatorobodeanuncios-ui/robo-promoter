@@ -623,3 +623,17 @@ export const getMyCreativeSignedUrls = createServerFn({ method: "POST" })
     }
     return { urls };
   });
+
+// ============ Meta Pixel (ID configurável pelo admin) ============
+export const getMetaPixelId = createServerFn({ method: "GET" }).handler(
+  async (): Promise<{ pixel_id: string }> => {
+    const admin = await getAdmin();
+    const { data } = await admin
+      .from("app_settings")
+      .select("value")
+      .eq("key", "meta_pixel_id")
+      .maybeSingle();
+    const v = (data?.value ?? null) as { pixel_id?: string } | null;
+    return { pixel_id: (v?.pixel_id ?? "").trim() };
+  },
+);

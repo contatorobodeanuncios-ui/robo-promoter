@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { campaignPricing, round2 } from "@/lib/pricing";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 
 async function getAdmin() {
@@ -474,6 +475,8 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
     }).parse(d),
   )
   .handler(async ({ data, context }) => {
+    // Camada aditiva: no máximo 10 gerações de cobrança a cada 5 min por usuário.
+    enforceRateLimit(`pay:create:${context.userId}`, 10, 5 * 60 * 1000);
     const admin = await getAdmin();
 
     const { data: prof } = await admin
@@ -776,6 +779,7 @@ export const getPaymentRequestStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
+    enforceRateLimit(`pay:status:${context.userId}`, 120, 5 * 60 * 1000);
     const admin = await getAdmin();
     const { data: pr, error } = await admin
       .from("payment_requests")

@@ -9,6 +9,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { submitAccessRequest } from "@/lib/admin.functions";
 import { lovable } from "@/integrations/lovable";
 import { toast } from "sonner";
+import { guardAuthAttempt } from "@/lib/security.functions";
+import { friendlyMessage } from "@/lib/errors";
+import { fbTrackOnce } from "@/lib/fbq";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -28,6 +31,7 @@ async function routeAfterLogin(
   displayName: string | null,
   nav: ReturnType<typeof useNavigate>,
 ) {
+  fbTrackOnce("CompleteRegistration", "fb_registration_tracked");
   const isAdmin = (email ?? "").toLowerCase() === ADMIN_EMAIL;
   if (isAdmin) {
     nav({ to: "/dashboard", replace: true });
@@ -102,6 +106,15 @@ function LoginPage() {
     e.preventDefault();
     setLoading(true);
     try {
+      // Camada de proteção que roda ANTES da lógica de login/cadastro.
+      const guard = await guardAuthAttempt({
+        data: { action: mode === "signup" ? "signup" : "login", email },
+      }).catch(() => ({ ok: true, message: null as string | null }));
+      if (!guard.ok) {
+        toast.error("Aguarde", { description: guard.message ?? "Muitas tentativas, tente novamente em alguns minutos." });
+        setLoading(false);
+        return;
+      }
       if (mode === "signup") {
         if (!acceptedTerms) {
           toast.error("Aceite necessário", { description: "Você precisa aceitar os Termos e a Política de Privacidade." });
@@ -127,8 +140,10 @@ function LoginPage() {
         if (error) throw error;
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Erro ao autenticar";
-      toast.error("Falha", { description: msg });
+      void guardAuthAttempt({
+        data: { action: mode === "signup" ? "signup" : "login", email, failed: true },
+      }).catch(() => {});
+      toast.error("Falha", { description: friendlyMessage(err, "Não foi possível entrar. Tente novamente.") });
     } finally {
       setLoading(false);
     }
@@ -140,7 +155,7 @@ function LoginPage() {
       redirect_uri: window.location.origin + "/login",
     });
     if (result.error) {
-      toast.error("Falha no login com Google", { description: String(result.error.message ?? result.error) });
+      toast.error("Falha no login com Google", { description: friendlyMessage(result.error, "Não foi possível entrar com o Google. Tente novamente.") });
       setLoading(false);
     }
   };
@@ -155,15 +170,18 @@ function LoginPage() {
             <Sparkles className="h-3 w-3 text-primary" /> IA + Facebook Ads
           </div>
           <h1 className="text-4xl font-bold leading-tight">
-            Seu robô lança e <span className="text-gradient">otimiza anúncios</span> enquanto você atende clientes.
+            Pare de perder dinheiro tentando <span className="text-gradient">entender de tráfego</span>.
           </h1>
           <p className="text-muted-foreground">
-            Crie campanhas em 4 passos. A IA analisa criativos, escolhe o público e ajusta lances em tempo real.
+            Envie seu criativo, escolha o público e o robô cuida do resto: análise, lançamento e
+            otimização automática das suas campanhas — sem Gerenciador confuso, sem Pixel, sem
+            agência cobrando caro.
           </p>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             {[
               { icon: Bot, label: "Análise IA de criativos" },
-              { icon: Zap, label: "Lançamento em 60s" },
+              { icon: Zap, label: "Anúncio no ar em minutos" },
+              { icon: Sparkles, label: "Sem precisar entender de tráfego" },
             ].map(({ icon: I, label }) => (
               <div key={label} className="glass rounded-xl p-4">
                 <I className="h-5 w-5 text-primary mb-2" />
@@ -171,6 +189,9 @@ function LoginPage() {
               </div>
             ))}
           </div>
+          <p className="text-xs text-muted-foreground">
+            Pagamento seguro · Suporte rápido · Cancele quando quiser
+          </p>
         </div>
         <p className="text-xs text-muted-foreground">© 2026 Robô de Lucro — Automação inteligente de anúncios</p>
       </div>
@@ -239,7 +260,7 @@ function LoginPage() {
             )}
             <Button type="submit" variant="neon" className="w-full h-11" disabled={loading || (mode === "signup" && !acceptedTerms)}>
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-              {mode === "signin" ? "Entrar no painel" : "Criar conta"}
+              {mode === "signin" ? "Entrar e ver minhas campanhas" : "Criar conta"}
             </Button>
           </form>
 
@@ -251,7 +272,7 @@ function LoginPage() {
 
           <p className="text-center text-xs text-muted-foreground">
             {mode === "signin" ? (
-              <>Novo por aqui? <button type="button" onClick={() => setMode("signup")} className="text-primary hover:underline">Criar conta</button></>
+              <>Ainda não tem robô? <button type="button" onClick={() => setMode("signup")} className="text-primary hover:underline">Criar minha conta grátis</button></>
             ) : (
               <>Já tem conta? <button type="button" onClick={() => setMode("signin")} className="text-primary hover:underline">Entrar</button></>
             )}

@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ import { campaignPricing, mediaBudgetForViews, isCreditsLike, MIN_DAYS, packageP
 import { CopyModal } from "@/components/app/ProMaxMenu";
 
 import { supabase } from "@/integrations/supabase/client";
+import { fbTrack } from "@/lib/fbq";
 
 export const Route = createFileRoute("/_app/create")({
   head: () => ({
@@ -61,10 +62,6 @@ function CreateWizard() {
     queryFn: () => robotScheduleFn(),
     staleTime: 30_000,
   });
-  const robotResumeAt =
-    robotQ.data?.mode === "scheduled" && robotQ.data.resume_at
-      ? new Date(robotQ.data.resume_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
-      : null;
 
   const maintenanceQ = useQuery({
     queryKey: ["maintenance-mode"],
@@ -353,6 +350,17 @@ function CreateWizard() {
     } finally {
       setLaunching(false);
     }
+  };
+
+  // Meta Pixel: InitiateCheckout no clique que leva ao fluxo de pagamento.
+  // Cliques repetidos nos 2s seguintes são ignorados (não duplica evento).
+  const lastCheckoutClick = useRef(0);
+  const handleCheckoutClick = () => {
+    const now = Date.now();
+    if (now - lastCheckoutClick.current < 2000) return;
+    lastCheckoutClick.current = now;
+    fbTrack("InitiateCheckout");
+    void launch();
   };
 
   const canNext =
@@ -818,12 +826,7 @@ function CreateWizard() {
               <p className="text-sm text-muted-foreground">
                 Você estará recebendo {days} créditos, referente à quantidade de dias que o Robô irá rodar seus anúncios.
               </p>
-              {robotResumeAt && (
-                <p className="mt-3 glass rounded-xl p-3 text-sm flex items-start gap-2">
-                  <Clock className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                  O robô está programado para iniciar as próximas campanhas às {robotResumeAt}
-                </p>
-              )}
+              <RobotResumeNotice resumeAt={robotQ.data?.mode === "scheduled" ? robotQ.data.resume_at : null} />
             </div>
             <div className="glass rounded-2xl p-5 border border-primary/40 bg-primary/5 space-y-3">
               {bumpAdded ? (
@@ -1118,7 +1121,7 @@ function CreateWizard() {
                 <span className="text-lg font-bold text-gradient">{fmtMoney(packageTotal)}</span>
               </div>
             </div>
-            <Button variant="neon" size="lg" className="w-full h-14 text-base animate-pulse-glow" onClick={launch} disabled={launching}>
+            <Button variant="neon" size="lg" className="w-full h-14 text-base animate-pulse-glow" onClick={handleCheckoutClick} disabled={launching}>
               {launching ? <><Loader2 className="animate-spin" /> {uploadProgress ?? "Ativando robô..."}</> : <><Rocket /> {fundingType === "pix_dedicated" ? "Gerar PIX e Lançar" : "Ativar Robô e Lançar Anúncio"}</>}
             </Button>
           </div>
@@ -1249,5 +1252,41 @@ function AiAnalysisPanel({
         Trocar imagem
       </button>
     </div>
+  );
+}
+
+/**
+ * Aviso da pausa programada com countdown ao vivo até a retomada do robô
+ * (atualiza a cada segundo, sem precisar recarregar a página).
+ */
+function RobotResumeNotice({ resumeAt }: { resumeAt: string | null | undefined }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!resumeAt) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [resumeAt]);
+
+  if (!resumeAt) return null;
+  const target = new Date(resumeAt).getTime();
+  const diff = Math.max(0, target - now);
+  if (diff <= 0) return null;
+  const h = Math.floor(diff / 3_600_000);
+  const m = Math.floor((diff % 3_600_000) / 60_000);
+  const sec = Math.floor((diff % 60_000) / 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const hora = new Date(resumeAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+
+  return (
+    <p className="mt-3 glass rounded-xl p-3 text-sm flex items-start gap-2">
+      <Clock className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+      <span>
+        O robô está programado para iniciar as próximas campanhas às {hora}
+        <br />
+        <span className="text-xs text-muted-foreground">
+          Retomada em {pad(h)}:{pad(m)}:{pad(sec)}
+        </span>
+      </span>
+    </p>
   );
 }
