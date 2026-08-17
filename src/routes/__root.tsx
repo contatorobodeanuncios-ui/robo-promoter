@@ -10,6 +10,7 @@ import {
 
 import appCss from "../styles.css?url";
 import { Toaster } from "@/components/ui/sonner";
+import { MetaPixel } from "@/components/app/MetaPixel";
 
 function NotFoundComponent() {
   return (
@@ -128,6 +129,7 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <MetaPixel />
       <Outlet />
       <Toaster theme="dark" position="top-right" richColors />
     </QueryClientProvider>
