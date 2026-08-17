@@ -1,4 +1,5 @@
-import { createServerFn, getRequest } from "@tanstack/react-start";
+import { createServerFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { enforceRateLimit, ipFromRequest, RateLimitError } from "@/lib/rate-limit";
@@ -54,7 +55,7 @@ export interface SecurityEventRow {
   id: string;
   action: string;
   actor: string;
-  details: Record<string, unknown>;
+  details: string;
   created_at: string;
 }
 
@@ -79,7 +80,7 @@ export const adminListSecurityEvents = createServerFn({ method: "GET" })
       id: r.id,
       action: r.action,
       actor: r.admin_email,
-      details: (r.details ?? {}) as Record<string, unknown>,
+      details: JSON.stringify(r.details ?? {}),
       created_at: r.created_at,
     }));
   });
