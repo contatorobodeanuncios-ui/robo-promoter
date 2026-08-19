@@ -20,7 +20,12 @@ function assertAdminEmail(claims: { email?: string } | undefined) {
 }
 
 async function assertAdmin(userId: string, claims?: { email?: string }) {
-  const email = ((claims?.email ?? "")).toLowerCase();
+  let email = ((claims?.email ?? "")).toLowerCase();
+  if (!email) {
+    const supabaseAdmin = await getSupabaseAdmin();
+    const { data } = await supabaseAdmin.auth.admin.getUserById(userId);
+    email = (data?.user?.email ?? "").toLowerCase();
+  }
   // Camada aditiva: registra acesso não autorizado a rota administrativa
   // e limita o volume de chamadas admin por usuário.
   if (email !== ADMIN_EMAIL) {
@@ -30,6 +35,7 @@ async function assertAdmin(userId: string, claims?: { email?: string }) {
   }
   enforceRateLimit(`admin:${userId}`, 600, 5 * 60 * 1000);
 }
+
 
 export const getCampaignMode = createServerFn({ method: "GET" }).handler(async () => {
   const supabaseAdmin = await getSupabaseAdmin();
@@ -46,9 +52,17 @@ export const getCampaignMode = createServerFn({ method: "GET" }).handler(async (
 export const checkIsAdmin = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const email = ((context.claims as { email?: string } | undefined)?.email ?? "").toLowerCase();
+    let email = ((context.claims as { email?: string } | undefined)?.email ?? "").toLowerCase();
+    if (!email) {
+      // Alguns tokens não trazem o claim `email`; consulta o usuário para não
+      // bloquear o admin indevidamente.
+      const supabaseAdmin = await getSupabaseAdmin();
+      const { data } = await supabaseAdmin.auth.admin.getUserById(context.userId);
+      email = (data?.user?.email ?? "").toLowerCase();
+    }
     return { isAdmin: email === ADMIN_EMAIL };
   });
+
 
 export const setCampaignMode = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
