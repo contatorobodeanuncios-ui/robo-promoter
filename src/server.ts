@@ -69,14 +69,15 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 // ============ Cabeçalhos de segurança HTTP (camada aditiva) ============
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://connect.facebook.net https://*.lovable.dev https://*.lovable.app",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://connect.facebook.net https://*.lovable.dev https://*.lovable.app https://*.lovableproject.com",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
   "img-src 'self' data: blob: https:",
   "media-src 'self' blob: https:",
   "connect-src 'self' https: wss:",
   "frame-src 'self' https:",
-  "frame-ancestors 'self' https://lovable.dev https://*.lovable.dev https://*.lovable.app",
+  // O editor/preview da Lovable embute o app em iframe — precisa estar liberado.
+  "frame-ancestors 'self' https://lovable.dev https://*.lovable.dev https://*.lovable.app https://*.lovableproject.com",
   "base-uri 'self'",
   "form-action 'self'",
 ].join("; ");
@@ -87,7 +88,10 @@ function withSecurityHeaders(response: Response): Response {
   headers.set("x-content-type-options", "nosniff");
   headers.set("referrer-policy", "strict-origin-when-cross-origin");
   headers.set("strict-transport-security", "max-age=31536000; includeSubDomains");
-  headers.set("x-frame-options", "SAMEORIGIN");
+  // NÃO enviar X-Frame-Options: ele ignora a lista de frame-ancestors e
+  // bloqueia o preview/editor (e o login social dentro do iframe).
+  headers.delete("x-frame-options");
+
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
