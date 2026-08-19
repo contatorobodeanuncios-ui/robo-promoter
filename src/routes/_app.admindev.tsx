@@ -261,14 +261,15 @@ function AdminDevPage() {
     queryFn: async () => {
       const { data } = await supabase.auth.getSession();
       if (!data.session) return { isAdmin: false };
-      try {
-        return await checkAdminFn();
-      } catch {
-        return { isAdmin: false };
-      }
+      // Falha de rede/servidor não deve virar "sem permissão": deixa propagar
+      // para o React Query tentar novamente.
+      return await checkAdminFn();
     },
-    retry: false,
+    retry: 2,
+    retryDelay: 800,
+    staleTime: 60_000,
   });
+
   const enabled = adminQuery.data?.isAdmin === true;
 
   const modeQuery = useQuery({
