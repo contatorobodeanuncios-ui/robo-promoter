@@ -46,9 +46,17 @@ export const getCampaignMode = createServerFn({ method: "GET" }).handler(async (
 export const checkIsAdmin = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const email = ((context.claims as { email?: string } | undefined)?.email ?? "").toLowerCase();
+    let email = ((context.claims as { email?: string } | undefined)?.email ?? "").toLowerCase();
+    if (!email) {
+      // Alguns tokens não trazem o claim `email`; consulta o usuário para não
+      // bloquear o admin indevidamente.
+      const supabaseAdmin = await getSupabaseAdmin();
+      const { data } = await supabaseAdmin.auth.admin.getUserById(context.userId);
+      email = (data?.user?.email ?? "").toLowerCase();
+    }
     return { isAdmin: email === ADMIN_EMAIL };
   });
+
 
 export const setCampaignMode = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
