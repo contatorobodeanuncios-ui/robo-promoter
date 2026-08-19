@@ -513,7 +513,29 @@ function AdminDevPage() {
     );
   }
 
-  if (adminQuery.error || !adminQuery.data?.isAdmin) {
+  if (adminQuery.error) {
+    return (
+      <div className="max-w-xl mx-auto px-6 py-16 text-center space-y-4">
+        <div className="mx-auto h-14 w-14 rounded-full border border-warning/30 bg-warning/10 grid place-items-center">
+          <AlertTriangle className="h-6 w-6 text-warning" />
+        </div>
+        <div className="space-y-2">
+          <h1 className="text-2xl font-bold tracking-tight">Não deu para validar seu acesso</h1>
+          <p className="text-sm text-muted-foreground">
+            Houve uma falha temporária ao verificar sua permissão. Tente novamente.
+          </p>
+        </div>
+        <div className="flex gap-2 justify-center">
+          <Button onClick={() => adminQuery.refetch()}>Tentar novamente</Button>
+          <Button variant="outline" onClick={() => navigate({ to: "/dashboard" })}>
+            Voltar ao dashboard
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!adminQuery.data?.isAdmin) {
     return (
       <div className="max-w-xl mx-auto px-6 py-16 text-center space-y-4">
         <div className="mx-auto h-14 w-14 rounded-full border border-warning/30 bg-warning/10 grid place-items-center">
@@ -531,6 +553,7 @@ function AdminDevPage() {
       </div>
     );
   }
+
 
   return (
     <div className="p-6 lg:p-10 max-w-[1400px] mx-auto space-y-8">
