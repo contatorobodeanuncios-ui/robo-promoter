@@ -13,6 +13,7 @@ import {
   getPaymentRequestStatus,
   getBillingProfile,
   setBillingCpfCnpj,
+  getCampaignCharge,
 } from "@/lib/payment.functions";
 import { campaignPricing } from "@/lib/pricing";
 import { useAppStore } from "@/lib/store";
