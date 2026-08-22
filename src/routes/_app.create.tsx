@@ -23,7 +23,7 @@ import { campaignPricing, mediaBudgetForViews, isCreditsLike, MIN_DAYS, packageP
 import { CopyModal } from "@/components/app/ProMaxMenu";
 
 import { supabase } from "@/integrations/supabase/client";
-import { fbTrack } from "@/lib/fbq";
+import { fbTrackWhenReady } from "@/lib/fbq";
 
 export const Route = createFileRoute("/_app/create")({
   head: () => ({
