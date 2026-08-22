@@ -23,7 +23,7 @@ import { campaignPricing, mediaBudgetForViews, isCreditsLike, MIN_DAYS, packageP
 import { CopyModal } from "@/components/app/ProMaxMenu";
 
 import { supabase } from "@/integrations/supabase/client";
-import { fbTrack } from "@/lib/fbq";
+import { fbTrackWhenReady } from "@/lib/fbq";
 
 export const Route = createFileRoute("/_app/create")({
   head: () => ({
@@ -357,9 +357,15 @@ function CreateWizard() {
   const lastCheckoutClick = useRef(0);
   const handleCheckoutClick = () => {
     const now = Date.now();
-    if (now - lastCheckoutClick.current < 2000) return;
+    // O primeiro clique sempre passa (lastCheckoutClick começa em 0).
+    if (lastCheckoutClick.current && now - lastCheckoutClick.current < 2000) {
+      console.log("[MetaPixel] clique duplicado ignorado (<2s)");
+      return;
+    }
     lastCheckoutClick.current = now;
-    fbTrack("InitiateCheckout");
+    console.log("[MetaPixel] antes de fbq('track','InitiateCheckout'), fbq existe?", Boolean(window.fbq));
+    fbTrackWhenReady("InitiateCheckout");
+    console.log("[MetaPixel] depois da chamada InitiateCheckout");
     void launch();
   };
 

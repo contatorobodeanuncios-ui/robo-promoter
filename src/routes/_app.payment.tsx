@@ -13,6 +13,7 @@ import {
   getPaymentRequestStatus,
   getBillingProfile,
   setBillingCpfCnpj,
+  getCampaignCharge,
 } from "@/lib/payment.functions";
 import { campaignPricing } from "@/lib/pricing";
 import { useAppStore } from "@/lib/store";
@@ -76,8 +77,18 @@ function PaymentPage() {
   // Campanha: verba de veiculação + taxa de serviço. Recarga de saldo não tem taxa.
   const plan = useAppStore((s) => s.plan);
   const pricing = budget && days ? campaignPricing(budget, days, plan) : null;
-  const amount = topup ?? boostAmount ?? (pricing ? pricing.total : 0);
+  const chargeFn = useServerFn(getCampaignCharge);
+  // Valor real da campanha (inclui visualizações extras e order bump).
+  const chargeQ = useQuery({
+    queryKey: ["campaign-charge", campaignId],
+    queryFn: () => chargeFn({ data: { campaignId: campaignId! } }),
+    enabled: Boolean(campaignId) && !boostId && !topup,
+    staleTime: 30_000,
+  });
+  const campaignAmount = chargeQ.data?.amount && chargeQ.data.amount > 0 ? chargeQ.data.amount : null;
+  const amount = topup ?? boostAmount ?? campaignAmount ?? (pricing ? pricing.total : 0);
   const isCampaign = !!campaignId;
+
 
 
   const createFn = useServerFn(createPaymentRequest);
@@ -143,10 +154,12 @@ function PaymentPage() {
   useEffect(() => {
     if (startedRef.current) return;
     if (profileQ.isLoading) return;
+    // Espera o valor real da campanha (com extras/order bump) antes de cobrar.
+    if (chargeQ.isLoading || chargeQ.isFetching) return;
     startedRef.current = true;
     if (!profileQ.data?.cpf_cnpj) { setStage("needsCpf"); return; }
     void runCharge("PIX");
-  }, [profileQ.isLoading, profileQ.data, runCharge]);
+  }, [profileQ.isLoading, profileQ.data, chargeQ.isLoading, chargeQ.isFetching, runCharge]);
 
   useEffect(() => {
     if (!requestId || stage === "paid" || stage === "error") return;

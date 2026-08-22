@@ -32,9 +32,34 @@ export function loadPixel(pixelId: string) {
   (window as unknown as { fbq?: (...a: unknown[]) => void }).fbq?.("init", pixelId);
 }
 
-export function fbTrack(event: string) {
-  if (typeof window === "undefined" || !window.fbq) return;
+export function fbTrack(event: string): boolean {
+  if (typeof window === "undefined") return false;
+  if (!window.fbq) {
+    console.warn(`[MetaPixel] fbq indisponível — evento "${event}" não enviado (Pixel ID configurado no admin?).`);
+    return false;
+  }
   window.fbq("track", event);
+  console.log(`[MetaPixel] evento enviado: ${event}`);
+  return true;
+}
+
+/**
+ * Dispara o evento assim que o fbq existir (o snippet cria o stub de fila
+ * imediatamente, mas o ID do Pixel vem de uma consulta assíncrona).
+ */
+export function fbTrackWhenReady(event: string, timeoutMs = 4000) {
+  if (typeof window === "undefined") return;
+  if (fbTrack(event)) return;
+  const start = Date.now();
+  const t = setInterval(() => {
+    if (window.fbq) {
+      clearInterval(t);
+      fbTrack(event);
+    } else if (Date.now() - start > timeoutMs) {
+      clearInterval(t);
+      console.warn(`[MetaPixel] timeout aguardando fbq — evento "${event}" perdido.`);
+    }
+  }, 200);
 }
 
 /** Dispara o evento no máximo uma vez por sessão do visitante. */
