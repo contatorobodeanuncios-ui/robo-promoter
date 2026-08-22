@@ -19,6 +19,7 @@ export function MetaPixel() {
   const pixelId = data?.pixel_id ?? "";
 
   useEffect(() => {
+    console.log("[MetaPixel] Pixel ID lido do backend:", pixelId || "(vazio — não configurado no admin)");
     if (!pixelId) return;
     const w = window as unknown as { __fbPixelBooted?: boolean };
     if (w.__fbPixelBooted) return;
