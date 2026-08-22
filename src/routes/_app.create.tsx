@@ -357,9 +357,15 @@ function CreateWizard() {
   const lastCheckoutClick = useRef(0);
   const handleCheckoutClick = () => {
     const now = Date.now();
-    if (now - lastCheckoutClick.current < 2000) return;
+    // O primeiro clique sempre passa (lastCheckoutClick começa em 0).
+    if (lastCheckoutClick.current && now - lastCheckoutClick.current < 2000) {
+      console.log("[MetaPixel] clique duplicado ignorado (<2s)");
+      return;
+    }
     lastCheckoutClick.current = now;
-    fbTrack("InitiateCheckout");
+    console.log("[MetaPixel] antes de fbq('track','InitiateCheckout'), fbq existe?", Boolean(window.fbq));
+    fbTrackWhenReady("InitiateCheckout");
+    console.log("[MetaPixel] depois da chamada InitiateCheckout");
     void launch();
   };
 
