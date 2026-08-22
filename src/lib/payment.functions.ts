@@ -461,6 +461,39 @@ async function creditApprovedPayment(params: {
   }
 }
 
+/**
+ * Valor real a cobrar por uma campanha: no plano Créditos/Pro Max é o pacote
+ * dos dias + tudo que foi comprado a mais (visualizações extras e order bump),
+ * já gravado em extra_paid na criação.
+ */
+export const getCampaignCharge = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ campaignId: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { data: c } = await supabase
+      .from("campaigns")
+      .select("budget, days, extra_paid, total_paid")
+      .eq("id", data.campaignId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!c) return { amount: 0 };
+    const { data: prof } = await supabase
+      .from("profiles")
+      .select("plan, trial_days, trial_started_at")
+      .eq("id", userId)
+      .maybeSingle();
+    const plan = effectivePlan(
+      (prof ?? {}) as { plan?: string | null; trial_days?: number | null; trial_started_at?: string | null },
+    );
+    const days = Number(c.days ?? 0);
+    if (isCreditsLike(plan)) {
+      const base = packagePriceFor(days, includedViewsForDays(days));
+      return { amount: round2(base + Number(c.extra_paid ?? 0)) };
+    }
+    return { amount: campaignPricing(Number(c.budget ?? 0), days, plan).total };
+  });
+
 export const createPaymentRequest = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
