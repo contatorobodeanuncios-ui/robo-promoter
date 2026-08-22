@@ -154,10 +154,12 @@ function PaymentPage() {
   useEffect(() => {
     if (startedRef.current) return;
     if (profileQ.isLoading) return;
+    // Espera o valor real da campanha (com extras/order bump) antes de cobrar.
+    if (chargeQ.isLoading || chargeQ.isFetching) return;
     startedRef.current = true;
     if (!profileQ.data?.cpf_cnpj) { setStage("needsCpf"); return; }
     void runCharge("PIX");
-  }, [profileQ.isLoading, profileQ.data, runCharge]);
+  }, [profileQ.isLoading, profileQ.data, chargeQ.isLoading, chargeQ.isFetching, runCharge]);
 
   useEffect(() => {
     if (!requestId || stage === "paid" || stage === "error") return;
