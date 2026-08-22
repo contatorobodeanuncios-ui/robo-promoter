@@ -1,7 +1,14 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { campaignPricing, round2 } from "@/lib/pricing";
+import {
+  campaignPricing,
+  round2,
+  effectivePlan,
+  isCreditsLike,
+  packagePriceFor,
+  includedViewsForDays,
+} from "@/lib/pricing";
 import { enforceRateLimit } from "@/lib/rate-limit";
 
 
