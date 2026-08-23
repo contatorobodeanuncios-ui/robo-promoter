@@ -97,6 +97,7 @@ export interface AdminCampaignRow {
   frequency: number;
   cpm: number;
   cost_per_result: number;
+  credits_total: number | null;
   invoice_url: string | null;
   funding_type: "wallet" | "pix_dedicated";
   city: string;
@@ -171,6 +172,7 @@ export const adminListCampaigns = createServerFn({ method: "GET" })
         frequency: Number(c.frequency ?? 0),
         cpm: Number(c.cpm ?? 0),
         cost_per_result: Number(c.cost_per_result ?? 0),
+        credits_total: (c as { credits_total?: number | null }).credits_total ?? null,
         invoice_url: c.invoice_url ?? null,
         funding_type: (c.funding_type ?? "wallet") as "wallet" | "pix_dedicated",
         city: c.city ?? "",
@@ -1174,6 +1176,8 @@ export const adminUpdateCampaignMetrics = createServerFn({ method: "POST" })
       results: z.number().int().optional(),
       revenue: z.number().optional(),
       cost_per_result: z.number().optional(),
+      reach: z.number().int().optional(),
+      credits_total: z.number().int().nullable().optional(),
     }).parse(d),
   )
   .handler(async ({ data, context }) => {
