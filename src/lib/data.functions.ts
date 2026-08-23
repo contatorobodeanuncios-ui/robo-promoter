@@ -627,13 +627,21 @@ export const getMyCreativeSignedUrls = createServerFn({ method: "POST" })
 // ============ Meta Pixel (ID configurável pelo admin) ============
 export const getMetaPixelId = createServerFn({ method: "GET" }).handler(
   async (): Promise<{ pixel_id: string }> => {
-    const admin = await getAdmin();
-    const { data } = await admin
-      .from("app_settings")
-      .select("value")
-      .eq("key", "meta_pixel_id")
-      .maybeSingle();
-    const v = (data?.value ?? null) as { pixel_id?: string } | null;
-    return { pixel_id: (v?.pixel_id ?? "").trim() };
+    // Nunca lançar: se a chave de serviço não estiver disponível no ambiente,
+    // o app deve carregar normalmente apenas sem o Pixel.
+    try {
+      const admin = await getAdmin();
+      const { data } = await admin
+        .from("app_settings")
+        .select("value")
+        .eq("key", "meta_pixel_id")
+        .maybeSingle();
+      const v = (data?.value ?? null) as { pixel_id?: string } | null;
+      return { pixel_id: (v?.pixel_id ?? "").trim() };
+    } catch (err) {
+      console.error("[MetaPixel] não foi possível ler o Pixel ID:", err);
+      return { pixel_id: "" };
+    }
   },
 );
+
