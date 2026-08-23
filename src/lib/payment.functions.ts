@@ -425,7 +425,7 @@ async function creditApprovedPayment(params: {
   if (isCampaign && params.campaignId) {
     const { data: camp } = await admin
       .from("campaigns")
-      .select("id, pix_remaining_budget, pix_total_budget, budget, days, platform_fee")
+      .select("id, pix_remaining_budget, pix_total_budget, budget, days, platform_fee, total_paid, scheduled_start_at")
       .eq("id", params.campaignId)
       .maybeSingle();
     // O valor pago inclui as taxas. Só a verba de veiculação vai para o
@@ -440,6 +440,11 @@ async function creditApprovedPayment(params: {
     );
     const serviceFee = round2(Math.max(0, feesPaid - platformFee));
     const currentRemaining = Number(camp?.pix_remaining_budget ?? 0);
+    // Soma este pagamento ao que já havia sido pago antes (em vez de
+    // sobrescrever), para refletir corretamente múltiplos pagamentos da
+    // mesma campanha (ex: pagamento inicial + order bump / reforço).
+    const previousTotalPaid = Number((camp as unknown as { total_paid?: number } | null)?.total_paid ?? 0);
+    const previousScheduledStart = (camp as unknown as { scheduled_start_at?: string | null } | null)?.scheduled_start_at ?? null;
     await admin
       .from("campaigns")
       .update({
@@ -447,7 +452,10 @@ async function creditApprovedPayment(params: {
         pix_total_budget: metaBudget,
         service_fee: serviceFee,
         platform_fee: platformFee,
-        total_paid: params.amount,
+        total_paid: round2(previousTotalPaid + params.amount),
+        // "Início programado" passa a refletir o momento em que o pagamento
+        // foi aprovado (só é definido uma vez, na primeira aprovação).
+        scheduled_start_at: previousScheduledStart ?? new Date().toISOString(),
         status: "rodando",
       } as never)
       .eq("id", params.campaignId);
