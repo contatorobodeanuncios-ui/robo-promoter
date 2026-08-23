@@ -23,6 +23,7 @@ import { Route as AppPaymentRouteImport } from './routes/_app.payment'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppCreateRouteImport } from './routes/_app.create'
 import { Route as AppComprovantesRouteImport } from './routes/_app.comprovantes'
+import { Route as AppAdmindevRouteImport } from './routes/_app.admindev'
 import { Route as AppAdminSupportRouteImport } from './routes/_app.admin-support'
 import { Route as AppAdminExecRouteImport } from './routes/_app.admin-exec'
 import { Route as AppAdminAuditRouteImport } from './routes/_app.admin-audit'
@@ -103,6 +104,11 @@ const AppComprovantesRoute = AppComprovantesRouteImport.update({
   path: '/comprovantes',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAdmindevRoute = AppAdmindevRouteImport.update({
+  id: '/admindev',
+  path: '/admindev',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppAdminSupportRoute = AppAdminSupportRouteImport.update({
   id: '/admin-support',
   path: '/admin-support',
@@ -169,6 +175,7 @@ export interface FileRoutesByFullPath {
   '/admin-audit': typeof AppAdminAuditRoute
   '/admin-exec': typeof AppAdminExecRoute
   '/admin-support': typeof AppAdminSupportRoute
+  '/admindev': typeof AppAdmindevRoute
   '/comprovantes': typeof AppComprovantesRoute
   '/create': typeof AppCreateRoute
   '/dashboard': typeof AppDashboardRoute
@@ -194,6 +201,7 @@ export interface FileRoutesByTo {
   '/admin-audit': typeof AppAdminAuditRoute
   '/admin-exec': typeof AppAdminExecRoute
   '/admin-support': typeof AppAdminSupportRoute
+  '/admindev': typeof AppAdmindevRoute
   '/comprovantes': typeof AppComprovantesRoute
   '/create': typeof AppCreateRoute
   '/dashboard': typeof AppDashboardRoute
@@ -221,6 +229,7 @@ export interface FileRoutesById {
   '/_app/admin-audit': typeof AppAdminAuditRoute
   '/_app/admin-exec': typeof AppAdminExecRoute
   '/_app/admin-support': typeof AppAdminSupportRoute
+  '/_app/admindev': typeof AppAdmindevRoute
   '/_app/comprovantes': typeof AppComprovantesRoute
   '/_app/create': typeof AppCreateRoute
   '/_app/dashboard': typeof AppDashboardRoute
@@ -248,6 +257,7 @@ export interface FileRouteTypes {
     | '/admin-audit'
     | '/admin-exec'
     | '/admin-support'
+    | '/admindev'
     | '/comprovantes'
     | '/create'
     | '/dashboard'
@@ -273,6 +283,7 @@ export interface FileRouteTypes {
     | '/admin-audit'
     | '/admin-exec'
     | '/admin-support'
+    | '/admindev'
     | '/comprovantes'
     | '/create'
     | '/dashboard'
@@ -299,6 +310,7 @@ export interface FileRouteTypes {
     | '/_app/admin-audit'
     | '/_app/admin-exec'
     | '/_app/admin-support'
+    | '/_app/admindev'
     | '/_app/comprovantes'
     | '/_app/create'
     | '/_app/dashboard'
@@ -432,6 +444,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppComprovantesRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/admindev': {
+      id: '/_app/admindev'
+      path: '/admindev'
+      fullPath: '/admindev'
+      preLoaderRoute: typeof AppAdmindevRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/admin-support': {
       id: '/_app/admin-support'
       path: '/admin-support'
@@ -509,6 +528,7 @@ interface AppRouteChildren {
   AppAdminAuditRoute: typeof AppAdminAuditRoute
   AppAdminExecRoute: typeof AppAdminExecRoute
   AppAdminSupportRoute: typeof AppAdminSupportRoute
+  AppAdmindevRoute: typeof AppAdmindevRoute
   AppComprovantesRoute: typeof AppComprovantesRoute
   AppCreateRoute: typeof AppCreateRoute
   AppDashboardRoute: typeof AppDashboardRoute
@@ -521,6 +541,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAdminAuditRoute: AppAdminAuditRoute,
   AppAdminExecRoute: AppAdminExecRoute,
   AppAdminSupportRoute: AppAdminSupportRoute,
+  AppAdmindevRoute: AppAdmindevRoute,
   AppComprovantesRoute: AppComprovantesRoute,
   AppCreateRoute: AppCreateRoute,
   AppDashboardRoute: AppDashboardRoute,
