@@ -8,7 +8,7 @@ import { createFileRoute } from "@tanstack/react-router";
  * Segurança: exige o bearer token do usuário logado; o caminho é sempre
  * derivado do id do usuário autenticado, nunca do que o cliente mandou.
  */
-const MAX_BYTES = 60 * 1024 * 1024;
+const MAX_BYTES = 32 * 1024 * 1024;
 
 export const Route = createFileRoute("/api/public/u/store")({
   server: {
@@ -29,23 +29,30 @@ export const Route = createFileRoute("/api/public/u/store")({
           if (userErr || !userData?.user) return json({ error: "Sessão inválida ou expirada" }, 401);
           const userId = userData.user.id;
 
-          const form = await request.formData();
-          const file = form.get("file");
-          if (!(file instanceof File)) return json({ error: "Arquivo ausente" }, 400);
-          if (file.size <= 0) return json({ error: "Arquivo vazio" }, 400);
-          if (file.size > MAX_BYTES) return json({ error: "Arquivo muito grande (máx. 60 MB)" }, 413);
+          // Corpo binário evita o custo e os picos de memória do parser de
+          // multipart. O cliente também comprime imagens grandes antes daqui.
+          const declaredLength = Number(request.headers.get("content-length") ?? 0);
+          if (declaredLength > MAX_BYTES) return json({ error: "Arquivo muito grande" }, 413);
+          const bytes = new Uint8Array(await request.arrayBuffer());
+          if (bytes.byteLength <= 0) return json({ error: "Arquivo vazio" }, 400);
+          if (bytes.byteLength > MAX_BYTES) return json({ error: "Arquivo muito grande" }, 413);
 
-          const rawName = (form.get("filename") as string | null) ?? file.name ?? "arquivo";
+          const rawName = decodeURIComponent(request.headers.get("x-file-name") ?? "arquivo");
           const safe = rawName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-100);
-          const path = `creatives/${userId}/${Date.now()}-${safe}`;
+          const rawUploadId = request.headers.get("x-upload-id") ?? crypto.randomUUID();
+          const uploadId = rawUploadId.replace(/[^a-zA-Z0-9-]/g, "").slice(0, 64);
+          if (!uploadId) return json({ error: "Identificador de envio inválido" }, 400);
+          // O mesmo ID é reutilizado nas tentativas. Se a resposta anterior se
+          // perdeu, a repetição sobrescreve o mesmo objeto em vez de duplicá-lo.
+          const path = `creatives/${userId}/${uploadId}-${safe}`;
+          const contentType = request.headers.get("content-type") || "application/octet-stream";
 
           const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-          const bytes = new Uint8Array(await file.arrayBuffer());
           const { error } = await supabaseAdmin.storage
             .from("campaign-creatives")
             .upload(path, bytes, {
-              contentType: file.type || "application/octet-stream",
-              upsert: false,
+              contentType,
+              upsert: true,
             });
           if (error) return json({ error: error.message }, 502);
 

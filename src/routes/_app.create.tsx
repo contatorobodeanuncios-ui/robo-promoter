@@ -24,6 +24,7 @@ import { CopyModal } from "@/components/app/ProMaxMenu";
 
 import { supabase } from "@/integrations/supabase/client";
 import { fbTrackWhenReady } from "@/lib/fbq";
+import { createUploadId, prepareImageForUpload } from "@/lib/image-upload";
 
 export const Route = createFileRoute("/_app/create")({
   head: () => ({
@@ -237,53 +238,78 @@ function CreateWizard() {
       // o servidor quem repassa ao Storage. Isso elimina de vez as duas causas
       // de "Failed to fetch": CORS entre domínios e bloqueadores de anúncio
       // barrando URLs com palavras de marketing.
-      const token = sessionData.session.access_token;
+      const uploadViaServer = async (originalFile: File): Promise<{ path: string; file: File }> => {
+        setUploadProgress(`Preparando ${originalFile.name}...`);
+        const file = await prepareImageForUpload(originalFile);
+        const uploadId = createUploadId();
+        const maxAttempts = 5;
 
-      const uploadViaServer = async (file: File, attempt = 1): Promise<string> => {
-        const form = new FormData();
-        form.append("file", file, file.name);
-        form.append("filename", file.name);
-
-        let res: Response;
-        try {
-          res = await fetch("/api/public/u/store", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${token}` },
-            body: form,
-          });
-        } catch (e) {
-          if (attempt < 3) {
-            setUploadProgress(`Conexão instável, tentando novamente (${attempt + 1}/3)...`);
-            await new Promise((r) => setTimeout(r, 1500 * attempt));
-            return uploadViaServer(file, attempt + 1);
+        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+          if (!navigator.onLine) {
+            setUploadProgress("Sem conexão. O envio continuará automaticamente quando a internet voltar...");
+            await new Promise<void>((resolve) => window.addEventListener("online", () => resolve(), { once: true }));
           }
-          throw new Error(
-            `Falha ao enviar ${file.name} após 3 tentativas. Verifique sua conexão e tente novamente. Detalhe técnico: ${e instanceof Error ? e.message : String(e)}`,
-          );
-        }
 
-        const body = (await res.json().catch(() => ({}))) as { path?: string; error?: string };
-        if (res.ok && body.path) return body.path;
+          // Renova/lê a sessão em cada tentativa; um token expirado durante um
+          // envio lento não condena as tentativas seguintes.
+          const { data: freshSession } = await supabase.auth.getSession();
+          const token = freshSession.session?.access_token;
+          if (!token) throw new Error("Sua sessão expirou. Entre novamente para concluir o anúncio.");
 
-        if (res.status >= 500 && attempt < 3) {
-          setUploadProgress(`Tentando novamente (${attempt + 1}/3)...`);
-          await new Promise((r) => setTimeout(r, 1500 * attempt));
-          return uploadViaServer(file, attempt + 1);
+          let res: Response;
+          try {
+            const controller = new AbortController();
+            const timeout = window.setTimeout(() => controller.abort(), 120_000);
+            try {
+              res = await fetch("/api/public/u/store", {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "Content-Type": file.type || "application/octet-stream",
+                  "X-File-Name": encodeURIComponent(file.name),
+                  "X-Upload-Id": uploadId,
+                },
+                body: file,
+                signal: controller.signal,
+              });
+            } finally {
+              window.clearTimeout(timeout);
+            }
+          } catch (error) {
+            if (attempt === maxAttempts) {
+              throw new Error(`Não foi possível concluir o envio de ${originalFile.name}. A imagem continua selecionada; tente finalizar novamente.`);
+            }
+            const delay = Math.min(12_000, 1_500 * 2 ** (attempt - 1));
+            setUploadProgress(`Reconectando e retomando o envio (${attempt + 1}/${maxAttempts})...`);
+            await new Promise((resolve) => window.setTimeout(resolve, delay));
+            continue;
+          }
+
+          const responseBody = (await res.json().catch(() => ({}))) as { path?: string; error?: string };
+          if (res.ok && responseBody.path) return { path: responseBody.path, file };
+
+          if ((res.status >= 500 || res.status === 408 || res.status === 429) && attempt < maxAttempts) {
+            const delay = Math.min(12_000, 1_500 * 2 ** (attempt - 1));
+            setUploadProgress(`Servidor ocupado, retomando (${attempt + 1}/${maxAttempts})...`);
+            await new Promise((resolve) => window.setTimeout(resolve, delay));
+            continue;
+          }
+          throw new Error(responseBody.error ?? `O envio foi recusado (erro ${res.status}).`);
         }
-        throw new Error(`Falha ao enviar ${file.name}: ${body.error ?? `erro ${res.status}`}`);
+        throw new Error(`Não foi possível concluir o envio de ${originalFile.name}.`);
       };
 
       const media: { path: string; kind: "image" | "video"; name: string; mime: string; size: number }[] = [];
       for (let i = 0; i < files.length; i++) {
         const f = files[i];
         setUploadProgress(`Enviando ${i + 1} de ${files.length}...`);
-        const path = await uploadViaServer(f);
+        const uploaded = await uploadViaServer(f);
         media.push({
-          path,
-          kind: f.type.startsWith("video/") ? "video" : "image",
-          name: f.name,
-          mime: f.type,
-          size: f.size,
+          path: uploaded.path,
+          kind: uploaded.file.type.startsWith("video/") ? "video" : "image",
+          name: uploaded.file.name,
+          mime: uploaded.file.type,
+          size: uploaded.file.size,
         });
       }
 
