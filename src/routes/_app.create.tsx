@@ -17,7 +17,7 @@ import {
 import { MapPreview } from "@/components/app/MapPreview";
 import { reachRange, fmtRange } from "@/lib/mock-data";
 import { analyzeCreative, type CreativeAnalysis } from "@/lib/ai-analysis.functions";
-import { getCreativeUploadPath, getMaintenanceMode, getRobotSchedule } from "@/lib/data.functions";
+import { getMaintenanceMode, getRobotSchedule } from "@/lib/data.functions";
 import { useAppStore } from "@/lib/store";
 import { campaignPricing, mediaBudgetForViews, isCreditsLike, MIN_DAYS, packagePriceFor, clicksForViews, includedViewsForDays, ORDER_BUMP_VIEWS, ORDER_BUMP_PRICE, ORDER_BUMP_FULL_PRICE } from "@/lib/pricing";
 import { CopyModal } from "@/components/app/ProMaxMenu";
@@ -53,7 +53,6 @@ function CreateWizard() {
   const nav = useNavigate();
   const addCampaign = useAppStore((s) => s.addCampaign);
   const analyzeFn = useServerFn(analyzeCreative);
-  const uploadPathFn = useServerFn(getCreativeUploadPath);
   const maintenanceFn = useServerFn(getMaintenanceMode);
 
   const robotScheduleFn = useServerFn(getRobotSchedule);
@@ -234,44 +233,51 @@ function CreateWizard() {
 
       // Sobe todos os arquivos do criativo (imagem, vídeo ou carrossel) para o
       // Storage, na ordem em que o cliente enviou.
-      const isNetworkError = (err: unknown) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        return /failed to fetch|network|timeout/i.test(msg);
-      };
+      // IMPORTANTE: o envio passa pelo NOSSO domínio (/api/public/u/store) e é
+      // o servidor quem repassa ao Storage. Isso elimina de vez as duas causas
+      // de "Failed to fetch": CORS entre domínios e bloqueadores de anúncio
+      // barrando URLs com palavras de marketing.
+      const token = sessionData.session.access_token;
 
-      const uploadWithRetry = async (path: string, file: File, attempt = 1): Promise<void> => {
-        const { error: upErr } = await supabase.storage
-          .from("campaign-creatives")
-          .upload(path, file, { contentType: file.type || "application/octet-stream" });
+      const uploadViaServer = async (file: File, attempt = 1): Promise<string> => {
+        const form = new FormData();
+        form.append("file", file, file.name);
+        form.append("filename", file.name);
 
-        if (!upErr) return;
-
-        if (isNetworkError(upErr) && attempt < 3) {
-          setUploadProgress(`Conexão instável, tentando novamente (${attempt + 1}/3)...`);
-          await new Promise((r) => setTimeout(r, 1500 * attempt));
-          return uploadWithRetry(path, file, attempt + 1);
-        }
-
-        if (isNetworkError(upErr)) {
-          // Antes isso afirmava categoricamente "sem conexão... verifique sua
-          // internet", mesmo quando a causa real era outra (oscilação momentânea
-          // durante o envio de um arquivo grande, CORS, etc.). Agora mostramos o
-          // motivo mais provável sem cravar a causa, e incluímos o erro técnico
-          // real por baixo, para dar pra diagnosticar se acontecer de novo.
+        let res: Response;
+        try {
+          res = await fetch("/api/public/u/store", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: form,
+          });
+        } catch (e) {
+          if (attempt < 3) {
+            setUploadProgress(`Conexão instável, tentando novamente (${attempt + 1}/3)...`);
+            await new Promise((r) => setTimeout(r, 1500 * attempt));
+            return uploadViaServer(file, attempt + 1);
+          }
           throw new Error(
-            `Falha ao enviar ${file.name} após 3 tentativas. Costuma acontecer por instabilidade durante o envio do arquivo (comum em redes móveis ou Wi-Fi fraco) — tente novamente, se possível em uma conexão mais estável. Detalhe técnico: ${upErr.message}`
+            `Falha ao enviar ${file.name} após 3 tentativas. Verifique sua conexão e tente novamente. Detalhe técnico: ${e instanceof Error ? e.message : String(e)}`,
           );
         }
 
-        throw new Error(`Falha ao enviar ${file.name}: ${upErr.message}`);
+        const body = (await res.json().catch(() => ({}))) as { path?: string; error?: string };
+        if (res.ok && body.path) return body.path;
+
+        if (res.status >= 500 && attempt < 3) {
+          setUploadProgress(`Tentando novamente (${attempt + 1}/3)...`);
+          await new Promise((r) => setTimeout(r, 1500 * attempt));
+          return uploadViaServer(file, attempt + 1);
+        }
+        throw new Error(`Falha ao enviar ${file.name}: ${body.error ?? `erro ${res.status}`}`);
       };
 
       const media: { path: string; kind: "image" | "video"; name: string; mime: string; size: number }[] = [];
       for (let i = 0; i < files.length; i++) {
         const f = files[i];
         setUploadProgress(`Enviando ${i + 1} de ${files.length}...`);
-        const { path } = await uploadPathFn({ data: { filename: f.name } });
-        await uploadWithRetry(path, f);
+        const path = await uploadViaServer(f);
         media.push({
           path,
           kind: f.type.startsWith("video/") ? "video" : "image",
@@ -280,6 +286,7 @@ function CreateWizard() {
           size: f.size,
         });
       }
+
       setUploadProgress(null);
       const firstImage = media.find((m) => m.kind === "image");
       // O bucket é privado: guardamos o CAMINHO no Storage e a exibição gera
