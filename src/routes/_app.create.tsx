@@ -148,8 +148,10 @@ function CreateWizard() {
         const result = await analyzeFn({ data: { imageDataUrl: dataUrl, headline, body, link } });
         setAnalysis(result);
         setScanState("done");
+        // A IA nunca bloqueia o avanço — só avisa quando a imagem pode violar
+        // as políticas do Facebook, para o cliente decidir se ajusta ou segue.
         if (!result.compliant) {
-          toast.error("Bloqueado pela IA — ajuste o criativo para avançar.");
+          toast.warning("A IA identificou que esta imagem pode violar as políticas do Facebook. Você pode revisar o criativo ou seguir mesmo assim.");
         } else if (result.issues.some((i) => i.severity === "soft_warning")) {
           toast.warning("A IA sugeriu ajustes de design (não bloqueia).");
         }
@@ -220,6 +222,16 @@ function CreateWizard() {
     if (files.length === 0) return;
     setLaunching(true);
     try {
+      // Confere se a sessão de login ainda é válida ANTES de tentar subir o
+      // arquivo. Uma sessão expirada no meio do wizard falha no upload com o
+      // mesmo tipo de erro genérico de rede do navegador ("Failed to fetch"),
+      // e antes isso era sempre (erroneamente) atribuído à internet do
+      // cliente. Checando aqui, damos o motivo real quando for esse o caso.
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        throw new Error("Sua sessão expirou. Atualize a página, faça login novamente e tente lançar a campanha de novo.");
+      }
+
       // Sobe todos os arquivos do criativo (imagem, vídeo ou carrossel) para o
       // Storage, na ordem em que o cliente enviou.
       const isNetworkError = (err: unknown) => {
@@ -241,8 +253,13 @@ function CreateWizard() {
         }
 
         if (isNetworkError(upErr)) {
+          // Antes isso afirmava categoricamente "sem conexão... verifique sua
+          // internet", mesmo quando a causa real era outra (oscilação momentânea
+          // durante o envio de um arquivo grande, CORS, etc.). Agora mostramos o
+          // motivo mais provável sem cravar a causa, e incluímos o erro técnico
+          // real por baixo, para dar pra diagnosticar se acontecer de novo.
           throw new Error(
-            `Falha ao enviar ${file.name}: sem conexão com o servidor de arquivos. Verifique sua internet e tente novamente.`
+            `Falha ao enviar ${file.name} após 3 tentativas. Costuma acontecer por instabilidade durante o envio do arquivo (comum em redes móveis ou Wi-Fi fraco) — tente novamente, se possível em uma conexão mais estável. Detalhe técnico: ${upErr.message}`
           );
         }
 
@@ -369,9 +386,12 @@ function CreateWizard() {
     void launch();
   };
 
+  // A IA nunca bloqueia o avanço da etapa 2 — analysis?.compliant não entra
+  // mais na condição. O aviso de possível violação continua visível no
+  // painel, mas o cliente pode prosseguir mesmo assim.
   const canNext =
     step === 1 ||
-    (step === 2 && files.length > 0 && scanState === "done" && (analysis?.compliant ?? true)) ||
+    (step === 2 && files.length > 0 && scanState === "done") ||
     (step === 3 && Boolean(headline && body && link)) ||
     (step === 4 && Boolean(city.trim() && neighborhood.trim() && Number(radius) >= 1 && Number(radius) <= 199)) ||
     (step === 5 && days >= MIN_DAYS) ||
@@ -1232,7 +1252,8 @@ function AiAnalysisPanel({
           <div className="flex items-start gap-2">
             <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
             <p className="text-xs text-destructive font-semibold">
-              Bloqueado: viola política da Meta. Envie outra imagem.
+              Atenção: esta imagem pode violar as políticas do Facebook. Você pode continuar mesmo
+              assim, mas avalie o risco de rejeição do anúncio pelo Meta.
             </p>
           </div>
           {analysis.issues.filter((i) => i.severity === "hard_block").map((i, idx) => (
