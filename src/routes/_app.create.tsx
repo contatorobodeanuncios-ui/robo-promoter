@@ -17,7 +17,7 @@ import {
 import { MapPreview } from "@/components/app/MapPreview";
 import { reachRange, fmtRange } from "@/lib/mock-data";
 import { analyzeCreative, type CreativeAnalysis } from "@/lib/ai-analysis.functions";
-import { getCreativeUploadPath, getMaintenanceMode, getRobotSchedule } from "@/lib/data.functions";
+import { getMaintenanceMode, getRobotSchedule } from "@/lib/data.functions";
 import { useAppStore } from "@/lib/store";
 import { campaignPricing, mediaBudgetForViews, isCreditsLike, MIN_DAYS, packagePriceFor, clicksForViews, includedViewsForDays, ORDER_BUMP_VIEWS, ORDER_BUMP_PRICE, ORDER_BUMP_FULL_PRICE } from "@/lib/pricing";
 import { CopyModal } from "@/components/app/ProMaxMenu";
@@ -53,7 +53,6 @@ function CreateWizard() {
   const nav = useNavigate();
   const addCampaign = useAppStore((s) => s.addCampaign);
   const analyzeFn = useServerFn(analyzeCreative);
-  const uploadPathFn = useServerFn(getCreativeUploadPath);
   const maintenanceFn = useServerFn(getMaintenanceMode);
 
   const robotScheduleFn = useServerFn(getRobotSchedule);
