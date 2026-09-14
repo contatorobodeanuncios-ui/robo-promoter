@@ -374,7 +374,7 @@ function AdminDevPage() {
 
   // ---- Arquivamento de campanhas (apagados / aguardando pagamento) ----
   const archiveFn = useServerFn(adminArchiveCampaign);
-  const [campaignView, setCampaignView] = useState<"active" | "awaiting_payment" | "deleted">("active");
+  const [campaignView, setCampaignView] = useState<"active" | "awaiting_pix_key" | "awaiting_payment" | "deleted">("active");
   const archiveMutation = useMutation({
     mutationFn: (v: { id: string; reason: "deleted" | "awaiting_payment" | null }) =>
       archiveFn({ data: v }),
@@ -388,11 +388,16 @@ function AdminDevPage() {
   const allCampaigns = campaignsQuery.data ?? [];
   const counts = {
     active: allCampaigns.filter((c) => !c.archived_reason).length,
+    awaiting_pix_key: allCampaigns.filter((c) => !c.archived_reason && c.status === "aguardando_chave_pix").length,
     awaiting_payment: allCampaigns.filter((c) => c.archived_reason === "awaiting_payment").length,
     deleted: allCampaigns.filter((c) => c.archived_reason === "deleted").length,
   };
   const visibleCampaigns = allCampaigns
-    .filter((c) => (campaignView === "active" ? !c.archived_reason : c.archived_reason === campaignView))
+    .filter((c) => campaignView === "awaiting_pix_key"
+      ? !c.archived_reason && c.status === "aguardando_chave_pix"
+      : campaignView === "active"
+        ? !c.archived_reason
+        : c.archived_reason === campaignView)
     .filter((c) =>
       matchesSearch(search, [
         c.client_name,
@@ -919,6 +924,7 @@ function AdminDevPage() {
               <div className="flex items-center gap-2">
                 {([
                   ["active", `Ativas (${counts.active})`],
+                  ["awaiting_pix_key", `Aguardando chave PIX (${counts.awaiting_pix_key})`],
                   ["awaiting_payment", `Aguardando pagamento (${counts.awaiting_payment})`],
                   ["deleted", `Apagados (${counts.deleted})`],
                 ] as const).map(([v, label]) => (
@@ -966,7 +972,7 @@ function AdminDevPage() {
                     {visibleCampaigns.map((c) => {
                       const isRunning = c.status === "running" || c.status === "rodando";
                       const isPaused = c.status === "paused" || c.status === "encerrada_saldo_consumido";
-                      const isPending = c.status === "aguardando_vinculo_meta" || c.status === "analyzing";
+                      const isPending = c.status === "aguardando_chave_pix" || c.status === "aguardando_vinculo_meta" || c.status === "analyzing";
                       const rowCls = isRunning
                         ? "bg-success/5 border-l-2 border-l-success"
                         : isPaused
@@ -1004,6 +1010,7 @@ function AdminDevPage() {
                               <option value="analyzing">⏳ Em Análise</option>
                               <option value="running">🟢 Ativo</option>
                               <option value="paused">🔴 Desativado</option>
+                               <option value="aguardando_chave_pix">🔑 Aguardando chave PIX</option>
                               <option value="aguardando_vinculo_meta">💰 Aguardando pagamento</option>
                               <option value="encerrada_saldo_consumido">⛔ Encerrada</option>
                             </select>
@@ -1038,9 +1045,24 @@ function AdminDevPage() {
                                 </button>
                               </div>
                             ) : (
-                              <span className="text-[10px] text-muted-foreground italic">
-                                {isPending && c.funding_type === "pix_dedicated" ? "sem cobrança" : "—"}
-                              </span>
+                              <div className="space-y-1">
+                                <span className="block text-[10px] text-muted-foreground italic">
+                                  {isPending && c.funding_type === "pix_dedicated" ? "sem cobrança" : "—"}
+                                </span>
+                                {c.status === "aguardando_chave_pix" && (
+                                  <Button
+                                    variant="glass"
+                                    size="sm"
+                                    className="h-7 text-[10px]"
+                                    onClick={() => {
+                                      const link = `${window.location.origin}/payment?campaignId=${encodeURIComponent(c.id)}&budget=${c.budget}&days=${c.days}&name=${encodeURIComponent(c.name)}`;
+                                      navigator.clipboard.writeText(link).then(() => toast.success("Link de pagamento copiado"));
+                                    }}
+                                  >
+                                    <Copy className="h-3 w-3" /> Reenviar link de pagamento
+                                  </Button>
+                                )}
+                              </div>
                             )}
                           </td>
                           <td className="px-2 py-2">

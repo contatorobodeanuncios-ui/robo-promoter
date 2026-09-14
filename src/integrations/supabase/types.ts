@@ -951,13 +951,6 @@ export type Database = {
     }
     Functions: {
       auto_pause_pix_campaigns: { Args: never; Returns: number }
-      has_role: {
-        Args: {
-          _role: Database["public"]["Enums"]["app_role"]
-          _user_id: string
-        }
-        Returns: boolean
-      }
     }
     Enums: {
       app_role: "admin" | "user"
@@ -970,6 +963,7 @@ export type Database = {
         | "rodando"
         | "encerrada_saldo_consumido"
         | "em_revisao"
+        | "aguardando_chave_pix"
       payment_request_kind:
         | "campaign_budget"
         | "balance_topup"
@@ -1112,6 +1106,7 @@ export const Constants = {
         "rodando",
         "encerrada_saldo_consumido",
         "em_revisao",
+        "aguardando_chave_pix",
       ],
       payment_request_kind: [
         "campaign_budget",

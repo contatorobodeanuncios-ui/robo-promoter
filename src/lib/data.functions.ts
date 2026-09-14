@@ -25,6 +25,7 @@ export type CampaignStatus =
   | "running"
   | "analyzing"
   | "paused"
+  | "aguardando_chave_pix"
   | "aguardando_vinculo_meta"
   | "rodando"
   | "encerrada_saldo_consumido";
@@ -233,6 +234,7 @@ const campaignInput = z.object({
     "running",
     "analyzing",
     "paused",
+    "aguardando_chave_pix",
     "aguardando_vinculo_meta",
     "rodando",
     "encerrada_saldo_consumido",
@@ -370,7 +372,7 @@ export const createCampaign = createServerFn({ method: "POST" })
       impressions: 0,
       ctr: 0,
       cpc: 0,
-      status: isPix ? ("aguardando_vinculo_meta" as const) : ("analyzing" as const),
+      status: isPix ? ("aguardando_chave_pix" as const) : ("analyzing" as const),
       funding_type: data.funding_type,
       // pix_total_budget é só a verba de veiculação (sem taxa).
       pix_total_budget: isPix ? metaBudget : null,

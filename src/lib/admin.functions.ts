@@ -83,7 +83,7 @@ export interface AdminCampaignRow {
   client_name: string | null;
   client_email: string | null;
   name: string;
-  status: "running" | "analyzing" | "paused" | "aguardando_vinculo_meta" | "rodando" | "encerrada_saldo_consumido" | "em_revisao";
+  status: "running" | "analyzing" | "paused" | "aguardando_chave_pix" | "aguardando_vinculo_meta" | "rodando" | "encerrada_saldo_consumido" | "em_revisao";
   budget: number;
   days: number;
   spent: number;
@@ -249,7 +249,7 @@ export const adminSetCampaignStatus = createServerFn({ method: "POST" })
       id: z.string().uuid(),
       status: z.enum([
         "running","analyzing","paused",
-        "aguardando_vinculo_meta","rodando","encerrada_saldo_consumido","em_revisao",
+        "aguardando_chave_pix","aguardando_vinculo_meta","rodando","encerrada_saldo_consumido","em_revisao",
       ]),
       lock: z.boolean().optional(),
     }).parse(d),
@@ -613,7 +613,7 @@ export const adminBulkSetStatus = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z.object({
       ids: z.array(z.string().uuid()).min(1).max(500),
-      status: z.enum(["running","analyzing","paused","aguardando_vinculo_meta","rodando","encerrada_saldo_consumido"]),
+      status: z.enum(["running","analyzing","paused","aguardando_chave_pix","aguardando_vinculo_meta","rodando","encerrada_saldo_consumido"]),
     }).parse(d),
   )
   .handler(async ({ data, context }) => {
@@ -1013,7 +1013,7 @@ export const adminGetClientContext = createServerFn({ method: "GET" })
       .from("campaigns")
       .select("id, name, status, budget, days, spent, created_at")
       .eq("user_id", data.user_id)
-      .in("status", ["running", "rodando", "analyzing", "aguardando_vinculo_meta", "paused"])
+      .in("status", ["running", "rodando", "analyzing", "aguardando_chave_pix", "aguardando_vinculo_meta", "paused"])
       .order("created_at", { ascending: false })
       .limit(50);
     return {

@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { campaignMediaBudget, campaignPricing, effectivePlan, isCreditsLike, round2 } from "@/lib/pricing";
 
 // Webhook do Asaas — chamado quando o cliente confirma o pagamento.
 // Segurança: Asaas envia o header `asaas-access-token`. Comparamos com o
@@ -169,21 +170,32 @@ export const Route = createFileRoute("/api/public/asaas-webhook")({
           // PIX dedicado → credita saldo da campanha e coloca pra rodar.
           const { data: camp, error: cErr } = await supabaseAdmin
             .from("campaigns")
-            .select("id, pix_remaining_budget, pix_total_budget")
+            .select("id, pix_remaining_budget, pix_total_budget, budget, days, platform_fee, total_paid, scheduled_start_at, user_id")
             .eq("id", campaignId)
             .maybeSingle();
           if (cErr || !camp) {
             return new Response("Campaign not found", { status: 404 });
           }
-          const currentRemaining = Number(camp.pix_remaining_budget ?? 0);
-          const currentTotal = Number(camp.pix_total_budget ?? 0);
           const value = Number(prAny.amount);
+          const { data: profile } = await supabaseAdmin
+            .from("profiles")
+            .select("plan, trial_days, trial_started_at")
+            .eq("id", camp.user_id)
+            .maybeSingle();
+          const plan = effectivePlan((profile ?? {}) as { plan?: string | null; trial_days?: number | null; trial_started_at?: string | null });
+          const pricing = campaignPricing(Number(camp.budget ?? 0), Number(camp.days ?? 0), plan);
+          const metaBudget = isCreditsLike(plan) ? campaignMediaBudget(value) : pricing.metaBudget;
+          const feesPaid = round2(Math.max(0, value - metaBudget));
+          const platformFee = Math.min(feesPaid, Number(camp.platform_fee ?? 0));
           await supabaseAdmin
             .from("campaigns")
             .update({
-              pix_remaining_budget: currentRemaining + value,
-              pix_total_budget: currentTotal > 0 ? currentTotal : value,
-              total_paid: value,
+              pix_remaining_budget: round2(Number(camp.pix_remaining_budget ?? 0) + metaBudget),
+              pix_total_budget: metaBudget,
+              service_fee: round2(Math.max(0, feesPaid - platformFee)),
+              platform_fee: platformFee,
+              total_paid: round2(Number(camp.total_paid ?? 0) + value),
+              scheduled_start_at: camp.scheduled_start_at ?? new Date().toISOString(),
               status: "rodando",
             })
             .eq("id", campaignId);

@@ -141,7 +141,7 @@ export const Route = createFileRoute("/api/public/hooks/meta-metrics-sync")({
               // Só atualiza status via Meta se não for "aguardando_vinculo_meta" (fluxo de pagamento)
               // e se o admin não tiver travado o status manualmente (admin_status_lock).
               const locked = Boolean((c as { admin_status_lock?: boolean }).admin_status_lock);
-              if (mappedStatus && !locked && c.status !== "aguardando_vinculo_meta") {
+              if (mappedStatus && !locked && c.status !== "aguardando_vinculo_meta" && c.status !== "aguardando_chave_pix") {
                 update.status = mappedStatus;
                 if (mappedStatus === "paused") update.paused_at = nowIso;
                 if (mappedStatus === "encerrada_saldo_consumido") update.ended_at = nowIso;

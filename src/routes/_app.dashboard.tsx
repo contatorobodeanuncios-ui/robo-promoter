@@ -1,11 +1,12 @@
 import { reachRange, fmtRange } from "@/lib/mock-data";
 import { Button } from "@/components/ui/button";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Bot, MousePointerClick, DollarSign, TrendingDown, Plus, Sparkles, MapPin, CalendarDays, Users, Copy, ExternalLink, AlertTriangle, Clock } from "lucide-react";
+import { Bot, MousePointerClick, DollarSign, TrendingDown, Plus, Sparkles, MapPin, CalendarDays, Users, Copy, ExternalLink, AlertTriangle, Clock, CreditCard } from "lucide-react";
 import { EnergyOrb } from "@/components/app/EnergyOrb";
 import { RobotMascot } from "@/components/app/RobotMascot";
 import { CampaignImage } from "@/components/app/CampaignImage";
 import { useUserDisplayName } from "@/components/app/AppShell";
+import { useState } from "react";
 import { useAppStore, computeSummary } from "@/lib/store";
 import { creditsState, airTimeLabel, purchasedViews } from "@/lib/pricing";
 
@@ -37,6 +38,7 @@ const statusMeta: Record<string, { label: string; cls: string; dot: string }> = 
   running: { label: "Rodando", cls: "text-success bg-success/10 border-success/30", dot: "bg-success" },
   rodando: { label: "Rodando", cls: "text-success bg-success/10 border-success/30", dot: "bg-success" },
   analyzing: { label: "IA analisando", cls: "text-primary bg-primary/10 border-primary/30", dot: "bg-primary animate-pulse" },
+  aguardando_chave_pix: { label: "Aguardando chave PIX", cls: "text-warning bg-warning/10 border-warning/30", dot: "bg-warning animate-pulse" },
   aguardando_vinculo_meta: { label: "Aguardando Pagamento", cls: "text-destructive bg-destructive/10 border-destructive/30", dot: "bg-destructive animate-pulse" },
   paused: { label: "Pausado", cls: "text-muted-foreground bg-white/5 border-white/10", dot: "bg-muted-foreground" },
   encerrada_saldo_consumido: { label: "Encerrada — saldo consumido", cls: "text-muted-foreground bg-destructive/10 border-destructive/30", dot: "bg-destructive" },
@@ -50,6 +52,12 @@ function Dashboard() {
   const isProMax = plan === "pro_max";
   const displayName = useUserDisplayName();
   const summary = computeSummary(campaigns);
+  const [campaignFilter, setCampaignFilter] = useState<"all" | "aguardando_chave_pix" | "aguardando_vinculo_meta">("all");
+  const visibleCampaigns = campaigns.filter((campaign) =>
+    campaignFilter === "all" ? true : campaign.status === campaignFilter,
+  );
+  const pixKeyCount = campaigns.filter((campaign) => campaign.status === "aguardando_chave_pix").length;
+  const paymentCount = campaigns.filter((campaign) => campaign.status === "aguardando_vinculo_meta").length;
   // Corrigido: faltava "rodando" aqui (o cron do Meta usa esse valor, não só
   // "running") — campanhas realmente ativas ficavam de fora do resumo do topo.
   const running = campaigns.filter((c) => c.status === "running" || c.status === "rodando");
@@ -132,9 +140,19 @@ function Dashboard() {
       </section>
 
       <section className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">Campanhas ativas</h2>
-          <span className="text-xs text-muted-foreground">{campaigns.length} campanhas</span>
+          <div className="flex flex-wrap items-center gap-2">
+            {([
+              ["all", `Todas (${campaigns.length})`],
+              ["aguardando_chave_pix", `Aguardando chave PIX (${pixKeyCount})`],
+              ["aguardando_vinculo_meta", `Aguardando pagamento (${paymentCount})`],
+            ] as const).map(([value, label]) => (
+              <Button key={value} variant={campaignFilter === value ? "neon" : "glass"} size="sm" onClick={() => setCampaignFilter(value)}>
+                {label}
+              </Button>
+            ))}
+          </div>
         </div>
 
         <div className="glass rounded-2xl overflow-hidden">
@@ -143,7 +161,10 @@ function Dashboard() {
               Nenhuma campanha ativa. <Link to="/create" className="text-primary">Criar uma agora</Link>.
             </div>
           )}
-          {campaigns.map((c) => {
+          {campaigns.length > 0 && visibleCampaigns.length === 0 && (
+            <div className="p-8 text-center text-sm text-muted-foreground">Nenhuma campanha neste filtro.</div>
+          )}
+          {visibleCampaigns.map((c) => {
             const s = statusMeta[c.status] ?? { label: c.status, cls: "text-muted-foreground bg-white/5 border-white/10", dot: "bg-muted-foreground" };
             const range = reachRange(c.budget, c.days);
             // Corrigido: a métrica não pode depender de "está rodando agora" —
@@ -151,6 +172,7 @@ function Dashboard() {
             // legítimos pra mostrar. O que importa é se o valor já chegou do
             // Facebook (maior que zero), não o status atual da campanha.
             const isAwaitingPay = c.status === "aguardando_vinculo_meta";
+            const needsPixKey = c.status === "aguardando_chave_pix";
             const hasPixLink = isAwaitingPay && c.funding_type === "pix_dedicated" && !!c.invoice_url;
             const M = ({ label, value, has }: { label: string; value: string; has: boolean }) => (
               <div className="glass rounded-md p-1.5 min-w-0">
@@ -237,14 +259,30 @@ function Dashboard() {
                   </div>
                 </Link>
 
+                {needsPixKey && (
+                  <div className="mt-3 rounded-xl border border-warning/50 bg-warning/5 p-3 flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-warning font-semibold flex items-center gap-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                      A chave PIX ainda não foi gerada para esta campanha.
+                    </span>
+                    <Link className="ml-auto" to="/payment" search={{ campaignId: c.id, budget: c.budget, days: c.days, name: c.name }}>
+                      <Button variant="neon" size="sm"><CreditCard className="h-3.5 w-3.5" /> Gerar chave PIX</Button>
+                    </Link>
+                  </div>
+                )}
+
                 {isAwaitingPay && (
                   <div className="mt-3 rounded-xl border-2 border-destructive/60 bg-destructive/10 p-3 flex flex-wrap items-center gap-2">
                     <span className="text-xs text-destructive font-semibold flex items-center gap-1.5">
                       <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                       Pagamento pendente. Aguardando finalização para concluir com o anúncio.
                     </span>
-                    {hasPixLink && (
-                      <div className="ml-auto flex gap-2">
+                    <div className="ml-auto flex gap-2">
+                      <Link to="/payment" search={{ campaignId: c.id, budget: c.budget, days: c.days, name: c.name }}>
+                        <Button variant="neon" size="sm"><CreditCard className="h-3.5 w-3.5" /> Abrir pagamento</Button>
+                      </Link>
+                      {hasPixLink && (
+                        <>
                         <Button
                           variant="glass"
                           size="sm"
@@ -260,8 +298,9 @@ function Dashboard() {
                             <ExternalLink className="h-3.5 w-3.5" /> Pagar agora
                           </Button>
                         </a>
-                      </div>
-                    )}
+                        </>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

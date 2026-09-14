@@ -153,7 +153,7 @@ export function campaignPricing(
   const metaBudget = round2(budget * days);
   // Planos CRÉDITOS e PRO MAX: pacote fechado por dias, sem taxa exibida.
   if (isCreditsLike(plan)) {
-    const total = packagePriceForDays(days);
+    const total = packagePriceFor(days, includedViewsForDays(days));
     return {
       metaBudget: campaignMediaBudget(total),
       serviceFee: 0,

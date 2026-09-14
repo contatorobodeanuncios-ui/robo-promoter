@@ -157,8 +157,8 @@ function CampaignDetail() {
       )}
 
       {(() => {
-        const totalCost = Math.round(c.budget * c.days);
-        const unpaid = Number(c.total_paid ?? 0) < totalCost;
+        const totalCost = Number(c.total_paid ?? 0);
+        const unpaid = c.status === "aguardando_chave_pix" || c.status === "aguardando_vinculo_meta";
         if (!unpaid) return null;
         return (
           <section className="rounded-2xl p-5 border-2 border-warning/50 bg-warning/5 flex flex-wrap items-center justify-between gap-4">
@@ -167,7 +167,7 @@ function CampaignDetail() {
               <div className="min-w-0">
                 <p className="font-semibold">Pagamento não concluído</p>
                 <p className="text-xs text-muted-foreground break-words">
-                  Esta campanha ainda não foi paga ({fmtBRL(totalCost)}). Conclua o pagamento para o anúncio subir.
+                  {c.status === "aguardando_chave_pix" ? "Gere a chave PIX para iniciar o pagamento." : `Esta campanha ainda não foi paga${totalCost > 0 ? ` (${fmtBRL(totalCost)})` : ""}. Conclua o pagamento para o anúncio subir.`}
                 </p>
               </div>
             </div>
@@ -181,7 +181,7 @@ function CampaignDetail() {
                 })
               }
             >
-              <CreditCard className="h-4 w-4" /> Concluir pagamento
+              <CreditCard className="h-4 w-4" /> {c.status === "aguardando_chave_pix" ? "Gerar chave PIX" : "Concluir pagamento"}
             </Button>
           </section>
         );
@@ -202,7 +202,7 @@ function CampaignDetail() {
         <div className="min-w-0">
           <p className="text-xs text-muted-foreground uppercase tracking-wider">Status</p>
           <p className="text-2xl font-bold tabular-nums capitalize break-words">
-            {c.status === "running" || c.status === "rodando" ? "Ativa" : c.status === "analyzing" ? "Em análise" : c.status === "paused" ? "Pausada" : c.status === "aguardando_vinculo_meta" ? "Aguardando pagamento" : "Encerrada"}
+            {c.status === "running" || c.status === "rodando" ? "Ativa" : c.status === "analyzing" ? "Em análise" : c.status === "paused" ? "Pausada" : c.status === "aguardando_chave_pix" ? "Aguardando chave PIX" : c.status === "aguardando_vinculo_meta" ? "Aguardando pagamento" : "Encerrada"}
           </p>
         </div>
       </section>
@@ -298,6 +298,7 @@ function handleDownloadReport(c: Campaign, hasRealMetrics: boolean) {
     c.status === "running" || c.status === "rodando" ? "Ativa"
       : c.status === "analyzing" ? "Em análise"
       : c.status === "paused" ? "Pausada"
+      : c.status === "aguardando_chave_pix" ? "Aguardando chave PIX"
       : c.status === "aguardando_vinculo_meta" ? "Aguardando pagamento"
       : "Encerrada";
 
