@@ -1,7 +1,7 @@
 import { reachRange, fmtRange } from "@/lib/mock-data";
 import { Button } from "@/components/ui/button";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Bot, MousePointerClick, DollarSign, TrendingDown, Plus, Sparkles, MapPin, CalendarDays, Users, Copy, ExternalLink, AlertTriangle, Clock } from "lucide-react";
+import { Bot, MousePointerClick, DollarSign, TrendingDown, Plus, Sparkles, MapPin, CalendarDays, Users, Copy, ExternalLink, AlertTriangle, Clock, CreditCard } from "lucide-react";
 import { EnergyOrb } from "@/components/app/EnergyOrb";
 import { RobotMascot } from "@/components/app/RobotMascot";
 import { CampaignImage } from "@/components/app/CampaignImage";
