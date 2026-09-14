@@ -37,7 +37,7 @@ ALTER TABLE public.campaign_boosts ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "boosts_select_own" ON public.campaign_boosts;
 CREATE POLICY "boosts_select_own" ON public.campaign_boosts
   FOR SELECT TO authenticated
-  USING (auth.uid() = user_id OR public.has_role(auth.uid(), 'admin'));
+  USING (auth.uid() = user_id OR private.has_role(auth.uid(), 'admin'));
 
 DROP POLICY IF EXISTS "boosts_insert_own" ON public.campaign_boosts;
 CREATE POLICY "boosts_insert_own" ON public.campaign_boosts

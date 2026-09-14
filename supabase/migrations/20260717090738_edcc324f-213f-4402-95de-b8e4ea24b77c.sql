@@ -21,14 +21,14 @@ CREATE POLICY "support attach owner read"
     AND (
       ((storage.foldername(name))[1] = 'support'
         AND (storage.foldername(name))[2] = auth.uid()::text)
-      OR public.has_role(auth.uid(), 'admin')
+      OR private.has_role(auth.uid(), 'admin')
     )
   );
 
 DROP POLICY IF EXISTS "support attach admin upload" ON storage.objects;
 CREATE POLICY "support attach admin upload"
   ON storage.objects FOR INSERT TO authenticated
-  WITH CHECK (bucket_id = 'support-attachments' AND public.has_role(auth.uid(), 'admin'));
+  WITH CHECK (bucket_id = 'support-attachments' AND private.has_role(auth.uid(), 'admin'));
 
 -- 2) Auditoria Meta
 CREATE TABLE IF NOT EXISTS public.campaign_meta_link_audit (
@@ -49,7 +49,7 @@ ALTER TABLE public.campaign_meta_link_audit ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "meta_link_audit_admin_read" ON public.campaign_meta_link_audit;
 CREATE POLICY "meta_link_audit_admin_read"
   ON public.campaign_meta_link_audit FOR SELECT TO authenticated
-  USING (public.has_role(auth.uid(), 'admin'));
+  USING (private.has_role(auth.uid(), 'admin'));
 
 CREATE INDEX IF NOT EXISTS idx_meta_link_audit_campaign
   ON public.campaign_meta_link_audit(campaign_id, created_at DESC);
@@ -111,7 +111,7 @@ ALTER TABLE public.campaign_ai_reviews ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "ai_reviews_admin_read" ON public.campaign_ai_reviews;
 CREATE POLICY "ai_reviews_admin_read"
   ON public.campaign_ai_reviews FOR SELECT TO authenticated
-  USING (public.has_role(auth.uid(), 'admin'));
+  USING (private.has_role(auth.uid(), 'admin'));
 
 CREATE INDEX IF NOT EXISTS idx_ai_reviews_campaign
   ON public.campaign_ai_reviews(campaign_id, created_at DESC);
@@ -131,4 +131,4 @@ ALTER TABLE public.admin_magic_link_events ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "magic_link_admin_read" ON public.admin_magic_link_events;
 CREATE POLICY "magic_link_admin_read"
   ON public.admin_magic_link_events FOR SELECT TO authenticated
-  USING (public.has_role(auth.uid(), 'admin'));
+  USING (private.has_role(auth.uid(), 'admin'));
