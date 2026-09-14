@@ -5,9 +5,9 @@ REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM PUBLIC, anon, authentic
 REVOKE EXECUTE ON FUNCTION public.handle_new_user_access_request() FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.prevent_balance_update() FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.prevent_campaign_metric_update() FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION private.has_role(uuid, public.app_role) FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.has_role(uuid, public.app_role) FROM PUBLIC, anon;
 
 -- has_role is invoked from RLS policies; authenticated users need EXECUTE to
 -- allow policy evaluation on their own queries.
-GRANT EXECUTE ON FUNCTION private.has_role(uuid, public.app_role) TO authenticated;
-GRANT EXECUTE ON FUNCTION private.has_role(uuid, public.app_role) TO service_role;
+GRANT EXECUTE ON FUNCTION public.has_role(uuid, public.app_role) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.has_role(uuid, public.app_role) TO service_role;

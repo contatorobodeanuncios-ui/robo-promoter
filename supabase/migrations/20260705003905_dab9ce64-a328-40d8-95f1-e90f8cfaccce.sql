@@ -15,7 +15,7 @@ GRANT ALL ON public.meta_metrics_runs TO service_role;
 ALTER TABLE public.meta_metrics_runs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "admins read meta_metrics_runs"
   ON public.meta_metrics_runs FOR SELECT TO authenticated
-  USING (private.has_role(auth.uid(), 'admin'));
+  USING (public.has_role(auth.uid(), 'admin'));
 
 -- admin_notes
 CREATE TABLE public.admin_notes (
@@ -29,7 +29,7 @@ GRANT ALL ON public.admin_notes TO service_role;
 ALTER TABLE public.admin_notes ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "admins read admin_notes"
   ON public.admin_notes FOR SELECT TO authenticated
-  USING (private.has_role(auth.uid(), 'admin'));
+  USING (public.has_role(auth.uid(), 'admin'));
 
 -- manual_balance_adjustments
 CREATE TABLE public.manual_balance_adjustments (
@@ -46,7 +46,7 @@ GRANT ALL ON public.manual_balance_adjustments TO service_role;
 ALTER TABLE public.manual_balance_adjustments ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "admins read balance adjustments"
   ON public.manual_balance_adjustments FOR SELECT TO authenticated
-  USING (private.has_role(auth.uid(), 'admin'));
+  USING (public.has_role(auth.uid(), 'admin'));
 CREATE POLICY "users read own balance adjustments"
   ON public.manual_balance_adjustments FOR SELECT TO authenticated
   USING (auth.uid() = user_id);

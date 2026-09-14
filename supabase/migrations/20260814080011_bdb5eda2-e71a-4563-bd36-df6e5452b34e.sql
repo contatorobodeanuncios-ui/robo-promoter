@@ -14,4 +14,4 @@ ALTER TABLE public.user_activity_events ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "own activity insert" ON public.user_activity_events;
 CREATE POLICY "own activity insert" ON public.user_activity_events FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
 DROP POLICY IF EXISTS "own activity select" ON public.user_activity_events;
-CREATE POLICY "own activity select" ON public.user_activity_events FOR SELECT TO authenticated USING (auth.uid() = user_id OR private.has_role(auth.uid(), 'admin'));
+CREATE POLICY "own activity select" ON public.user_activity_events FOR SELECT TO authenticated USING (auth.uid() = user_id OR public.has_role(auth.uid(), 'admin'));

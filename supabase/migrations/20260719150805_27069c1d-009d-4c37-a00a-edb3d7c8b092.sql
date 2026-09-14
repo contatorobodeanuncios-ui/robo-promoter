@@ -13,5 +13,5 @@ GRANT ALL ON public.access_link_slugs TO service_role;
 ALTER TABLE public.access_link_slugs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Admins manage access link slugs" ON public.access_link_slugs
   FOR ALL TO authenticated
-  USING (private.has_role(auth.uid(), 'admin'::app_role))
-  WITH CHECK (private.has_role(auth.uid(), 'admin'::app_role));
+  USING (public.has_role(auth.uid(), 'admin'::app_role))
+  WITH CHECK (public.has_role(auth.uid(), 'admin'::app_role));

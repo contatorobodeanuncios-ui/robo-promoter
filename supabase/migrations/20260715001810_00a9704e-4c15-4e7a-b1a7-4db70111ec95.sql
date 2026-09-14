@@ -41,7 +41,7 @@ ALTER TABLE public.pix_attempts ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "admins read pix_attempts" ON public.pix_attempts;
 CREATE POLICY "admins read pix_attempts" ON public.pix_attempts
   FOR SELECT TO authenticated
-  USING (private.has_role(auth.uid(), 'admin'::app_role));
+  USING (public.has_role(auth.uid(), 'admin'::app_role));
 CREATE INDEX IF NOT EXISTS idx_pix_attempts_created ON public.pix_attempts (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_pix_attempts_user ON public.pix_attempts (user_id, created_at DESC);
 
@@ -78,23 +78,23 @@ CREATE POLICY "users insert own messages" ON public.support_messages
 DROP POLICY IF EXISTS "admins insert messages" ON public.support_messages;
 CREATE POLICY "admins insert messages" ON public.support_messages
   FOR INSERT TO authenticated
-  WITH CHECK (sender = 'admin' AND private.has_role(auth.uid(), 'admin'::app_role));
+  WITH CHECK (sender = 'admin' AND public.has_role(auth.uid(), 'admin'::app_role));
 
 DROP POLICY IF EXISTS "admins view all messages" ON public.support_messages;
 CREATE POLICY "admins view all messages" ON public.support_messages
   FOR SELECT TO authenticated
-  USING (private.has_role(auth.uid(), 'admin'::app_role));
+  USING (public.has_role(auth.uid(), 'admin'::app_role));
 
 DROP POLICY IF EXISTS "admins view all conversations" ON public.support_conversations;
 CREATE POLICY "admins view all conversations" ON public.support_conversations
   FOR SELECT TO authenticated
-  USING (private.has_role(auth.uid(), 'admin'::app_role));
+  USING (public.has_role(auth.uid(), 'admin'::app_role));
 
 DROP POLICY IF EXISTS "admins update conversations" ON public.support_conversations;
 CREATE POLICY "admins update conversations" ON public.support_conversations
   FOR UPDATE TO authenticated
-  USING (private.has_role(auth.uid(), 'admin'::app_role))
-  WITH CHECK (private.has_role(auth.uid(), 'admin'::app_role));
+  USING (public.has_role(auth.uid(), 'admin'::app_role))
+  WITH CHECK (public.has_role(auth.uid(), 'admin'::app_role));
 
 DROP POLICY IF EXISTS "users update own conversations" ON public.support_conversations;
 CREATE POLICY "users update own conversations" ON public.support_conversations

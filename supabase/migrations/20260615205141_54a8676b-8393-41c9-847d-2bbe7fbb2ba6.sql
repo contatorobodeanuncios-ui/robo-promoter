@@ -30,7 +30,7 @@ ALTER TABLE public.payment_requests ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS pr_select_own ON public.payment_requests;
 CREATE POLICY pr_select_own ON public.payment_requests
-  FOR SELECT TO authenticated USING (auth.uid() = user_id OR private.has_role(auth.uid(),'admin'));
+  FOR SELECT TO authenticated USING (auth.uid() = user_id OR public.has_role(auth.uid(),'admin'));
 
 DROP POLICY IF EXISTS pr_insert_own ON public.payment_requests;
 CREATE POLICY pr_insert_own ON public.payment_requests
@@ -38,7 +38,7 @@ CREATE POLICY pr_insert_own ON public.payment_requests
 
 DROP POLICY IF EXISTS pr_update_admin ON public.payment_requests;
 CREATE POLICY pr_update_admin ON public.payment_requests
-  FOR UPDATE TO authenticated USING (private.has_role(auth.uid(),'admin')) WITH CHECK (private.has_role(auth.uid(),'admin'));
+  FOR UPDATE TO authenticated USING (public.has_role(auth.uid(),'admin')) WITH CHECK (public.has_role(auth.uid(),'admin'));
 
 DROP TRIGGER IF EXISTS payment_requests_touch ON public.payment_requests;
 CREATE TRIGGER payment_requests_touch BEFORE UPDATE ON public.payment_requests
