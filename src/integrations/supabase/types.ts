@@ -970,6 +970,7 @@ export type Database = {
         | "rodando"
         | "encerrada_saldo_consumido"
         | "em_revisao"
+        | "aguardando_chave_pix"
       payment_request_kind:
         | "campaign_budget"
         | "balance_topup"
@@ -1112,6 +1113,7 @@ export const Constants = {
         "rodando",
         "encerrada_saldo_consumido",
         "em_revisao",
+        "aguardando_chave_pix",
       ],
       payment_request_kind: [
         "campaign_budget",
