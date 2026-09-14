@@ -161,6 +161,9 @@ function Dashboard() {
               Nenhuma campanha ativa. <Link to="/create" className="text-primary">Criar uma agora</Link>.
             </div>
           )}
+          {campaigns.length > 0 && visibleCampaigns.length === 0 && (
+            <div className="p-8 text-center text-sm text-muted-foreground">Nenhuma campanha neste filtro.</div>
+          )}
           {visibleCampaigns.map((c) => {
             const s = statusMeta[c.status] ?? { label: c.status, cls: "text-muted-foreground bg-white/5 border-white/10", dot: "bg-muted-foreground" };
             const range = reachRange(c.budget, c.days);

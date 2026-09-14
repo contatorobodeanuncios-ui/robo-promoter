@@ -234,6 +234,7 @@ const campaignInput = z.object({
     "running",
     "analyzing",
     "paused",
+    "aguardando_chave_pix",
     "aguardando_vinculo_meta",
     "rodando",
     "encerrada_saldo_consumido",
