@@ -428,11 +428,23 @@ async function creditApprovedPayment(params: {
       .select("id, pix_remaining_budget, pix_total_budget, budget, days, platform_fee, total_paid, scheduled_start_at")
       .eq("id", params.campaignId)
       .maybeSingle();
+    const { data: planProfile } = await admin
+      .from("profiles")
+      .select("plan, trial_days, trial_started_at")
+      .eq("id", params.userId)
+      .maybeSingle();
+    const plan = effectivePlan(
+      (planProfile ?? {}) as { plan?: string | null; trial_days?: number | null; trial_started_at?: string | null },
+    );
     // O valor pago inclui as taxas. Só a verba de veiculação vai para o
     // orçamento da campanha; o restante fica registrado como taxa (serviço
     // e, para usuários FREE, também a taxa de plataforma já gravada na linha).
-    const pricing = campaignPricing(Number(camp?.budget ?? 0), Number(camp?.days ?? 0));
-    const metaBudget = pricing.metaBudget > 0 ? pricing.metaBudget : round2(params.amount / 1.15);
+    const pricing = campaignPricing(Number(camp?.budget ?? 0), Number(camp?.days ?? 0), plan);
+    const metaBudget = isCreditsLike(plan)
+      ? campaignMediaBudget(params.amount)
+      : pricing.metaBudget > 0
+        ? pricing.metaBudget
+        : round2(params.amount / 1.15);
     const feesPaid = round2(Math.max(0, params.amount - metaBudget));
     const platformFee = Math.min(
       feesPaid,
@@ -639,6 +651,18 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
       prId = row.id as string;
     }
 
+    // A campanha só passa a “aguardando pagamento” depois que existe uma
+    // solicitação real e reutilizável. O update é idempotente e não interfere
+    // em campanhas já aprovadas ou pagas com saldo.
+    if (data.campaignId && paymentType === "campaign_budget") {
+      await admin
+        .from("campaigns")
+        .update({ status: "aguardando_vinculo_meta" } as never)
+        .eq("id", data.campaignId)
+        .eq("user_id", context.userId)
+        .eq("status", "aguardando_chave_pix");
+    }
+
     if (data.boostId) {
       await admin
         .from("campaign_boosts")
@@ -780,6 +804,13 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
             last_error: null,
           } as never)
           .eq("id", prId);
+        if (data.campaignId && invoiceUrl) {
+          await admin
+            .from("campaigns")
+            .update({ invoice_url: invoiceUrl } as never)
+            .eq("id", data.campaignId)
+            .eq("user_id", context.userId);
+        }
       } else if (apiError) {
         await admin
           .from("payment_requests")

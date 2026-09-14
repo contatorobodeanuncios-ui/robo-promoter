@@ -101,7 +101,7 @@ export const computeSummary = (campaigns: Campaign[]) => {
     avgCpc,
     avgCtr,
     running: running.length,
-    analyzing: campaigns.filter((c) => c.status === "analyzing" || c.status === "aguardando_vinculo_meta").length,
+    analyzing: campaigns.filter((c) => c.status === "analyzing" || c.status === "aguardando_chave_pix" || c.status === "aguardando_vinculo_meta").length,
     paused: campaigns.filter((c) => c.status === "paused").length,
   };
 };

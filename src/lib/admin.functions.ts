@@ -83,7 +83,7 @@ export interface AdminCampaignRow {
   client_name: string | null;
   client_email: string | null;
   name: string;
-  status: "running" | "analyzing" | "paused" | "aguardando_vinculo_meta" | "rodando" | "encerrada_saldo_consumido" | "em_revisao";
+  status: "running" | "analyzing" | "paused" | "aguardando_chave_pix" | "aguardando_vinculo_meta" | "rodando" | "encerrada_saldo_consumido" | "em_revisao";
   budget: number;
   days: number;
   spent: number;
@@ -249,7 +249,7 @@ export const adminSetCampaignStatus = createServerFn({ method: "POST" })
       id: z.string().uuid(),
       status: z.enum([
         "running","analyzing","paused",
-        "aguardando_vinculo_meta","rodando","encerrada_saldo_consumido","em_revisao",
+        "aguardando_chave_pix","aguardando_vinculo_meta","rodando","encerrada_saldo_consumido","em_revisao",
       ]),
       lock: z.boolean().optional(),
     }).parse(d),
