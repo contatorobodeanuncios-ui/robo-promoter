@@ -8,9 +8,9 @@ declare global {
   }
 }
 
-export function loadPixel(pixelId: string) {
-  if (typeof window === "undefined" || !pixelId) return;
-  if (window.fbq) return;
+export function loadPixel(pixelId: string): boolean {
+  if (typeof window === "undefined" || !pixelId) return false;
+  if (window.fbq) return true;
   /* eslint-disable */
   (function (f: any, b: any, e: any, v: any, n?: any, t?: any, s?: any) {
     if (f.fbq) return;
@@ -26,10 +26,12 @@ export function loadPixel(pixelId: string) {
     t.async = !0;
     t.src = v;
     s = b.getElementsByTagName(e)[0];
-    s.parentNode.insertBefore(t, s);
+    if (s?.parentNode) s.parentNode.insertBefore(t, s);
+    else (b.head || b.documentElement).appendChild(t);
   })(window, document, "script", "https://connect.facebook.net/en_US/fbevents.js");
   /* eslint-enable */
   (window as unknown as { fbq?: (...a: unknown[]) => void }).fbq?.("init", pixelId);
+  return true;
 }
 
 export function fbTrack(event: string): boolean {
