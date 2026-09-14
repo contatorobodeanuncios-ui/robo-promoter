@@ -23,8 +23,8 @@ export function MetaPixel() {
     if (!pixelId) return;
     const w = window as unknown as { __fbPixelBooted?: boolean };
     if (w.__fbPixelBooted) return;
+    if (!loadPixel(pixelId)) return;
     w.__fbPixelBooted = true;
-    loadPixel(pixelId);
     fbTrack("PageView");
     fbTrackOnce("Lead", "fb_lead_tracked");
   }, [pixelId]);
