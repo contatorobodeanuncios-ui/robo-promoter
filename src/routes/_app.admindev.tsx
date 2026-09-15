@@ -387,7 +387,7 @@ function AdminDevPage() {
 
   const allCampaigns = campaignsQuery.data ?? [];
   const counts = {
-    active: allCampaigns.filter((c) => !c.archived_reason).length,
+    active: allCampaigns.filter((c) => !c.archived_reason && c.status !== "aguardando_chave_pix").length,
     awaiting_pix_key: allCampaigns.filter((c) => !c.archived_reason && c.status === "aguardando_chave_pix").length,
     awaiting_payment: allCampaigns.filter((c) => c.archived_reason === "awaiting_payment").length,
     deleted: allCampaigns.filter((c) => c.archived_reason === "deleted").length,
@@ -396,7 +396,7 @@ function AdminDevPage() {
     .filter((c) => campaignView === "awaiting_pix_key"
       ? !c.archived_reason && c.status === "aguardando_chave_pix"
       : campaignView === "active"
-        ? !c.archived_reason
+        ? !c.archived_reason && c.status !== "aguardando_chave_pix"
         : c.archived_reason === campaignView)
     .filter((c) =>
       matchesSearch(search, [

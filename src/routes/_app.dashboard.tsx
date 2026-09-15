@@ -53,8 +53,11 @@ function Dashboard() {
   const displayName = useUserDisplayName();
   const summary = computeSummary(campaigns);
   const [campaignFilter, setCampaignFilter] = useState<"all" | "aguardando_chave_pix" | "aguardando_vinculo_meta">("all");
+  const activeCampaigns = campaigns.filter((campaign) => campaign.status !== "aguardando_chave_pix");
   const visibleCampaigns = campaigns.filter((campaign) =>
-    campaignFilter === "all" ? true : campaign.status === campaignFilter,
+    campaignFilter === "all"
+      ? campaign.status !== "aguardando_chave_pix"
+      : campaign.status === campaignFilter,
   );
   const pixKeyCount = campaigns.filter((campaign) => campaign.status === "aguardando_chave_pix").length;
   const paymentCount = campaigns.filter((campaign) => campaign.status === "aguardando_vinculo_meta").length;
@@ -144,7 +147,7 @@ function Dashboard() {
           <h2 className="text-lg font-semibold">Campanhas ativas</h2>
           <div className="flex flex-wrap items-center gap-2">
             {([
-              ["all", `Todas (${campaigns.length})`],
+               ["all", `Ativas (${activeCampaigns.length})`],
               ["aguardando_chave_pix", `Aguardando chave PIX (${pixKeyCount})`],
               ["aguardando_vinculo_meta", `Aguardando pagamento (${paymentCount})`],
             ] as const).map(([value, label]) => (
