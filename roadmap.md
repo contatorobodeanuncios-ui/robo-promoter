@@ -5,3 +5,4 @@
 - [x] Adicionar status `aguardando_chave_pix` e transições seguras.
 - [x] Adicionar filtros e retomada de pagamento no dashboard e admindev.
 - [x] Testar preços, transições, idempotência e regressão de saldo.
+- [x] Exibir campanhas aguardando chave PIX somente na aba dedicada.
