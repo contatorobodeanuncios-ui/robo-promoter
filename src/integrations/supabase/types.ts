@@ -950,6 +950,21 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_bulk_add_balance: {
+        Args: {
+          _admin_email: string
+          _admin_id: string
+          _amount: number
+          _hours?: number
+          _mode: string
+          _user_ids?: string[]
+        }
+        Returns: {
+          affected_count: number
+          total_amount: number
+          unit_amount: number
+        }[]
+      }
       auto_pause_pix_campaigns: { Args: never; Returns: number }
       has_role: {
         Args: {
