@@ -1130,6 +1130,64 @@ export const adminAdjustBalance = createServerFn({ method: "POST" })
     return { ok: true, balance: next };
   });
 
+const bulkBalanceSchema = z.object({
+  mode: z.enum(["specific", "recent_hours", "last_day", "all"]),
+  amount: z.number().positive().max(1_000_000),
+  user_ids: z.array(z.string().uuid()).max(5000).optional(),
+  hours: z.number().int().min(1).max(8760).optional(),
+});
+
+export const adminBulkBalancePreview = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => bulkBalanceSchema.parse(d))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    let q = admin.from("profiles").select("id", { count: "exact", head: true });
+    if (data.mode === "specific") {
+      if (!data.user_ids?.length) return { count: 0, total: 0 };
+      q = q.in("id", data.user_ids);
+    } else if (data.mode !== "all") {
+      const h = data.mode === "last_day" ? 24 : data.hours;
+      if (!h) throw new Error("Informe as horas");
+      q = q.gte("created_at", new Date(Date.now() - h * 3600_000).toISOString());
+    }
+    const { count, error } = await q;
+    if (error) throw new Error(error.message);
+    const c = count ?? 0;
+    return { count: c, total: Number((c * data.amount).toFixed(2)) };
+  });
+
+export const adminBulkAddBalance = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => bulkBalanceSchema.parse(d))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId, context.claims as { email?: string });
+    const admin = await getSupabaseAdmin();
+    let email = (context.claims as { email?: string })?.email ?? "";
+    if (!email) {
+      const { data: u } = await admin.auth.admin.getUserById(context.userId);
+      email = u.user?.email ?? "";
+    }
+    const { data: rows, error } = await admin.rpc("admin_bulk_add_balance", {
+      _admin_id: context.userId,
+      _admin_email: email || "admin",
+      _mode: data.mode,
+      _amount: data.amount,
+      _user_ids: data.mode === "specific" ? data.user_ids ?? [] : undefined,
+      _hours: data.mode === "recent_hours" ? data.hours : data.mode === "last_day" ? 24 : undefined,
+    });
+    if (error) throw new Error(error.message);
+    const r = (Array.isArray(rows) ? rows[0] : rows) as
+      | { affected_count: number; unit_amount: number; total_amount: number }
+      | undefined;
+    return {
+      affected: Number(r?.affected_count ?? 0),
+      unit: Number(r?.unit_amount ?? data.amount),
+      total: Number(r?.total_amount ?? 0),
+    };
+  });
+
 export const adminUpdateProfile = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
