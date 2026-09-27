@@ -1,4 +1,5 @@
 import { getRobotSchedule, getMetaPixelId } from "@/lib/data.functions";
+import { parsePositiveBRL, nextBalance, type BalanceOperation } from "@/lib/money";
 import { adminListSecurityEvents } from "@/lib/security.functions";
 import { createFileRoute, redirect, useNavigate, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
@@ -1887,6 +1888,7 @@ function AllClientsSection({
   const qc = useQueryClient();
   const [filter, setFilter] = useState<ClientFilter>("active");
   const [balanceTarget, setBalanceTarget] = useState<AdminClientRow | null>(null);
+  const [balanceMode, setBalanceMode] = useState<BalanceOperation>("add");
   const [profileTarget, setProfileTarget] = useState<AdminClientRow | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
 
@@ -2055,8 +2057,11 @@ function AllClientsSection({
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2 flex-wrap">
-                      <Button variant="glass" size="sm" onClick={() => setBalanceTarget(c)} title="Editar saldo">
+                      <Button variant="glass" size="sm" onClick={() => { setBalanceMode("add"); setBalanceTarget(c); }} title="Editar saldo">
                         <Wallet className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button variant="glass" size="sm" onClick={() => { setBalanceMode("set_zero"); setBalanceTarget(c); }} title="Zerar saldo">
+                        <Ban className="h-3.5 w-3.5" /> Zerar
                       </Button>
                       <Button variant="glass" size="sm" onClick={() => setProfileTarget(c)} title="Editar perfil">
                         <Pencil className="h-3.5 w-3.5" />
@@ -2274,64 +2279,90 @@ function BulkBalanceDialog({ clients, onClose }: { clients: AdminClientRow[]; on
   );
 }
 
-function BalanceDialog({ client, onClose }: { client: AdminClientRow; onClose: () => void }) {
+function BalanceDialog({
+  client,
+  onClose,
+  initialMode = "add",
+}: {
+  client: AdminClientRow;
+  onClose: () => void;
+  initialMode?: BalanceOperation;
+}) {
   const qc = useQueryClient();
-  // Em vez de depender do sinal "-" (que some em muitos teclados numéricos de
-  // celular), o admin escolhe explicitamente Adicionar/Subtrair e digita
-  // sempre um valor positivo — elimina a ambiguidade por completo.
-  const [mode, setMode] = useState<"add" | "subtract">("add");
+  // A direção vem SOMENTE do botão escolhido; o valor é sempre positivo.
+  const [mode, setMode] = useState<BalanceOperation>(initialMode);
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
   const fn = useServerFn(adminAdjustBalance);
-  const amountNum = Number(amount);
-  const delta = mode === "subtract" ? -Math.abs(amountNum) : Math.abs(amountNum);
+  const amountNum = parsePositiveBRL(amount);
+  const isZero = mode === "set_zero";
+  const preview = isZero ? 0 : Number.isNaN(amountNum) ? null : nextBalance(client.balance, mode, amountNum);
   const mut = useMutation({
-    mutationFn: () => fn({ data: { user_id: client.id, delta, reason: reason.trim() } }),
-    onSuccess: () => {
+    mutationFn: () =>
+      fn({
+        data: {
+          user_id: client.id,
+          operation: mode,
+          amount: isZero ? undefined : amountNum,
+          reason: reason.trim(),
+        },
+      }),
+    onSuccess: (r) => {
+      // Atualiza o saldo na tela imediatamente, sem recarregar.
+      qc.setQueriesData<AdminClientRow[]>({ queryKey: ["admin-all-clients"] }, (old) =>
+        Array.isArray(old) ? old.map((c) => (c.id === client.id ? { ...c, balance: r.balance } : c)) : old,
+      );
       qc.invalidateQueries({ queryKey: ["admin-all-clients"] });
-      toast.success("Saldo atualizado");
+      toast.success(`Saldo atualizado: ${fmtBRL(r.previous)} → ${fmtBRL(r.balance)}`);
       onClose();
     },
     onError: (e) => toast.error("Falha ao ajustar saldo", { description: String(e) }),
   });
-  const valid = amount.trim() !== "" && !Number.isNaN(amountNum) && amountNum > 0 && reason.trim().length >= 3;
+  const valid = (isZero || !Number.isNaN(amountNum)) && reason.trim().length >= 3;
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Editar saldo — {client.display_name ?? client.email ?? "cliente"}</DialogTitle>
+          <DialogTitle>
+            {isZero ? "Zerar saldo" : "Editar saldo"} — {client.display_name ?? client.email ?? "cliente"}
+          </DialogTitle>
           <DialogDescription>
-            Saldo atual: {fmtBRL(client.balance)}. Escolha se é para somar ou subtrair e informe o valor (sempre positivo).
+            Saldo atual: <b>{fmtBRL(client.balance)}</b>.{" "}
+            {isZero
+              ? "Esta ação vai definir o saldo deste cliente para exatamente R$ 0,00."
+              : "Escolha se é para somar ou subtrair e informe o valor (sempre positivo)."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Operação</Label>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant={mode === "add" ? "neon" : "glass"}
-                size="sm"
-                onClick={() => setMode("add")}
-                className="flex-1"
-              >
-                <Plus className="h-3.5 w-3.5" /> Adicionar
-              </Button>
-              <Button
-                type="button"
-                variant={mode === "subtract" ? "neon" : "glass"}
-                size="sm"
-                onClick={() => setMode("subtract")}
-                className="flex-1"
-              >
-                <Minus className="h-3.5 w-3.5" /> Subtrair
-              </Button>
+          {!isZero && (
+            <>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Operação</Label>
+                <div className="flex gap-2">
+                  <Button type="button" variant={mode === "add" ? "neon" : "glass"} size="sm" onClick={() => setMode("add")} className="flex-1">
+                    <Plus className="h-3.5 w-3.5" /> Adicionar
+                  </Button>
+                  <Button type="button" variant={mode === "subtract" ? "neon" : "glass"} size="sm" onClick={() => setMode("subtract")} className="flex-1">
+                    <Minus className="h-3.5 w-3.5" /> Subtrair
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Valor (ex: 50 ou 50,00)</Label>
+                <Input
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value.replace(/[^\d.,]/g, ""))}
+                  placeholder="ex: 50,00"
+                  inputMode="decimal"
+                />
+              </div>
+            </>
+          )}
+          {preview !== null && (
+            <div className={`rounded-lg border p-3 text-sm ${isZero ? "border-destructive/40 bg-destructive/10" : "border-primary/30 bg-primary/5"}`}>
+              {fmtBRL(client.balance)} → <b>{fmtBRL(preview)}</b>
             </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Valor (sempre positivo, ex: 50)</Label>
-            <Input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="ex: 50" inputMode="decimal" />
-          </div>
+          )}
           <div className="space-y-1.5">
             <Label className="text-xs">Motivo (obrigatório)</Label>
             <Textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="ex: reembolso de campanha cancelada" rows={3} />
@@ -2341,7 +2372,7 @@ function BalanceDialog({ client, onClose }: { client: AdminClientRow; onClose: (
           <Button variant="glass" size="sm" onClick={onClose}>Cancelar</Button>
           <Button variant="neon" size="sm" disabled={!valid || mut.isPending} onClick={() => mut.mutate()}>
             {mut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-            Salvar
+            {isZero ? "Confirmar e zerar" : "Salvar"}
           </Button>
         </DialogFooter>
       </DialogContent>
