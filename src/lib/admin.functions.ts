@@ -1089,45 +1089,75 @@ export const adminSetUserStatus = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+// O sinal NUNCA vem do valor digitado: `amount` é sempre positivo e a direção
+// vem exclusivamente de `operation`. `set_zero` define o saldo final = 0.
 export const adminAdjustBalance = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
-    z.object({
-      user_id: z.string().uuid(),
-      delta: z.number(),
-      reason: z.string().min(3).max(500),
-    }).parse(d),
+    z
+      .object({
+        user_id: z.string().uuid(),
+        operation: z.enum(["add", "subtract", "set_zero"]),
+        amount: z.number().finite().positive().max(1_000_000).optional(),
+        reason: z.string().trim().min(3).max(500),
+      })
+      .refine((v) => v.operation === "set_zero" || typeof v.amount === "number", {
+        message: "Valor obrigatório",
+      })
+      .parse(d),
   )
   .handler(async ({ data, context }) => {
     await assertAdmin(context.userId, context.claims as { email?: string });
     const admin = await getSupabaseAdmin();
-    const { data: prof } = await admin
+    const { data: prof, error: pErr } = await admin
       .from("profiles")
       .select("balance")
       .eq("id", data.user_id)
       .maybeSingle();
-    const current = Number(prof?.balance ?? 0);
-    const next = Number((current + data.delta).toFixed(2));
-    const { error: uErr } = await admin
+    if (pErr) throw new Error(pErr.message);
+    if (!prof) throw new Error("Cliente não encontrado");
+    const current = Number(prof.balance ?? 0);
+    const abs = Math.abs(Number(data.amount ?? 0));
+    let next: number;
+    if (data.operation === "set_zero") next = 0;
+    else if (data.operation === "subtract") next = Math.round((current - abs) * 100) / 100;
+    else next = Math.round((current + abs) * 100) / 100;
+    const delta = Math.round((next - current) * 100) / 100;
+
+    // Update condicionado ao saldo lido: evita sobrescrever alteração concorrente.
+    const { data: upd, error: uErr } = await admin
       .from("profiles")
       .update({ balance: next })
-      .eq("id", data.user_id);
+      .eq("id", data.user_id)
+      .eq("balance", current)
+      .select("balance");
     if (uErr) throw new Error(uErr.message);
+    if (!upd || upd.length === 0) {
+      throw new Error("O saldo foi alterado por outra operação. Tente novamente.");
+    }
+    const reason = data.operation === "set_zero" ? `[Zerar saldo] ${data.reason}` : data.reason;
     await admin.from("manual_balance_adjustments").insert({
       user_id: data.user_id,
       admin_id: context.userId,
-      delta: data.delta,
-      reason: data.reason,
+      delta,
+      reason,
       balance_after: next,
     });
     await admin.from("admin_audit_log").insert({
       admin_email: (context.claims as { email?: string })?.email ?? "",
-      action: "balance_adjust",
+      action: data.operation === "set_zero" ? "balance_set_zero" : "balance_adjust",
       target_type: "user",
       target_id: data.user_id,
-      details: { delta: data.delta, reason: data.reason, balance_after: next },
+      details: {
+        operation: data.operation,
+        amount: data.operation === "set_zero" ? null : abs,
+        delta,
+        balance_before: current,
+        balance_after: next,
+        reason: data.reason,
+      },
     });
-    return { ok: true, balance: next };
+    return { ok: true, balance: next, previous: current, delta };
   });
 
 const bulkBalanceSchema = z.object({
