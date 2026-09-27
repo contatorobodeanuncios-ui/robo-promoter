@@ -39,6 +39,8 @@ import {
   adminArchiveCampaign,
   adminSetUserStatus,
   adminAdjustBalance,
+  adminBulkBalancePreview,
+  adminBulkAddBalance,
   adminUpdateProfile,
   adminUpdateCampaignMetrics,
   adminListPixAttempts,
@@ -1886,6 +1888,7 @@ function AllClientsSection({
   const [filter, setFilter] = useState<ClientFilter>("active");
   const [balanceTarget, setBalanceTarget] = useState<AdminClientRow | null>(null);
   const [profileTarget, setProfileTarget] = useState<AdminClientRow | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   const setStatusFn = useServerFn(adminSetUserStatus);
   const banMut = useMutation({
@@ -1927,7 +1930,10 @@ function AllClientsSection({
     <section className="glass-strong rounded-2xl overflow-hidden">
       <div className="p-5 border-b border-white/5 flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-semibold">Todos os Clientes</h2>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="glass" size="sm" onClick={() => setBulkOpen(true)}>
+            <Wallet className="h-3.5 w-3.5" /> Adicionar saldo em massa
+          </Button>
           <Button variant={filter === "active" ? "neon" : "glass"} size="sm" onClick={() => setFilter("active")}>
             Ativos ({all.filter((c) => c.status !== "banned").length})
           </Button>
@@ -2097,7 +2103,174 @@ function AllClientsSection({
       {profileTarget && (
         <ProfileDialog client={profileTarget} onClose={() => setProfileTarget(null)} />
       )}
+      {bulkOpen && <BulkBalanceDialog clients={all} onClose={() => setBulkOpen(false)} />}
     </section>
+  );
+}
+
+type BulkMode = "specific" | "recent_hours" | "last_day" | "all";
+
+function BulkBalanceDialog({ clients, onClose }: { clients: AdminClientRow[]; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [mode, setMode] = useState<BulkMode>("specific");
+  const [amount, setAmount] = useState("");
+  const [hours, setHours] = useState("24");
+  const [query, setQuery] = useState("");
+  const [picked, setPicked] = useState<string[]>([]);
+  const [preview, setPreview] = useState<{ count: number; total: number } | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const previewFn = useServerFn(adminBulkBalancePreview);
+  const applyFn = useServerFn(adminBulkAddBalance);
+
+  const amountNum = Number(amount.replace(",", "."));
+  const hoursNum = Number(hours);
+  const payload = {
+    mode,
+    amount: amountNum,
+    user_ids: mode === "specific" ? picked : undefined,
+    hours: mode === "recent_hours" ? hoursNum : undefined,
+  };
+  const valid =
+    amountNum > 0 &&
+    amountNum <= 1_000_000 &&
+    (mode !== "specific" || picked.length > 0) &&
+    (mode !== "recent_hours" || (Number.isInteger(hoursNum) && hoursNum >= 1 && hoursNum <= 8760));
+
+  const reset = () => { setPreview(null); setConfirming(false); };
+  const previewMut = useMutation({
+    mutationFn: () => previewFn({ data: payload }),
+    onSuccess: (r) => { setPreview(r); setConfirming(false); },
+    onError: (e) => toast.error("Falha na prévia", { description: String(e) }),
+  });
+  const applyMut = useMutation({
+    mutationFn: () => applyFn({ data: payload }),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["admin-all-clients"] });
+      if (r.affected === 0) toast.warning("Nenhum cliente corresponde ao critério.");
+      else {
+        if (preview && preview.count !== r.affected)
+          toast.info(`A quantidade mudou desde a prévia (${preview.count} → ${r.affected}).`);
+        toast.success(`Saldo de ${fmtBRL(r.unit)} adicionado para ${r.affected} clientes.`);
+      }
+      onClose();
+    },
+    onError: (e) => toast.error("Falha ao adicionar saldo", { description: String(e) }),
+  });
+
+  const q = query.trim().toLowerCase();
+  const results = q
+    ? clients.filter((c) => `${c.display_name ?? ""} ${c.email ?? ""}`.toLowerCase().includes(q)).slice(0, 30)
+    : [];
+  const modes: { id: BulkMode; label: string }[] = [
+    { id: "specific", label: "Específico" },
+    { id: "recent_hours", label: "Últimas X horas" },
+    { id: "last_day", label: "Último dia" },
+    { id: "all", label: "Todos" },
+  ];
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Adicionar saldo em massa</DialogTitle>
+          <DialogDescription>Escolha o critério, o valor por cliente e confira a prévia antes de aplicar.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {modes.map((m) => (
+              <Button key={m.id} type="button" size="sm" variant={mode === m.id ? "neon" : "glass"}
+                onClick={() => { setMode(m.id); reset(); }}>
+                {m.label}
+              </Button>
+            ))}
+          </div>
+
+          {mode === "specific" && (
+            <div className="space-y-2">
+              <Label className="text-xs">Buscar por nome ou e-mail</Label>
+              <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ex: maria@..." />
+              {results.length > 0 && (
+                <div className="max-h-40 overflow-y-auto rounded-md border border-white/10">
+                  {results.map((c) => {
+                    const on = picked.includes(c.id);
+                    return (
+                      <button key={c.id} type="button"
+                        onClick={() => { setPicked((p) => (on ? p.filter((x) => x !== c.id) : [...p, c.id])); reset(); }}
+                        className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-white/5 ${on ? "bg-primary/10" : ""}`}>
+                        {on ? <Check className="h-3.5 w-3.5 text-primary" /> : <Plus className="h-3.5 w-3.5" />}
+                        <span className="truncate">{c.display_name ?? "—"} · {c.email ?? ""}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {picked.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {picked.map((id) => {
+                    const c = clients.find((x) => x.id === id);
+                    return (
+                      <span key={id} className="text-[11px] px-2 py-1 rounded-full bg-primary/15 flex items-center gap-1">
+                        {c?.display_name ?? c?.email ?? id.slice(0, 8)}
+                        <button type="button" onClick={() => { setPicked((p) => p.filter((x) => x !== id)); reset(); }}>
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {mode === "recent_hours" && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">Cadastrados nas últimas (horas)</Label>
+              <Input value={hours} onChange={(e) => { setHours(e.target.value); reset(); }} inputMode="numeric" />
+            </div>
+          )}
+          {mode === "last_day" && <p className="text-xs text-muted-foreground">Clientes cadastrados nas últimas 24 horas.</p>}
+          {mode === "all" && <p className="text-xs text-muted-foreground">Todos os clientes cadastrados na base.</p>}
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Valor por cliente (R$)</Label>
+            <Input value={amount} onChange={(e) => { setAmount(e.target.value); reset(); }} placeholder="ex: 10" inputMode="decimal" />
+          </div>
+
+          {preview && (
+            <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm space-y-1">
+              <div>Clientes afetados: <b>{preview.count}</b></div>
+              <div>Valor unitário: <b>{fmtBRL(amountNum)}</b></div>
+              <div>Total a somar: <b>{fmtBRL(preview.total)}</b></div>
+              {preview.count === 0 && <div className="text-xs text-destructive">Nenhum cliente corresponde ao critério.</div>}
+            </div>
+          )}
+          {confirming && preview && preview.count > 0 && (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs">
+              Confirma adicionar {fmtBRL(amountNum)} para {preview.count} clientes (total {fmtBRL(preview.total)})? Esta ação não pode ser desfeita automaticamente.
+            </div>
+          )}
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="glass" size="sm" onClick={onClose}>Cancelar</Button>
+          {!confirming ? (
+            <>
+              <Button variant="glass" size="sm" disabled={!valid || previewMut.isPending} onClick={() => previewMut.mutate()}>
+                {previewMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />}
+                Ver prévia
+              </Button>
+              <Button variant="neon" size="sm" disabled={!preview || preview.count === 0} onClick={() => setConfirming(true)}>
+                Continuar
+              </Button>
+            </>
+          ) : (
+            <Button variant="neon" size="sm" disabled={applyMut.isPending} onClick={() => applyMut.mutate()}>
+              {applyMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              Confirmar e aplicar
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
