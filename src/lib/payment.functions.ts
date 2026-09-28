@@ -486,6 +486,14 @@ async function creditApprovedPayment(params: {
     } else {
       await admin.from("profiles").update({ balance: next } as never).eq("id", params.userId);
     }
+    if (params.paymentRequestId) {
+      const { appendPaymentEvent } = await import("@/lib/evidence.server");
+      await appendPaymentEvent(
+        params.paymentRequestId,
+        { event: "saldo_creditado", actor: "sistema" },
+        { balance_before: Number(profile?.balance ?? 0), balance_after: next },
+      );
+    }
   }
 }
 
@@ -533,6 +541,8 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
       boostId: z.string().uuid().optional(),
       billingType: z.enum(["PIX", "CREDIT_CARD"]).default("PIX"),
       card: cardInputSchema.optional(),
+      termsAccepted: z.boolean().optional(),
+      sessionId: z.string().max(100).nullable().optional(),
     }).parse(d),
   )
   .handler(async ({ data, context }) => {
@@ -652,6 +662,38 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
       prId = row.id as string;
     }
 
+    // Evidência do pagamento: IP/aparelho/local lidos no servidor + aceite de termos.
+    {
+      const { getRequestMeta, ensurePaymentEvidence } = await import("@/lib/evidence.server");
+      const { TERMS_VERSION } = await import("@/lib/terms");
+      const meta = getRequestMeta();
+      const nowIso = new Date().toISOString();
+      if (data.termsAccepted) {
+        await admin.from("terms_acceptances" as never).insert({
+          user_id: context.userId,
+          version: TERMS_VERSION,
+          context: "payment",
+          payment_request_id: prId,
+          ip: meta.ip,
+          user_agent: meta.user_agent,
+        } as never);
+      }
+      await ensurePaymentEvidence({
+        paymentRequestId: prId,
+        userId: context.userId,
+        email: email,
+        sessionId: data.sessionId ?? null,
+        meta,
+        terms: {
+          accepted: !!data.termsAccepted,
+          at: data.termsAccepted ? nowIso : null,
+          ip: data.termsAccepted ? meta.ip : null,
+          version: data.termsAccepted ? TERMS_VERSION : null,
+        },
+        event: data.billingType === "CREDIT_CARD" ? "cartao_solicitado" : "pix_solicitado",
+      });
+    }
+
     // A campanha só passa a “aguardando pagamento” depois que existe uma
     // solicitação real e reutilizável. O update é idempotente e não interfere
     // em campanhas já aprovadas ou pagas com saldo.
@@ -764,6 +806,11 @@ export const createPaymentRequest = createServerFn({ method: "POST" })
                     asaas_payment_id: json.id,
                   } as never)
                   .eq("id", prId);
+                {
+                  const { getRequestMeta, appendPaymentEvent } = await import("@/lib/evidence.server");
+                  const m = getRequestMeta();
+                  await appendPaymentEvent(prId, { event: "confirmado_cartao", ip: m.ip, user_agent: m.user_agent, actor: "cliente" });
+                }
                 await creditApprovedPayment({
                   amount: data.amount,
                   userId: context.userId,
@@ -945,6 +992,11 @@ export const adminApprovePayment = createServerFn({ method: "POST" })
       campaign_id?: string | null;
     };
 
+    {
+      const { getRequestMeta, appendPaymentEvent } = await import("@/lib/evidence.server");
+      const m = getRequestMeta();
+      await appendPaymentEvent(prAny.id, { event: "aprovado_admin", ip: m.ip, user_agent: m.user_agent, actor: "admin" });
+    }
     await creditApprovedPayment({
       amount: Number(prAny.amount),
       userId: prAny.user_id,

@@ -2103,7 +2103,7 @@ function AllClientsSection({
       )}
 
       {balanceTarget && (
-        <BalanceDialog client={balanceTarget} onClose={() => setBalanceTarget(null)} />
+        <BalanceDialog key={`${balanceTarget.id}-${balanceMode}`} client={balanceTarget} initialMode={balanceMode} onClose={() => setBalanceTarget(null)} />
       )}
       {profileTarget && (
         <ProfileDialog client={profileTarget} onClose={() => setProfileTarget(null)} />

@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { recordSessionStart } from "@/lib/evidence.functions";
 
 /**
  * Rastreamento leve de atividade do usuário (sessão + cliques). Qualquer
@@ -38,7 +39,13 @@ export function startSession() {
   if (sessionId) return;
   sessionId = genId();
   sessionStartedAt = Date.now();
-  void insertEvent("session_start");
+  // Registro no servidor (captura IP/aparelho/local pelos cabeçalhos).
+  void recordSessionStart({ data: { session_id: sessionId } })
+    .catch(() => { void insertEvent("session_start"); });
+}
+
+export function getActivitySessionId() {
+  return sessionId;
 }
 
 /** Deve ser chamado no unload/beforeunload da página. */

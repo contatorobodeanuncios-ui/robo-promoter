@@ -212,8 +212,27 @@ export const Route = createFileRoute("/api/public/asaas-webhook")({
             .from("profiles")
             .update({ balance: nextBalance })
             .eq("id", prAny.user_id);
+          {
+            const { appendPaymentEvent } = await import("@/lib/evidence.server");
+            await appendPaymentEvent(
+              prAny.id,
+              { event: "saldo_creditado", actor: "sistema" },
+              { balance_before: Number(profile.balance), balance_after: nextBalance },
+            );
+          }
         }
 
+        {
+          const { metaFromRequest, appendPaymentEvent } = await import("@/lib/evidence.server");
+          const m = metaFromRequest(request);
+          await appendPaymentEvent(prAny.id, {
+            event: "confirmado_provedor",
+            ip: m.ip,
+            user_agent: m.user_agent,
+            actor: "asaas",
+            note: `${event} ${payment.id ?? ""}`.trim(),
+          });
+        }
         await supabaseAdmin
           .from("payment_requests")
           .update({

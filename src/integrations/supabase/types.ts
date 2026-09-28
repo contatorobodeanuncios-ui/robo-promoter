@@ -525,6 +525,36 @@ export type Database = {
         }
         Relationships: []
       }
+      login_events: {
+        Row: {
+          city: string | null
+          country: string | null
+          created_at: string
+          id: string
+          ip: string | null
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          id?: string
+          ip?: string | null
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          id?: string
+          ip?: string | null
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       manual_balance_adjustments: {
         Row: {
           admin_id: string
@@ -587,6 +617,80 @@ export type Database = {
           status?: string
         }
         Relationships: []
+      }
+      payment_evidence: {
+        Row: {
+          account_email: string | null
+          balance_after: number | null
+          balance_before: number | null
+          bonus: number | null
+          city: string | null
+          country: string | null
+          created_at: string
+          id: string
+          ip: string | null
+          payment_request_id: string
+          session_id: string | null
+          status_events: Json
+          terms_accepted: boolean
+          terms_accepted_at: string | null
+          terms_ip: string | null
+          terms_version: string | null
+          updated_at: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          account_email?: string | null
+          balance_after?: number | null
+          balance_before?: number | null
+          bonus?: number | null
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          id?: string
+          ip?: string | null
+          payment_request_id: string
+          session_id?: string | null
+          status_events?: Json
+          terms_accepted?: boolean
+          terms_accepted_at?: string | null
+          terms_ip?: string | null
+          terms_version?: string | null
+          updated_at?: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          account_email?: string | null
+          balance_after?: number | null
+          balance_before?: number | null
+          bonus?: number | null
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          id?: string
+          ip?: string | null
+          payment_request_id?: string
+          session_id?: string | null
+          status_events?: Json
+          terms_accepted?: boolean
+          terms_accepted_at?: string | null
+          terms_ip?: string | null
+          terms_version?: string | null
+          updated_at?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_evidence_payment_request_id_fkey"
+            columns: ["payment_request_id"]
+            isOneToOne: true
+            referencedRelation: "payment_requests"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       payment_requests: {
         Row: {
@@ -861,32 +965,77 @@ export type Database = {
           },
         ]
       }
+      terms_acceptances: {
+        Row: {
+          context: string | null
+          created_at: string
+          id: string
+          ip: string | null
+          payment_request_id: string | null
+          user_agent: string | null
+          user_id: string
+          version: string
+        }
+        Insert: {
+          context?: string | null
+          created_at?: string
+          id?: string
+          ip?: string | null
+          payment_request_id?: string | null
+          user_agent?: string | null
+          user_id: string
+          version: string
+        }
+        Update: {
+          context?: string | null
+          created_at?: string
+          id?: string
+          ip?: string | null
+          payment_request_id?: string | null
+          user_agent?: string | null
+          user_id?: string
+          version?: string
+        }
+        Relationships: []
+      }
       user_activity_events: {
         Row: {
+          city: string | null
+          country: string | null
           created_at: string
           duration_ms: number | null
           id: string
+          ip: string | null
           kind: string
           label: string | null
           session_id: string | null
+          user_agent: string | null
           user_id: string
         }
         Insert: {
+          city?: string | null
+          country?: string | null
           created_at?: string
           duration_ms?: number | null
           id?: string
+          ip?: string | null
           kind: string
           label?: string | null
           session_id?: string | null
+          user_agent?: string | null
           user_id: string
         }
         Update: {
+          city?: string | null
+          country?: string | null
           created_at?: string
           duration_ms?: number | null
           id?: string
+          ip?: string | null
           kind?: string
           label?: string | null
           session_id?: string | null
+          user_agent?: string | null
           user_id?: string
         }
         Relationships: []
