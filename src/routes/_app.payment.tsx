@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ShieldCheck, Sparkles, Loader2, Copy, Check, AlertTriangle, RefreshCw, CreditCard, QrCode, Pencil } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getActivitySessionId } from "@/lib/activity";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
@@ -45,7 +46,7 @@ const fmtBRL = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 type BillingType = "PIX" | "CREDIT_CARD";
-type Stage = "loading" | "needsCpf" | "needsCard" | "ready" | "fallback" | "error" | "paid";
+type Stage = "loading" | "needsCpf" | "needsCard" | "ready" | "fallback" | "error" | "paid" | "needsTerms";
 
 function formatCpfCnpj(v: string): string {
   const d = v.replace(/\D/g, "").slice(0, 14);
@@ -111,6 +112,8 @@ function PaymentPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [cpfRetry, setCpfRetry] = useState(false);
   const runIdRef = useRef(0);
+  const [termsOk, setTermsOk] = useState(false);
+  const termsOkRef = useRef(false);
 
   const runCharge = useCallback(async (bt: BillingType, card?: {
     holderName: string; number: string; expiryMonth: string; expiryYear: string; ccv: string;
@@ -130,6 +133,8 @@ function PaymentPage() {
           boostId: boostId || undefined,
           billingType: bt,
           card,
+          termsAccepted: termsOkRef.current,
+          sessionId: getActivitySessionId(),
         },
       });
       if (rid !== runIdRef.current) return;
@@ -157,6 +162,7 @@ function PaymentPage() {
     // Espera o valor real da campanha (com extras/order bump) antes de cobrar.
     if (chargeQ.isLoading || chargeQ.isFetching) return;
     startedRef.current = true;
+    if (!termsOkRef.current) { setStage("needsTerms"); return; }
     if (!profileQ.data?.cpf_cnpj) { setStage("needsCpf"); return; }
     void runCharge("PIX");
   }, [profileQ.isLoading, profileQ.data, chargeQ.isLoading, chargeQ.isFetching, runCharge]);
@@ -188,6 +194,7 @@ function PaymentPage() {
   };
 
   const switchTo = (bt: BillingType) => {
+    if (!termsOkRef.current) { setBilling(bt); setStage("needsTerms"); return; }
     if (bt === billing && (stage === "ready" || stage === "needsCard")) return;
     setBilling(bt);
     if (bt === "CREDIT_CARD") setStage("needsCard");
@@ -291,6 +298,35 @@ function PaymentPage() {
                 : "border-white/10 bg-background/30 text-muted-foreground hover:border-white/20"
             }`}><CreditCard className="h-4 w-4" /> Cartão</button>
         </div>
+
+        {stage === "needsTerms" && (
+          <div className="space-y-3">
+            <label className="flex items-start gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 accent-primary"
+                checked={termsOk}
+                onChange={(e) => { setTermsOk(e.target.checked); termsOkRef.current = e.target.checked; }}
+              />
+              <span>
+                Li e aceito os{" "}
+                <Link to="/termos" target="_blank" className="text-primary hover:underline">Termos de Uso</Link>
+              </span>
+            </label>
+            <Button
+              variant="neon"
+              className="w-full"
+              disabled={!termsOk}
+              onClick={() => {
+                if (!profileQ.data?.cpf_cnpj) { setStage("needsCpf"); return; }
+                if (billing === "CREDIT_CARD") setStage("needsCard");
+                else void runCharge("PIX");
+              }}
+            >
+              Continuar para o pagamento
+            </Button>
+          </div>
+        )}
 
         {stage === "needsCpf" && (
           <CpfForm
