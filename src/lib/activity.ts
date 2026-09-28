@@ -38,7 +38,14 @@ export function startSession() {
   if (sessionId) return;
   sessionId = genId();
   sessionStartedAt = Date.now();
-  void insertEvent("session_start");
+  // Registro no servidor (captura IP/aparelho/local pelos cabeçalhos).
+  void import("@/lib/evidence.functions")
+    .then((m) => m.recordSessionStart({ data: { session_id: sessionId } }))
+    .catch(() => { void insertEvent("session_start"); });
+}
+
+export function getActivitySessionId() {
+  return sessionId;
 }
 
 /** Deve ser chamado no unload/beforeunload da página. */
