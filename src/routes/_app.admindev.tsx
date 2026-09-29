@@ -1,4 +1,5 @@
 import { getRobotSchedule, getMetaPixelId } from "@/lib/data.functions";
+import { adminGetPaymentEvidence, adminListLoginEvents, adminExportEvidencePDF } from "@/lib/evidence-admin.functions";
 import { parsePositiveBRL, nextBalance, type BalanceOperation } from "@/lib/money";
 import { adminListSecurityEvents } from "@/lib/security.functions";
 import { createFileRoute, redirect, useNavigate, Link } from "@tanstack/react-router";
@@ -3373,6 +3374,7 @@ function ClientAccessActivity({ userId }: { userId: string }) {
   };
 
   return (
+    <div className="space-y-3">
     <div className="rounded-xl border border-white/10 p-3 space-y-2">
       <p className="text-xs uppercase tracking-wider text-muted-foreground">Atividade de acesso</p>
       {q.isLoading ? (
@@ -3392,6 +3394,156 @@ function ClientAccessActivity({ userId }: { userId: string }) {
         </>
       )}
     </div>
+    <ClientLoginHistory userId={userId} />
+    </div>
+  );
+}
+
+const NAO_REG = "Não registrado";
+
+/** Histórico de acesso (IP/local/aparelho) + pagamentos com botão Evidências. */
+function ClientLoginHistory({ userId }: { userId: string }) {
+  const fn = useServerFn(adminListLoginEvents);
+  const [evId, setEvId] = useState<string | null>(null);
+  const q = useQuery({
+    queryKey: ["admin-login-events", userId],
+    queryFn: () => fn({ data: { user_id: userId } }),
+  });
+  return (
+    <div className="rounded-xl border border-white/10 p-3 space-y-3">
+      <p className="text-xs uppercase tracking-wider text-muted-foreground">Histórico de acesso</p>
+      {q.isLoading ? (
+        <p className="text-xs text-muted-foreground">Carregando...</p>
+      ) : (q.data?.logins ?? []).length === 0 ? (
+        <p className="text-xs text-muted-foreground">Nenhum acesso com IP registrado ainda.</p>
+      ) : (
+        <ul className="space-y-1.5 max-h-56 overflow-y-auto">
+          {q.data!.logins.map((l) => (
+            <li key={l.id} className="text-xs border-b border-white/5 pb-1.5">
+              <div className="font-medium">{new Date(l.created_at).toLocaleString("pt-BR")} · IP {l.ip ?? NAO_REG}</div>
+              <div className="text-muted-foreground truncate">
+                {(l.city ?? "Cidade não disponível")} / {(l.country ?? "País não disponível")} · {l.user_agent ?? NAO_REG}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="text-xs uppercase tracking-wider text-muted-foreground pt-1">Pagamentos</p>
+      {(q.data?.payments ?? []).length === 0 ? (
+        <p className="text-xs text-muted-foreground">Nenhum pagamento.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {q.data!.payments.map((p) => (
+            <li key={p.id} className="flex items-center justify-between gap-2 text-xs">
+              <span className="truncate">
+                {new Date(p.created_at).toLocaleString("pt-BR")} · {fmtBRL(p.amount)} · {p.status}
+              </span>
+              <Button variant="glass" size="sm" onClick={() => setEvId(p.id)}>Evidências</Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {evId && <EvidenceDialog paymentId={evId} onClose={() => setEvId(null)} />}
+    </div>
+  );
+}
+
+function EvidenceDialog({ paymentId, onClose }: { paymentId: string; onClose: () => void }) {
+  const fn = useServerFn(adminGetPaymentEvidence);
+  const pdfFn = useServerFn(adminExportEvidencePDF);
+  const q = useQuery({ queryKey: ["admin-evidence", paymentId], queryFn: () => fn({ data: { payment_id: paymentId } }) });
+  const pdf = useMutation({
+    mutationFn: () => pdfFn({ data: { payment_id: paymentId } }),
+    onSuccess: (r) => {
+      const bin = atob(r.pdf);
+      const arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([arr], { type: "application/pdf" }));
+      const a = document.createElement("a");
+      a.href = url; a.download = r.filename; a.click();
+      URL.revokeObjectURL(url);
+      toast.success("PDF gerado");
+    },
+    onError: (e: Error) => toast.error("Falha ao gerar PDF", { description: e.message }),
+  });
+  const d = q.data;
+  const ev = d?.evidence;
+  const dt = (s?: string | null) => (s ? new Date(s).toLocaleString("pt-BR") : NAO_REG);
+  const v = (s?: string | null) => (s ? s : NAO_REG);
+  const money = (n?: number | null) => (n === null || n === undefined ? NAO_REG : fmtBRL(n));
+  const Row = ({ k, val }: { k: string; val: string }) => (
+    <div className="grid grid-cols-[140px_minmax(0,1fr)] gap-2 text-xs py-0.5">
+      <span className="text-muted-foreground">{k}</span>
+      <span className="break-words">{val}</span>
+    </div>
+  );
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Evidências do pagamento</DialogTitle>
+          <DialogDescription>Somente dados realmente registrados.</DialogDescription>
+        </DialogHeader>
+        {q.isLoading || !d ? (
+          <p className="text-sm text-muted-foreground">{q.isError ? "Falha ao carregar." : "Carregando..."}</p>
+        ) : (
+          <div className="space-y-4">
+            <section>
+              <p className="text-[11px] uppercase text-muted-foreground mb-1">Pagamento</p>
+              <Row k="Valor pago" val={fmtBRL(d.payment.amount)} />
+              <Row k="Status" val={d.payment.status} />
+              <Row k="Criado em" val={dt(d.payment.created_at)} />
+              <Row k="Aprovado em" val={dt(d.payment.approved_at)} />
+              <Row k="Referência Asaas" val={v(d.payment.asaas_payment_id)} />
+              <Row k="E-mail da conta" val={v(ev?.account_email ?? d.client.email)} />
+            </section>
+            <section>
+              <p className="text-[11px] uppercase text-muted-foreground mb-1">Termos de Uso</p>
+              <Row k="Aceitou" val={ev ? (ev.terms_accepted ? "Sim" : "Não") : NAO_REG} />
+              <Row k="Data/hora" val={dt(ev?.terms_accepted_at)} />
+              <Row k="IP do aceite" val={v(ev?.terms_ip)} />
+              <Row k="Versão" val={v(ev?.terms_version)} />
+            </section>
+            <section>
+              <p className="text-[11px] uppercase text-muted-foreground mb-1">Clique em pagar</p>
+              <Row k="IP do pagamento" val={v(ev?.ip)} />
+              <Row k="Aparelho" val={v(ev?.user_agent)} />
+              <Row k="Cidade" val={ev ? (ev.city ?? "Não disponível") : NAO_REG} />
+              <Row k="País" val={ev ? (ev.country ?? "Não disponível") : NAO_REG} />
+              <Row k="ID da sessão" val={v(ev?.session_id)} />
+            </section>
+            <section>
+              <p className="text-[11px] uppercase text-muted-foreground mb-1">Saldo</p>
+              <Row k="Antes" val={money(ev?.balance_before)} />
+              <Row k="Depois" val={money(ev?.balance_after)} />
+              <Row k="Bônus" val={money(ev?.bonus)} />
+            </section>
+            <section>
+              <p className="text-[11px] uppercase text-muted-foreground mb-1">Linha do tempo</p>
+              {(ev?.status_events ?? []).length === 0 ? (
+                <p className="text-xs text-muted-foreground">{NAO_REG}</p>
+              ) : ev!.status_events.map((s, i) => (
+                <Row key={i} k={dt(s.at)} val={`${s.event}${s.actor ? ` (${s.actor})` : ""} · IP ${s.ip ?? NAO_REG}`} />
+              ))}
+            </section>
+            <section>
+              <p className="text-[11px] uppercase text-muted-foreground mb-1">IP da sessão de login (auth.sessions)</p>
+              {d.auth_sessions.length === 0 ? (
+                <p className="text-xs text-muted-foreground">{NAO_REG}</p>
+              ) : d.auth_sessions.slice(0, 5).map((s, i) => (
+                <Row key={i} k={dt(s.created_at)} val={v(s.ip)} />
+              ))}
+            </section>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="glass" onClick={onClose}>Fechar</Button>
+          <Button variant="neon" disabled={!d || pdf.isPending} onClick={() => pdf.mutate()}>
+            {pdf.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Exportar PDF
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
