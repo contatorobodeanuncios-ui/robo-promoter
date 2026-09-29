@@ -1099,6 +1099,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_auth_session_ips: {
+        Args: { _user_id: string }
+        Returns: {
+          created_at: string
+          ip: string
+          updated_at: string
+          user_agent: string
+        }[]
+      }
       admin_bulk_add_balance: {
         Args: {
           _admin_email: string
