@@ -19,7 +19,7 @@ function assertAdminEmail(claims: { email?: string } | undefined) {
   if (email !== ADMIN_EMAIL) throw new Error("Forbidden: admin only");
 }
 
-async function assertAdmin(userId: string, claims?: { email?: string }) {
+export async function assertAdmin(userId: string, claims?: { email?: string }) {
   let email = ((claims?.email ?? "")).toLowerCase();
   if (!email) {
     const supabaseAdmin = await getSupabaseAdmin();
